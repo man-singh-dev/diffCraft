@@ -1,0 +1,48 @@
+# Local development infrastructure. Not for production.
+# Values come from the root .env (Compose reads it automatically); the defaults below
+# are used when a variable is not set.
+
+name: diffcraft
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-diffcraft}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-diffcraft}
+      POSTGRES_DB: ${POSTGRES_DB:-diffcraft}
+    ports:
+      # Bound to 127.0.0.1 so the database is not reachable from other machines.
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      # Postgres 18+ images keep data in /var/lib/postgresql/<major>/docker, so the
+      # volume is mounted at /var/lib/postgresql (not /var/lib/postgresql/data).
+      - postgres-data:/var/lib/postgresql
+      # Init scripts only run when the data volume is empty (first start).
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    ports:
+      # Bound to 127.0.0.1 so Redis is not reachable from other machines.
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  postgres-data:
+  redis-data:
