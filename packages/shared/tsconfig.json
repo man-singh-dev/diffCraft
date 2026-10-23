@@ -3,7 +3,11 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "noEmit": true
+    "noEmit": true,
+    // Allows '.ts' extensions in relative imports, so Bundler-based consumers
+    // (Next.js) and NodeNext consumers (the API) can both resolve shared source.
+    // Only valid because noEmit is true.
+    "allowImportingTsExtensions": true
   },
   "include": ["src"]
 }
