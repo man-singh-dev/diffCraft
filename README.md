@@ -4,6 +4,7 @@
 
 **Collaborative Code Review and AI-Assisted Debugging Platform**
 
+[![CI](https://github.com/man-singh-dev/diffCraft/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/man-singh-dev/diffCraft/actions/workflows/ci.yml)
 ![Status](https://img.shields.io/badge/status-initial%20development-orange)
 ![License](https://img.shields.io/badge/license-undecided-lightgrey)
 
