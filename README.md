@@ -50,19 +50,24 @@
 
 ## Current Status
 
-| Area                                                             | Status          | Notes                                                    |
-| ---------------------------------------------------------------- | --------------- | -------------------------------------------------------- |
-| Repository and documentation                                     | **In progress** | This README defines scope and intended architecture.     |
-| Monorepo scaffolding (`apps/web`, `apps/api`, `packages/shared`) | Planned         | Package manager and workspace tooling not yet committed. |
-| Database schema and migrations (Drizzle)                         | Planned         | Schema below is a proposal, not final.                   |
-| Authentication and workspace membership                          | Planned         |                                                          |
-| Code diff viewer                                                 | Planned         |                                                          |
-| Reviews, comments, threads, approvals                            | Planned         |                                                          |
-| Real-time collaboration (Socket.IO)                              | Planned         |                                                          |
-| AI analysis worker (BullMQ + LLM provider)                       | Planned         |                                                          |
-| Tests (Vitest)                                                   | Planned         | No tests exist yet; no coverage figures are claimed.     |
-| Docker / CI                                                      | Planned         | No Dockerfile, Compose file or CI workflow exists yet.   |
-| OpenAPI documentation                                            | Planned         | To be generated from Zod route schemas.                  |
+| Area                                                             | Status          | Notes                                                                                                                      |
+| ---------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Repository and documentation                                     | **In progress** | This README defines scope and intended architecture. Stage notes live in `docs/learning/`.                                 |
+| Monorepo scaffolding (`apps/web`, `apps/api`, `packages/shared`) | **Implemented** | pnpm workspaces; shared TypeScript, ESLint and Prettier config.                                                            |
+| Shared package (`packages/shared`)                               | **Implemented** | Zod schemas with inferred types. Currently only the health response contract.                                              |
+| API skeleton (Fastify)                                           | **Implemented** | Validated env config, `GET /health` (liveness), graceful shutdown. No database access yet.                                 |
+| Web skeleton (Next.js)                                           | **Implemented** | Home page that shows the API health status, fetched server-side.                                                           |
+| Local infrastructure (Docker Compose)                            | **Implemented** | PostgreSQL 18 and Redis 8 for local development. No app code connects to them yet.                                         |
+| CI (GitHub Actions)                                              | **Implemented** | Typecheck, lint, format check, tests and web build on pull requests and pushes to `main`.                                  |
+| Tests (Vitest)                                                   | **Implemented** | Unit tests for config validation, the health route and schema, and the web health client. No coverage figures are claimed. |
+| Database schema and migrations (Drizzle)                         | Planned         | Schema below is a proposal, not final.                                                                                     |
+| Authentication and workspace membership                          | Planned         |                                                                                                                            |
+| Code diff viewer                                                 | Planned         |                                                                                                                            |
+| Reviews, comments, threads, approvals                            | Planned         |                                                                                                                            |
+| Real-time collaboration (Socket.IO)                              | Planned         |                                                                                                                            |
+| AI analysis worker (BullMQ + LLM provider)                       | Planned         |                                                                                                                            |
+| Application Dockerfiles / deployment                             | Planned         | Only local Postgres and Redis run in Docker so far.                                                                        |
+| OpenAPI documentation                                            | Planned         | To be generated from Zod route schemas.                                                                                    |
 
 Status labels used throughout: **Implemented** · **In progress** · **Planned**.
 
@@ -285,7 +290,9 @@ flowchart LR
 
 ## Technology Stack
 
-All entries describe the **intended** stack. None are installed yet.
+**In use now:** Next.js, TypeScript, Tailwind CSS, Node.js, Fastify, Zod, Vitest, Docker (local PostgreSQL and Redis) and GitHub Actions CI.
+
+**Planned:** Drizzle ORM, Socket.IO, BullMQ, the LLM provider integration and OpenAPI generation. PostgreSQL and Redis run locally but no application code uses them yet.
 
 | Layer            | Technology                                    | Rationale                                                                                                            |
 | ---------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -299,7 +306,7 @@ All entries describe the **intended** stack. None are installed yet.
 | AI               | Server-side LLM provider integration          | Provider abstracted behind an interface so models/providers can be swapped and mocked in tests.                      |
 | Testing          | **Vitest**                                    | Fast TypeScript-native test runner for unit and integration tests.                                                   |
 | API docs         | **OpenAPI**                                   | Generated from route schemas so documentation tracks the code.                                                       |
-| Infrastructure   | **Docker**, CI (e.g. GitHub Actions)          | Reproducible local services and automated checks. _Planned._                                                         |
+| Infrastructure   | **Docker**, **GitHub Actions**                | Reproducible local services and automated checks.                                                                    |
 
 ---
 
@@ -963,116 +970,193 @@ Planned CI checks: type-checking, linting, unit and integration tests, and migra
 
 ## Local Development Setup
 
-> [!WARNING]
-> **Planned setup — these commands do not work yet.** The repository does not yet contain package manifests, scripts, migrations or Docker configuration. This section documents the intended developer experience and will be replaced with verified instructions as the scaffolding lands.
+> Status: **Implemented** for the Stage 0 skeleton. Steps marked _(Stage 1)_ do not exist yet.
 
-### Prerequisites (planned)
+### Prerequisites
 
-- Node.js (current LTS)
-- A workspace-aware package manager (pnpm workspaces is the current preference; not yet committed)
-- Docker (for local PostgreSQL and Redis)
-- An API key for the chosen LLM provider (only required to run real AI analyses; tests use a mock)
+- **Node.js 24** (the version is in `.nvmrc`; `nvm use` picks it up).
+- **pnpm 12**, installed with npm: `npm install -g pnpm@12`. The exact version is pinned in the `packageManager` field of `package.json`. Corepack is not used because it could not run pnpm 12.
+- **Docker** with Docker Compose (Docker Desktop on Windows and macOS), for local PostgreSQL and Redis.
 
-### Intended steps
+### Steps
 
 ```bash
 # 1. Clone
-git clone <repository-url> diffcraft
-cd diffcraft
+git clone https://github.com/man-singh-dev/diffCraft.git
+cd diffCraft
 
-# 2. Install dependencies               (planned)
+# 2. Configure environment (local-only placeholder values)
+cp .env.example .env                 # PowerShell: Copy-Item .env.example .env
+
+# 3. Install dependencies
 pnpm install
 
-# 3. Configure environment              (planned)
-cp .env.example .env    # then fill in placeholders
+# 4. Start PostgreSQL and Redis in the background (check health with `docker compose ps`)
+pnpm infra:up
 
-# 4. Start PostgreSQL and Redis          (planned)
-docker compose up -d postgres redis
+# 5. Apply database migrations        (Stage 1, does not exist yet)
+# pnpm db:migrate
 
-# 5. Apply database migrations          (planned)
-pnpm db:migrate
-
-# 6. Run web, API and worker in dev mode (planned)
-pnpm dev
+# 6. Run the API and web dev servers (in two terminals)
+pnpm --filter @diffcraft/api dev     # http://localhost:4000  (GET /health)
+pnpm --filter @diffcraft/web dev     # http://localhost:3000
 ```
 
-Planned local URLs: web on `http://localhost:3000`, API on `http://localhost:4000`, OpenAPI UI on `http://localhost:4000/docs`.
+The web home page shows whether it can reach the API's `/health` endpoint.
+
+### Checks (the same ones CI runs)
+
+```bash
+pnpm typecheck                       # tsc for every package (web runs `next typegen` first)
+pnpm lint                            # ESLint
+pnpm format:check                    # Prettier (use `pnpm format` to fix)
+pnpm test                            # Vitest
+pnpm --filter @diffcraft/web build   # Next.js production build
+```
+
+To stop the local infrastructure: `pnpm infra:down`.
 
 ---
 
 ## Environment Variables
 
-> Planned. A `.env.example` file will be added with the scaffolding. **Never commit real values.**
+All variables live in one root `.env` file (copied from `.env.example`). The API loads it with `--env-file-if-exists`, the web app with `loadEnvConfig` in `next.config.ts`, and Docker Compose reads it automatically. Every variable has a safe local default, so the app also runs (and CI passes) without a `.env`. **Never commit real values.** `.env` is git-ignored.
 
-| Variable              | Used by     | Description                                    | Example placeholder                                     |
-| --------------------- | ----------- | ---------------------------------------------- | ------------------------------------------------------- |
-| `NODE_ENV`            | all         | Runtime environment.                           | `development`                                           |
-| `DATABASE_URL`        | api, worker | PostgreSQL connection string.                  | `postgres://<user>:<password>@localhost:5432/diffcraft` |
-| `REDIS_URL`           | api, worker | Redis connection string.                       | `redis://localhost:6379`                                |
-| `API_PORT`            | api         | Port for the Fastify server.                   | `4000`                                                  |
-| `WEB_ORIGIN`          | api         | Allowed CORS / Socket.IO origin.               | `http://localhost:3000`                                 |
-| `SESSION_SECRET`      | api         | Secret used to sign session cookies.           | `<generate-a-long-random-value>`                        |
-| `NEXT_PUBLIC_API_URL` | web         | Public base URL of the API (non-secret).       | `http://localhost:4000`                                 |
-| `LLM_PROVIDER`        | worker      | Identifier of the configured provider adapter. | `<provider-name>`                                       |
-| `LLM_API_KEY`         | worker      | Provider API key. **Server-side only.**        | `<your-llm-api-key>`                                    |
-| `LLM_MODEL`           | worker      | Model identifier.                              | `<model-id>`                                            |
-| `LLM_TIMEOUT_MS`      | worker      | Per-request timeout.                           | `60000`                                                 |
-| `AI_JOB_MAX_ATTEMPTS` | worker      | Maximum attempts per analysis job.             | `3`                                                     |
-| `AI_MAX_DIFF_BYTES`   | api, worker | Upper bound on diff size per analysis.         | `200000`                                                |
-| `WORKER_CONCURRENCY`  | worker      | Concurrent jobs per worker process.            | `2`                                                     |
-| `LOG_LEVEL`           | all         | Logging verbosity.                             | `info`                                                  |
+### In use now (in `.env.example`)
 
-All variables will be validated with a Zod schema at startup so misconfiguration fails fast.
+| Variable            | Used by                  | Description                                                                           | Example placeholder                                         |
+| ------------------- | ------------------------ | ------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `NODE_ENV`          | api                      | Runtime environment (`development`, `test`, `production`).                            | `development`                                               |
+| `API_PORT`          | api                      | Port for the Fastify server.                                                          | `4000`                                                      |
+| `LOG_LEVEL`         | api                      | Logging verbosity.                                                                    | `info`                                                      |
+| `WEB_ORIGIN`        | api                      | Origin of the web app. Validated at startup; will be the CORS / Socket.IO allow-list. | `http://localhost:3000`                                     |
+| `API_URL`           | web (server-only)        | Base URL the web server uses to call the API. Not exposed to the browser.             | `http://localhost:4000`                                     |
+| `POSTGRES_USER`     | docker-compose           | Postgres superuser created on first start.                                            | `diffcraft`                                                 |
+| `POSTGRES_PASSWORD` | docker-compose           | Password for that user (local only).                                                  | `diffcraft`                                                 |
+| `POSTGRES_DB`       | docker-compose           | Default database created on first start.                                              | `diffcraft`                                                 |
+| `POSTGRES_PORT`     | docker-compose           | Host port for Postgres (bound to `127.0.0.1`).                                        | `5432`                                                      |
+| `REDIS_PORT`        | docker-compose           | Host port for Redis (bound to `127.0.0.1`).                                           | `6379`                                                      |
+| `DATABASE_URL`      | _not read yet_ (Stage 1) | PostgreSQL connection string for the API.                                             | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft` |
+| `REDIS_URL`         | _not read yet_ (Stage 1) | Redis connection string for the API and worker.                                       | `redis://localhost:6379`                                    |
+
+The API validates its variables with a Zod schema at startup and exits with a list of invalid names (never their values). The web app validates `API_URL` the same way.
+
+### Planned
+
+| Variable              | Used by     | Description                                    | Example placeholder              |
+| --------------------- | ----------- | ---------------------------------------------- | -------------------------------- |
+| `SESSION_SECRET`      | api         | Secret used to sign session cookies.           | `<generate-a-long-random-value>` |
+| `LLM_PROVIDER`        | worker      | Identifier of the configured provider adapter. | `<provider-name>`                |
+| `LLM_API_KEY`         | worker      | Provider API key. **Server-side only.**        | `<your-llm-api-key>`             |
+| `LLM_MODEL`           | worker      | Model identifier.                              | `<model-id>`                     |
+| `LLM_TIMEOUT_MS`      | worker      | Per-request timeout.                           | `60000`                          |
+| `AI_JOB_MAX_ATTEMPTS` | worker      | Maximum attempts per analysis job.             | `3`                              |
+| `AI_MAX_DIFF_BYTES`   | api, worker | Upper bound on diff size per analysis.         | `200000`                         |
+| `WORKER_CONCURRENCY`  | worker      | Concurrent jobs per worker process.            | `2`                              |
 
 ---
 
 ## Docker Setup
 
-> **Not yet implemented.** No `Dockerfile` or Compose file exists.
+> Status: **Implemented** for local infrastructure only. No application code connects to these services yet (that starts in Stage 1).
 
-The plan is a Compose file for local development providing:
+`docker-compose.yml` at the repo root runs two services for local development:
 
-- `postgres` — PostgreSQL with a named volume.
-- `redis` — Redis for BullMQ and the Socket.IO adapter.
-- Optionally `api`, `worker` and `web` services built from per-app Dockerfiles, for running the full stack in containers.
+| Service    | Image                | Host port (default) | Data                                                  | Healthcheck      |
+| ---------- | -------------------- | ------------------- | ----------------------------------------------------- | ---------------- |
+| `postgres` | `postgres:18-alpine` | `127.0.0.1:5432`    | Named volume `postgres-data` at `/var/lib/postgresql` | `pg_isready`     |
+| `redis`    | `redis:8-alpine`     | `127.0.0.1:6379`    | Named volume `redis-data` at `/data`                  | `redis-cli ping` |
 
-This section will be updated with verified commands once the files are added.
+- Ports are bound to `127.0.0.1` only, so other machines on your network cannot reach them.
+- Credentials and ports come from `.env` (`POSTGRES_*`, `REDIS_PORT`), with local defaults in the Compose file.
+- Postgres 18 images store data in `/var/lib/postgresql/18/docker`, so the volume is mounted at `/var/lib/postgresql` (not the older `/var/lib/postgresql/data`).
+- `infra/postgres/init/01-create-test-db.sql` creates a second database, `diffcraft_test`, for tests. Postgres runs init scripts **only when the data volume is empty** (first start). To run them again, delete the volume with `docker compose down -v`, which **deletes all local data**.
+
+| Script            | Runs                     | Purpose                                        |
+| ----------------- | ------------------------ | ---------------------------------------------- |
+| `pnpm infra:up`   | `docker compose up -d`   | Start Postgres and Redis in the background.    |
+| `pnpm infra:down` | `docker compose down`    | Stop and remove the containers (volumes kept). |
+| `pnpm infra:logs` | `docker compose logs -f` | Follow the logs of both services.              |
+
+Check that both services are healthy with `docker compose ps`.
+
+Per-app Dockerfiles for `api`, `worker` and `web` are **Planned** (Stage 9).
 
 ---
 
 ## Project Structure
 
-> **Proposed structure.** The repository currently contains documentation only. The layout below is the intended monorepo organisation and will be updated to match the real tree as it is created.
+The tree below is the **current** repository (excluding `node_modules` and build output). Entries marked _(planned)_ do not exist yet.
 
 ```text
-diffcraft/
+diffCraft/
+├── .github/
+│   └── workflows/
+│       └── ci.yml                    # CI: typecheck, lint, format check, test, web build
 ├── apps/
-│   ├── web/                  # Next.js frontend (diff viewer, review UI)
-│   │   └── src/
-│   │       ├── app/          # Routes and layouts
-│   │       ├── components/   # Diff viewer, threads, findings panel
-│   │       └── lib/          # API client, socket client
-│   ├── api/                  # Fastify REST API + Socket.IO server
-│   │   └── src/
-│   │       ├── plugins/      # auth, db, redis, rate-limit, socket
-│   │       ├── modules/      # auth, workspaces, reviews, comments, approvals, analyses
-│   │       ├── db/           # Drizzle schema and migrations
-│   │       └── realtime/     # rooms, event emitters
-│   └── worker/               # BullMQ consumer for AI analysis
-│       └── src/
-│           ├── jobs/         # analysis job processor
-│           ├── llm/          # provider interface + adapters
-│           └── context/      # diff context builder, redaction
+│   ├── api/                          # Fastify API
+│   │   ├── src/
+│   │   │   ├── app.ts                # buildApp(): creates the Fastify instance (no listen)
+│   │   │   ├── server.ts             # Entry point: config, listen, graceful shutdown
+│   │   │   ├── config.ts             # Zod-validated environment config
+│   │   │   ├── config.test.ts
+│   │   │   ├── health.test.ts
+│   │   │   └── routes/
+│   │   │       └── health.ts         # GET /health (liveness)
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── vitest.config.ts
+│   ├── web/                          # Next.js frontend (App Router)
+│   │   ├── src/
+│   │   │   ├── app/
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── page.tsx          # Home page: shows API health (server component)
+│   │   │   │   └── globals.css
+│   │   │   └── lib/
+│   │   │       ├── api-health.ts     # Fetches and validates GET /health
+│   │   │       ├── api-health.test.ts
+│   │   │       └── env.server.ts     # Server-only, Zod-validated API_URL
+│   │   ├── AGENTS.md                 # Generated by Next.js for AI coding tools
+│   │   ├── next.config.ts            # Loads the root .env, transpiles @diffcraft/shared
+│   │   ├── postcss.config.mjs
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── vitest.config.ts
+│   └── worker/                       # (planned) BullMQ consumer for AI analysis
 ├── packages/
-│   └── shared/               # Zod schemas, event contracts, shared types and enums
+│   └── shared/                       # Zod schemas and inferred types (raw TS, no build step)
+│       ├── src/
+│       │   ├── index.ts
+│       │   ├── health.ts             # HealthResponseSchema
+│       │   └── health.test.ts
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── vitest.config.ts
+├── infra/
+│   └── postgres/
+│       └── init/
+│           └── 01-create-test-db.sql # Creates diffcraft_test on first start
 ├── docs/
-│   └── architecture.md       # Extended architecture notes and decision records
-├── .env.example              # (planned)
-├── docker-compose.yml        # (planned)
+│   ├── learning/
+│   │   └── stage-0.md                # Stage 0 revision notes
+│   └── architecture.md               # (planned) Extended architecture notes and decision records
+├── .env.example                      # All environment variables with local placeholder values
+├── .gitattributes                    # LF line endings everywhere
+├── .gitignore
+├── .nvmrc                            # Node.js version
+├── .prettierignore
+├── .prettierrc
+├── docker-compose.yml                # Local PostgreSQL and Redis
+├── eslint.config.mjs
+├── package.json                      # Root scripts and pinned pnpm version
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
+├── tsconfig.base.json                # Shared strict compiler options
+├── vitest.config.mts                 # Runs each app/package as a Vitest project
 └── README.md
 ```
 
-The worker is shown as a separate app; it may initially live as a second entrypoint inside `apps/api` to share the database layer, and be split out later.
+As the API grows, `apps/api/src` is expected to gain `plugins/`, `modules/`, `db/` (Drizzle schema and migrations) and `realtime/` folders _(planned)_. The worker may first live as a second entrypoint inside `apps/api` to share the database layer, and be split out later.
 
 ---
 
@@ -1125,15 +1209,18 @@ Notes:
 
 ## Development Roadmap
 
-| Phase                           | Scope                                                                                                                                                      | Status             |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| **0. Foundation**               | README and architecture docs; monorepo scaffolding; TypeScript, lint and format config; shared package; CI for type-check and tests.                       | In progress (docs) |
-| **1. Core data and auth**       | Drizzle schema and migrations; registration, login, sessions; workspaces, membership and roles; authorization guards; OpenAPI generation.                  | Planned            |
-| **2. Reviews and diffs**        | Review creation from patch upload; diff parsing; file list; unified and side-by-side viewer; revisions.                                                    | Planned            |
-| **3. Discussion and decisions** | Line-anchored comments, threads, resolution, outdated detection; reviewer assignment; approvals and status recomputation; history.                         | Planned            |
-| **4. Real-time**                | Socket.IO with session auth and rooms; emit-after-commit; presence; notifications; Redis adapter.                                                          | Planned            |
-| **5. AI analysis**              | Job model; BullMQ queue and worker; provider adapter; context builder and redaction; schema-validated findings; retries and failure handling; findings UI. | Planned            |
-| **6. Hardening**                | Rate limiting, security headers, integration test suite, Docker Compose, deployment configuration, observability.                                          | Planned            |
+| Stage                             | Scope                                                                                                                                  | Status          |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| **0. Foundation**                 | pnpm monorepo; shared TypeScript, ESLint, Prettier and Vitest config; shared package; API and web skeletons; local Docker Compose; CI. | **Implemented** |
+| **1. Database and auth**          | Drizzle schema and migrations; DB and Redis connections; `/ready` probe; registration, login and sessions.                             | Planned         |
+| **2. Workspaces and roles**       | Workspaces, membership and invitations; role-based authorization guards.                                                               | Planned         |
+| **3. Reviews and diff ingestion** | Review creation from patch upload; diff parsing and storage; changed-file list; revisions.                                             | Planned         |
+| **4. Diff viewer**                | Unified and side-by-side diff views; file navigation; stable line references.                                                          | Planned         |
+| **5. Comments and threads**       | Line-anchored comments, replies, resolution and outdated detection.                                                                    | Planned         |
+| **6. Approvals and lifecycle**    | Reviewer assignment; approve / request changes; status recomputation; review history.                                                  | Planned         |
+| **7. Real-time**                  | Socket.IO with session auth and rooms; emit-after-commit; presence; notifications; Redis adapter.                                      | Planned         |
+| **8. AI analysis**                | Job model; BullMQ queue and worker; provider adapter; context building and redaction; schema-validated findings; retries; findings UI. | Planned         |
+| **9. Hardening and deployment**   | Rate limiting, security headers, integration tests, production builds and Dockerfiles, deployment configuration, observability.        | Planned         |
 
 ---
 
