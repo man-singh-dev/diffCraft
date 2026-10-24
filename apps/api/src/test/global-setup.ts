@@ -23,9 +23,11 @@ export default async function setup(): Promise<void> {
   try {
     await migrate(drizzle({ client: pool }), { migrationsFolder });
   } catch (error) {
-    throw new Error('Failed to run migrations against TEST_DATABASE_URL. Is Postgres running?', {
-      cause: error,
-    });
+    const message = 'Failed to run migrations against TEST_DATABASE_URL. Is Postgres running?';
+    // Printed as well as thrown: Vitest 5.0.5 can crash while printing global-setup
+    // errors ("code.charCodeAt is not a function"), which hides this message.
+    console.error(`\n[api] ${message}\n`);
+    throw new Error(message, { cause: error });
   } finally {
     await pool.end();
   }
