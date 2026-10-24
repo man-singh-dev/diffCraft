@@ -3,12 +3,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { UNUSED_DATABASE_URL } from './test/db.js';
 
 describe('GET /health', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent' }));
+    // Liveness must not depend on the database, so point it at one that doesn't exist.
+    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: UNUSED_DATABASE_URL }));
   });
 
   afterAll(async () => {

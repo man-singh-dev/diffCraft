@@ -14,7 +14,10 @@
     "test": "vitest run",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "infra:logs": "docker compose logs -f"
+    "infra:logs": "docker compose logs -f",
+    "db:generate": "pnpm --filter @diffcraft/api db:generate",
+    "db:migrate": "pnpm --filter @diffcraft/api db:migrate",
+    "db:studio": "pnpm --filter @diffcraft/api db:studio"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

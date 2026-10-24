@@ -5,6 +5,9 @@ const ConfigSchema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   WEB_ORIGIN: z.url().default('http://localhost:3000'),
+  DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  // Only read by the test suite (migrations + DB tests); the app itself never connects to it.
+  TEST_DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }).optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
