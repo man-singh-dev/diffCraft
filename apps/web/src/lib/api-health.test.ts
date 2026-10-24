@@ -19,7 +19,7 @@ function makeFetch(status: number, body: unknown): typeof fetch {
 
 describe('getApiHealth', () => {
   it('returns ok:true with valid data for a good response', async () => {
-    const result = await getApiHealth(makeFetch(200, VALID_BODY), TEST_URL);
+    const result = await getApiHealth(TEST_URL, makeFetch(200, VALID_BODY));
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.status).toBe('ok');
@@ -28,20 +28,20 @@ describe('getApiHealth', () => {
   });
 
   it('returns ok:false when the response body has an invalid shape', async () => {
-    const result = await getApiHealth(makeFetch(200, { wrong: 'shape' }), TEST_URL);
+    const result = await getApiHealth(TEST_URL, makeFetch(200, { wrong: 'shape' }));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/invalid/i);
   });
 
   it('returns ok:false for a non-200 status', async () => {
-    const result = await getApiHealth(makeFetch(503, {}), TEST_URL);
+    const result = await getApiHealth(TEST_URL, makeFetch(503, {}));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain('503');
   });
 
   it('returns ok:false for a network error', async () => {
     const errorFetch = vi.fn().mockRejectedValue(new Error('Network failure'));
-    const result = await getApiHealth(errorFetch as unknown as typeof fetch, TEST_URL);
+    const result = await getApiHealth(TEST_URL, errorFetch as unknown as typeof fetch);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe('Network failure');
   });

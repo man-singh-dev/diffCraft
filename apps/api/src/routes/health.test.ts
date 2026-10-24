@@ -1,9 +1,9 @@
 import { HealthResponseSchema } from '@diffcraft/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { buildApp } from './app.js';
-import { loadConfig } from './config.js';
-import { UNUSED_DATABASE_URL } from './test/db.js';
+import { buildApp } from '../app.js';
+import { loadConfig } from '../config.js';
+import { UNUSED_DATABASE_URL } from '../test/db.js';
 
 describe('GET /health', () => {
   let app: FastifyInstance;

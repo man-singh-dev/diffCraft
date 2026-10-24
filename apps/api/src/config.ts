@@ -1,3 +1,4 @@
+import { formatZodIssues } from '@diffcraft/shared';
 import { z } from 'zod';
 
 const ConfigSchema = z.object({
@@ -21,8 +22,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const result = ConfigSchema.safeParse(env);
   if (result.success) return result.data;
 
-  const details = result.error.issues
-    .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
-    .join('\n');
-  throw new Error(`Invalid environment configuration:\n${details}`);
+  throw new Error(`Invalid environment configuration:\n${formatZodIssues(result.error.issues)}`);
 }

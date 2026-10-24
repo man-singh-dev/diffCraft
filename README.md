@@ -50,24 +50,24 @@
 
 ## Current Status
 
-| Area                                                             | Status          | Notes                                                                                                                      |
-| ---------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Repository and documentation                                     | **In progress** | This README defines scope and intended architecture. Stage notes live in `docs/learning/`.                                 |
-| Monorepo scaffolding (`apps/web`, `apps/api`, `packages/shared`) | **Implemented** | pnpm workspaces; shared TypeScript, ESLint and Prettier config.                                                            |
-| Shared package (`packages/shared`)                               | **Implemented** | Zod schemas with inferred types. Currently only the health response contract.                                              |
-| API skeleton (Fastify)                                           | **Implemented** | Validated env config, `GET /health` (liveness), graceful shutdown. No database access yet.                                 |
-| Web skeleton (Next.js)                                           | **Implemented** | Home page that shows the API health status, fetched server-side.                                                           |
-| Local infrastructure (Docker Compose)                            | **Implemented** | PostgreSQL 18 and Redis 8 for local development. No app code connects to them yet.                                         |
-| CI (GitHub Actions)                                              | **Implemented** | Typecheck, lint, format check, tests and web build on pull requests and pushes to `main`.                                  |
-| Tests (Vitest)                                                   | **Implemented** | Unit tests for config validation, the health route and schema, and the web health client. No coverage figures are claimed. |
-| Database schema and migrations (Drizzle)                         | Planned         | Schema below is a proposal, not final.                                                                                     |
-| Authentication and workspace membership                          | Planned         |                                                                                                                            |
-| Code diff viewer                                                 | Planned         |                                                                                                                            |
-| Reviews, comments, threads, approvals                            | Planned         |                                                                                                                            |
-| Real-time collaboration (Socket.IO)                              | Planned         |                                                                                                                            |
-| AI analysis worker (BullMQ + LLM provider)                       | Planned         |                                                                                                                            |
-| Application Dockerfiles / deployment                             | Planned         | Only local Postgres and Redis run in Docker so far.                                                                        |
-| OpenAPI documentation                                            | Planned         | To be generated from Zod route schemas.                                                                                    |
+| Area                                                             | Status          | Notes                                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository and documentation                                     | **In progress** | This README defines scope and intended architecture. Stage notes live in `docs/learning/`.                                                                                                                                                          |
+| Monorepo scaffolding (`apps/web`, `apps/api`, `packages/shared`) | **Implemented** | pnpm workspaces; shared TypeScript, ESLint and Prettier config.                                                                                                                                                                                     |
+| Shared package (`packages/shared`)                               | **Implemented** | Zod schemas with inferred types: the health and readiness response contracts, plus a Zod error formatter.                                                                                                                                           |
+| API skeleton (Fastify)                                           | **Implemented** | Validated env config, `GET /health` (liveness), `GET /ready` (readiness, checks the database), graceful shutdown.                                                                                                                                   |
+| Web skeleton (Next.js)                                           | **Implemented** | Home page that shows the API health status, fetched server-side.                                                                                                                                                                                    |
+| Local infrastructure (Docker Compose)                            | **Implemented** | PostgreSQL 18 and Redis 8 for local development. The API connects to Postgres; nothing uses Redis yet.                                                                                                                                              |
+| CI (GitHub Actions)                                              | **Implemented** | Typecheck, lint, format check, tests (with a PostgreSQL 18 service container) and web build on PRs and pushes to `main`.                                                                                                                            |
+| Tests (Vitest)                                                   | **Implemented** | Unit tests, plus database tests (`/ready`, the unique email index) that run against a separate test database (`diffcraft_test`, migrated automatically before the tests; skipped if `TEST_DATABASE_URL` is unset). No coverage figures are claimed. |
+| Database schema and migrations (Drizzle)                         | **In progress** | `users` and `sessions` tables, Drizzle migrations, `GET /ready`. The rest of the schema below is still a proposal.                                                                                                                                  |
+| Authentication and workspace membership                          | Planned         |                                                                                                                                                                                                                                                     |
+| Code diff viewer                                                 | Planned         |                                                                                                                                                                                                                                                     |
+| Reviews, comments, threads, approvals                            | Planned         |                                                                                                                                                                                                                                                     |
+| Real-time collaboration (Socket.IO)                              | Planned         |                                                                                                                                                                                                                                                     |
+| AI analysis worker (BullMQ + LLM provider)                       | Planned         |                                                                                                                                                                                                                                                     |
+| Application Dockerfiles / deployment                             | Planned         | Only local Postgres and Redis run in Docker so far.                                                                                                                                                                                                 |
+| OpenAPI documentation                                            | Planned         | To be generated from Zod route schemas.                                                                                                                                                                                                             |
 
 Status labels used throughout: **Implemented** · **In progress** · **Planned**.
 
@@ -290,9 +290,9 @@ flowchart LR
 
 ## Technology Stack
 
-**In use now:** Next.js, TypeScript, Tailwind CSS, Node.js, Fastify, Zod, Vitest, Docker (local PostgreSQL and Redis) and GitHub Actions CI.
+**In use now:** Next.js, TypeScript, Tailwind CSS, Node.js, Fastify, Zod, PostgreSQL with Drizzle ORM (schema, migrations and the `pg` driver), Vitest, Docker (local PostgreSQL and Redis) and GitHub Actions CI.
 
-**Planned:** Drizzle ORM, Socket.IO, BullMQ, the LLM provider integration and OpenAPI generation. PostgreSQL and Redis run locally but no application code uses them yet.
+**Planned:** Socket.IO, BullMQ, the LLM provider integration and OpenAPI generation. Redis runs locally but no application code uses it yet.
 
 | Layer            | Technology                                    | Rationale                                                                                                            |
 | ---------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -537,7 +537,7 @@ List endpoints use **keyset (cursor) pagination** on `(created_at, id)` or `(upd
 ## API Design
 
 > [!NOTE]
-> **All endpoints below are proposed.** None are implemented yet. Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
+> **All endpoints below are proposed** unless marked **Implemented** (so far only `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
 
 Conventions (proposed):
 
@@ -629,11 +629,11 @@ Conventions (proposed):
 
 ### Operational
 
-| Method | Path      | Purpose                                                 | Auth              |
-| ------ | --------- | ------------------------------------------------------- | ----------------- |
-| `GET`  | `/health` | Liveness probe.                                         | Public            |
-| `GET`  | `/ready`  | Readiness probe (DB and Redis reachable).               | Public / internal |
-| `GET`  | `/docs`   | OpenAPI UI (disabled or protected outside development). | Development       |
+| Method | Path      | Purpose                                                                                                                  | Auth              | Status          |
+| ------ | --------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------- | --------------- |
+| `GET`  | `/health` | Liveness probe. Never touches the database.                                                                              | Public            | **Implemented** |
+| `GET`  | `/ready`  | Readiness probe: `200 {"status":"ready"}` or `503 {"status":"not_ready"}`. Checks the database now; Redis will be added. | Public / internal | **Implemented** |
+| `GET`  | `/docs`   | OpenAPI UI (disabled or protected outside development).                                                                  | Development       | Planned         |
 
 ---
 
@@ -970,7 +970,7 @@ Planned CI checks: type-checking, linting, unit and integration tests, and migra
 
 ## Local Development Setup
 
-> Status: **Implemented** for the Stage 0 skeleton. Steps marked _(Stage 1)_ do not exist yet.
+> Status: **Implemented** for the Stage 0 skeleton and the Stage 1 database layer.
 
 ### Prerequisites
 
@@ -985,7 +985,9 @@ Planned CI checks: type-checking, linting, unit and integration tests, and migra
 git clone https://github.com/man-singh-dev/diffCraft.git
 cd diffCraft
 
-# 2. Configure environment (local-only placeholder values)
+# 2. Configure environment (local-only placeholder values).
+#    .env must contain DATABASE_URL (the dev database, required by the API) and
+#    TEST_DATABASE_URL (the separate diffcraft_test database, used only by tests).
 cp .env.example .env                 # PowerShell: Copy-Item .env.example .env
 
 # 3. Install dependencies
@@ -994,15 +996,15 @@ pnpm install
 # 4. Start PostgreSQL and Redis in the background (check health with `docker compose ps`)
 pnpm infra:up
 
-# 5. Apply database migrations        (Stage 1, does not exist yet)
-# pnpm db:migrate
+# 5. Apply database migrations to the dev database (DATABASE_URL)
+pnpm db:migrate
 
-# 6. Run the API and web dev servers (in two terminals)
-pnpm --filter @diffcraft/api dev     # http://localhost:4000  (GET /health)
-pnpm --filter @diffcraft/web dev     # http://localhost:3000
+# 6. Run the API and web dev servers together (Ctrl+C stops both)
+pnpm dev                             # API http://localhost:4000 (GET /health, GET /ready)
+                                     # web http://localhost:3000
 ```
 
-The web home page shows whether it can reach the API's `/health` endpoint.
+The web home page shows whether it can reach the API's `/health` endpoint. To run one server on its own: `pnpm --filter @diffcraft/api dev` or `pnpm --filter @diffcraft/web dev`. To browse the database: `pnpm db:studio`. After changing the schema, create a migration with `pnpm db:generate --name <change>`.
 
 ### Checks (the same ones CI runs)
 
@@ -1010,7 +1012,7 @@ The web home page shows whether it can reach the API's `/health` endpoint.
 pnpm typecheck                       # tsc for every package (web runs `next typegen` first)
 pnpm lint                            # ESLint
 pnpm format:check                    # Prettier (use `pnpm format` to fix)
-pnpm test                            # Vitest
+pnpm test                            # Vitest (migrates the test database first)
 pnpm --filter @diffcraft/web build   # Next.js production build
 ```
 
@@ -1020,24 +1022,25 @@ To stop the local infrastructure: `pnpm infra:down`.
 
 ## Environment Variables
 
-All variables live in one root `.env` file (copied from `.env.example`). The API loads it with `--env-file-if-exists`, the web app with `loadEnvConfig` in `next.config.ts`, and Docker Compose reads it automatically. Every variable has a safe local default, so the app also runs (and CI passes) without a `.env`. **Never commit real values.** `.env` is git-ignored.
+All variables live in one root `.env` file (copied from `.env.example`). The API loads it with `--env-file-if-exists`, the web app with `loadEnvConfig` in `next.config.ts`, and Docker Compose reads it automatically. Every variable except `DATABASE_URL` has a safe local default; without `TEST_DATABASE_URL` the database tests are skipped. **Never commit real values.** `.env` is git-ignored.
 
 ### In use now (in `.env.example`)
 
-| Variable            | Used by                  | Description                                                                           | Example placeholder                                         |
-| ------------------- | ------------------------ | ------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `NODE_ENV`          | api                      | Runtime environment (`development`, `test`, `production`).                            | `development`                                               |
-| `API_PORT`          | api                      | Port for the Fastify server.                                                          | `4000`                                                      |
-| `LOG_LEVEL`         | api                      | Logging verbosity.                                                                    | `info`                                                      |
-| `WEB_ORIGIN`        | api                      | Origin of the web app. Validated at startup; will be the CORS / Socket.IO allow-list. | `http://localhost:3000`                                     |
-| `API_URL`           | web (server-only)        | Base URL the web server uses to call the API. Not exposed to the browser.             | `http://localhost:4000`                                     |
-| `POSTGRES_USER`     | docker-compose           | Postgres superuser created on first start.                                            | `diffcraft`                                                 |
-| `POSTGRES_PASSWORD` | docker-compose           | Password for that user (local only).                                                  | `diffcraft`                                                 |
-| `POSTGRES_DB`       | docker-compose           | Default database created on first start.                                              | `diffcraft`                                                 |
-| `POSTGRES_PORT`     | docker-compose           | Host port for Postgres (bound to `127.0.0.1`).                                        | `5432`                                                      |
-| `REDIS_PORT`        | docker-compose           | Host port for Redis (bound to `127.0.0.1`).                                           | `6379`                                                      |
-| `DATABASE_URL`      | _not read yet_ (Stage 1) | PostgreSQL connection string for the API.                                             | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft` |
-| `REDIS_URL`         | _not read yet_ (Stage 1) | Redis connection string for the API and worker.                                       | `redis://localhost:6379`                                    |
+| Variable            | Used by                  | Description                                                                           | Example placeholder                                              |
+| ------------------- | ------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `NODE_ENV`          | api                      | Runtime environment (`development`, `test`, `production`).                            | `development`                                                    |
+| `API_PORT`          | api                      | Port for the Fastify server.                                                          | `4000`                                                           |
+| `LOG_LEVEL`         | api                      | Logging verbosity.                                                                    | `info`                                                           |
+| `WEB_ORIGIN`        | api                      | Origin of the web app. Validated at startup; will be the CORS / Socket.IO allow-list. | `http://localhost:3000`                                          |
+| `API_URL`           | web (server-only)        | Base URL the web server uses to call the API. Not exposed to the browser.             | `http://localhost:4000`                                          |
+| `POSTGRES_USER`     | docker-compose           | Postgres superuser created on first start.                                            | `diffcraft`                                                      |
+| `POSTGRES_PASSWORD` | docker-compose           | Password for that user (local only).                                                  | `diffcraft`                                                      |
+| `POSTGRES_DB`       | docker-compose           | Default database created on first start.                                              | `diffcraft`                                                      |
+| `POSTGRES_PORT`     | docker-compose           | Host port for Postgres (bound to `127.0.0.1`).                                        | `5432`                                                           |
+| `REDIS_PORT`        | docker-compose           | Host port for Redis (bound to `127.0.0.1`).                                           | `6379`                                                           |
+| `DATABASE_URL`      | api, drizzle-kit         | PostgreSQL connection string for the API and `pnpm db:*`. **Required.**               | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft`      |
+| `TEST_DATABASE_URL` | api tests                | Separate test database; migrated before the API tests. Optional (tests skip without). | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft_test` |
+| `REDIS_URL`         | _not read yet_ (Stage 1) | Redis connection string for the API and worker.                                       | `redis://localhost:6379`                                         |
 
 The API validates its variables with a Zod schema at startup and exits with a list of invalid names (never their values). The web app validates `API_URL` the same way.
 

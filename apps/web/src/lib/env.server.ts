@@ -4,19 +4,18 @@
 // will throw a build-time error.
 import 'server-only';
 
+import { formatZodIssues } from '@diffcraft/shared';
 import { z } from 'zod';
 
 const EnvSchema = z.object({
+  // The only default for the API URL; everything else receives it from here.
   API_URL: z.url().default('http://localhost:4000'),
 });
 
 const result = EnvSchema.safeParse(process.env);
 
 if (!result.success) {
-  const details = result.error.issues
-    .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
-    .join('\n');
-  throw new Error(`Invalid server environment:\n${details}`);
+  throw new Error(`Invalid server environment:\n${formatZodIssues(result.error.issues)}`);
 }
 
 export const env = result.data;

@@ -5,7 +5,7 @@ import { env } from '@/lib/env.server';
 import { getApiHealth } from '@/lib/api-health';
 
 export default async function HomePage() {
-  const health = await getApiHealth(fetch, env.API_URL);
+  const health = await getApiHealth(env.API_URL);
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-16">

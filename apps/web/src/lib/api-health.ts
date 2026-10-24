@@ -2,8 +2,8 @@ import { HealthResponseSchema, type HealthResponse } from '@diffcraft/shared';
 
 type ApiHealthResult = { ok: true; data: HealthResponse } | { ok: false; reason: string };
 export async function getApiHealth(
+  apiUrl: string,
   fetchImpl: typeof fetch = fetch,
-  apiUrl = process.env['API_URL'] ?? 'http://localhost:4000',
 ): Promise<ApiHealthResult> {
   try {
     const controller = new AbortController();
