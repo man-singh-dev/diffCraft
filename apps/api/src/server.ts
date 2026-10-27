@@ -26,7 +26,7 @@ process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 
 try {
-  await app.listen({ host: '127.0.0.1', port: config.API_PORT });
+  await app.listen({ host: config.HOST, port: config.API_PORT });
 } catch (error) {
   app.log.error(error);
   process.exit(1);

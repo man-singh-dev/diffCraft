@@ -64,5 +64,9 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://diffcraft:diffcraft@localhost:5432/diffcraft_test
 
+      # The production bundle (dist/server.js, dist/migrate.js) that Render runs.
+      - name: Build API
+        run: pnpm --filter @diffcraft/api build
+
       - name: Build web
         run: pnpm --filter @diffcraft/web build
