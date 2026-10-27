@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ErrorResponseSchema, PublicUserSchema, RegisterRequestSchema } from './auth.js';
+import {
+  ErrorResponseSchema,
+  LoginRequestSchema,
+  PublicUserSchema,
+  RegisterRequestSchema,
+} from './auth.js';
 
 const validRegister = {
   email: 'user@example.com',
@@ -57,6 +62,32 @@ describe('RegisterRequestSchema', () => {
 
   it('rejects missing fields', () => {
     expect(RegisterRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('LoginRequestSchema', () => {
+  it('trims and lowercases the email', () => {
+    const parsed = LoginRequestSchema.parse({ email: '  Ada@Example.COM ', password: 'x' });
+    expect(parsed.email).toBe('ada@example.com');
+  });
+
+  it('does not apply the sign-up password rules', () => {
+    expect(LoginRequestSchema.safeParse({ email: 'a@x.com', password: 'short' }).success).toBe(
+      true,
+    );
+  });
+
+  it('enforces password length 1–128', () => {
+    const withPassword = (password: string) =>
+      LoginRequestSchema.safeParse({ email: 'a@x.com', password }).success;
+    expect(withPassword('')).toBe(false);
+    expect(withPassword('a'.repeat(128))).toBe(true);
+    expect(withPassword('a'.repeat(129))).toBe(false);
+  });
+
+  it('rejects missing fields and an empty email', () => {
+    expect(LoginRequestSchema.safeParse({}).success).toBe(false);
+    expect(LoginRequestSchema.safeParse({ email: '   ', password: 'x' }).success).toBe(false);
   });
 });
 

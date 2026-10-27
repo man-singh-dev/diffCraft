@@ -4,8 +4,6 @@ import { users } from './users.js';
 export const sessions = pgTable(
   'sessions',
   {
-    // A hash of the session token, never the token itself: a leaked table can't be
-    // used to hijack sessions.
     id: text('id').primaryKey(),
     userId: uuid('user_id')
       .notNull()
@@ -14,6 +12,7 @@ export const sessions = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
   },
+  //indexes for common queuries
   (table) => [
     index('sessions_user_id_idx').on(table.userId),
     index('sessions_expires_at_idx').on(table.expiresAt),

@@ -1,11 +1,14 @@
 import { sql } from 'drizzle-orm';
 import { pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-
+//session depends on user so we need to import user first
 export const users = pgTable(
   'users',
   {
-    // uuidv7() is built into Postgres 18. v7 ids start with a timestamp, so new rows
-    // land at the end of the primary-key index instead of at random positions (as v4 does).
+    //UUIDv4 IDs rae random and not guessable, so they are safe to expose in URLs. They are also
+    //more efficient than serial integers for large tables, because they don't require a global
+    //lock to generate the next ID. --- IGNORE ---
+    //UUIDv7 IDs are time-ordered, so they are more efficient than UUIDv4 for large tables, because
+    //they don't require a global lock to generate the next ID. --- IGNORE ---
     id: uuid('id')
       .primaryKey()
       .default(sql`uuidv7()`),
@@ -25,4 +28,4 @@ export const users = pgTable(
 );
 
 export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
+export type NewUser = typeof users.$inferInsert;//data accepted when new user enters
