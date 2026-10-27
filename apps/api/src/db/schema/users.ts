@@ -28,4 +28,4 @@ export const users = pgTable(
 );
 
 export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;//data accepted when new user enters
+export type NewUser = typeof users.$inferInsert; //data accepted when new user enters
