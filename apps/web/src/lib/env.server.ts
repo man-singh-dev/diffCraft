@@ -8,7 +8,7 @@ import { formatZodIssues } from '@diffcraft/shared';
 import { z } from 'zod';
 
 const EnvSchema = z.object({
-  // The only default for the API URL; everything else receives it from here.
+  // Keep this default in sync with next.config.ts (the /api rewrite), which can't import this file.
   API_URL: z.url().default('http://localhost:4000'),
 });
 
