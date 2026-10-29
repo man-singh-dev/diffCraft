@@ -8,6 +8,10 @@
 ![Status](https://img.shields.io/badge/status-initial%20development-orange)
 ![License](https://img.shields.io/badge/license-undecided-lightgrey)
 
+**Live demo:** [diffcraft-three.vercel.app](https://diffcraft-three.vercel.app)
+
+<sub>The API runs on a free instance that sleeps after inactivity, so the first request can take about a minute.</sub>
+
 </div>
 
 > [!IMPORTANT]
@@ -18,6 +22,7 @@
 ## Table of Contents
 
 - [Current Status](#current-status)
+- [Known Limitations](#known-limitations)
 - [Overview](#overview)
 - [Problem Statement](#problem-statement)
 - [Goals and Design Principles](#goals-and-design-principles)
@@ -51,26 +56,38 @@
 
 ## Current Status
 
-| Area                                                             | Status          | Notes                                                                                                                                                                                                                                               |
-| ---------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository and documentation                                     | **In progress** | This README defines scope and intended architecture. Stage notes live in `docs/learning/`.                                                                                                                                                          |
-| Monorepo scaffolding (`apps/web`, `apps/api`, `packages/shared`) | **Implemented** | pnpm workspaces; shared TypeScript, ESLint and Prettier config.                                                                                                                                                                                     |
-| Shared package (`packages/shared`)                               | **Implemented** | Zod schemas with inferred types: the health and readiness response contracts, plus a Zod error formatter.                                                                                                                                           |
-| API skeleton (Fastify)                                           | **Implemented** | Validated env config, `GET /health` (liveness), `GET /ready` (readiness, checks the database), graceful shutdown.                                                                                                                                   |
-| Web skeleton (Next.js)                                           | **Implemented** | Home page that shows the API health status, fetched server-side.                                                                                                                                                                                    |
-| Local infrastructure (Docker Compose)                            | **Implemented** | PostgreSQL 18 and Redis 8 for local development. The API connects to Postgres; nothing uses Redis yet.                                                                                                                                              |
-| CI (GitHub Actions)                                              | **Implemented** | Typecheck, lint, format check, tests (with a PostgreSQL 18 service container) and web build on PRs and pushes to `main`.                                                                                                                            |
-| Tests (Vitest)                                                   | **Implemented** | Unit tests, plus database tests (`/ready`, the unique email index) that run against a separate test database (`diffcraft_test`, migrated automatically before the tests; skipped if `TEST_DATABASE_URL` is unset). No coverage figures are claimed. |
-| Database schema and migrations (Drizzle)                         | **In progress** | `users` and `sessions` tables, Drizzle migrations, `GET /ready`. The rest of the schema below is still a proposal.                                                                                                                                  |
-| Authentication and workspace membership                          | Planned         |                                                                                                                                                                                                                                                     |
-| Code diff viewer                                                 | Planned         |                                                                                                                                                                                                                                                     |
-| Reviews, comments, threads, approvals                            | Planned         |                                                                                                                                                                                                                                                     |
-| Real-time collaboration (Socket.IO)                              | Planned         |                                                                                                                                                                                                                                                     |
-| AI analysis worker (BullMQ + LLM provider)                       | Planned         |                                                                                                                                                                                                                                                     |
-| Application Dockerfiles / deployment                             | Planned         | Only local Postgres and Redis run in Docker so far.                                                                                                                                                                                                 |
-| OpenAPI documentation                                            | Planned         | To be generated from Zod route schemas.                                                                                                                                                                                                             |
+| Area                                                             | Status          | Notes                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository and documentation                                     | **In progress** | This README defines scope and intended architecture, and marks what is implemented.                                                                                                                                                                                               |
+| Monorepo scaffolding (`apps/web`, `apps/api`, `packages/shared`) | **Implemented** | pnpm workspaces; shared TypeScript, ESLint and Prettier config.                                                                                                                                                                                                                   |
+| Shared package (`packages/shared`)                               | **Implemented** | Zod schemas with inferred types: health and readiness responses, auth requests, the public user, the error response shape, plus a Zod error formatter.                                                                                                                            |
+| API skeleton (Fastify)                                           | **Implemented** | Validated env config, `GET /health` (liveness), `GET /ready` (readiness, checks the database), graceful shutdown.                                                                                                                                                                 |
+| Web skeleton (Next.js)                                           | **Implemented** | Home page that shows the API health status (fetched server-side) and links to log in, sign up or the profile.                                                                                                                                                                     |
+| Local infrastructure (Docker Compose)                            | **Implemented** | PostgreSQL 18 and Redis 8 for local development. The API connects to Postgres; nothing uses Redis until Stage 7.                                                                                                                                                                  |
+| CI (GitHub Actions)                                              | **Implemented** | Typecheck, lint, format check, tests (with a PostgreSQL 18 service container), API build and web build on PRs and pushes to `main`.                                                                                                                                               |
+| Tests (Vitest)                                                   | **Implemented** | Unit tests, plus API integration tests (auth routes, sessions, `/ready`, the unique email index) that run against a separate test database (`diffcraft_test`, migrated automatically before the tests; skipped if `TEST_DATABASE_URL` is unset). No coverage figures are claimed. |
+| Database layer (Drizzle)                                         | **Implemented** | Drizzle schema and migrations for the `users` and `sessions` tables, `GET /ready`. The rest of the schema below is still a proposal.                                                                                                                                              |
+| Authentication                                                   | **Implemented** | Register, login, logout and me (`/api/v1/auth/*`), with server-side sessions in HttpOnly cookies.                                                                                                                                                                                 |
+| Web pages (sign-up, login, profile)                              | **Implemented** | Sign-up, login and profile pages, plus logout.                                                                                                                                                                                                                                    |
+| Deployment (Vercel + Render + Neon)                              | **Implemented** | Web on Vercel, API on Render, PostgreSQL on Neon. See [Deployment](#deployment).                                                                                                                                                                                                  |
+| Workspaces and membership                                        | Planned         |                                                                                                                                                                                                                                                                                   |
+| Code diff viewer                                                 | Planned         |                                                                                                                                                                                                                                                                                   |
+| Reviews, comments, threads, approvals                            | Planned         |                                                                                                                                                                                                                                                                                   |
+| Real-time collaboration (Socket.IO)                              | Planned         |                                                                                                                                                                                                                                                                                   |
+| AI analysis worker (BullMQ + LLM provider)                       | Planned         |                                                                                                                                                                                                                                                                                   |
+| Application Dockerfiles                                          | Planned         | Only local Postgres and Redis run in Docker so far.                                                                                                                                                                                                                               |
+| OpenAPI documentation                                            | Planned         | To be generated from Zod route schemas.                                                                                                                                                                                                                                           |
 
 Status labels used throughout: **Implemented** · **In progress** · **Planned**.
+
+---
+
+## Known Limitations
+
+- **Cold starts.** The API runs on a free Render instance that sleeps after inactivity, so the first request after a quiet period can take about a minute.
+- **No rate limiting yet.** Login and registration are not rate-limited. Rate limiting is planned (Stage 9).
+- **Email enumeration on register.** `POST /api/v1/auth/register` returns `409` when the email is already registered, which reveals whether an account exists. This stays until email verification is added.
+- **No custom domain yet.** The app is served from its default Vercel URL.
 
 ---
 
@@ -122,7 +139,7 @@ DiffCraft aims to address these by modeling reviews, line-anchored threads, revi
 
 ## Key Features
 
-All features below are **Planned** unless marked otherwise.
+All features below are **Planned** unless marked otherwise. So far only user authentication is **Implemented**.
 
 ### Code Diff Viewer
 
@@ -170,7 +187,7 @@ All features below are **Planned** unless marked otherwise.
 
 ### Authentication and Authorization
 
-- User authentication.
+- User authentication: email/password sign-up, login, logout and server-side sessions. **Implemented.**
 - Workspace membership with invitations.
 - Role-based access control at the workspace level.
 - Resource-level authorization checks on every protected endpoint and socket room.
@@ -204,7 +221,7 @@ flowchart LR
 ## Screenshots
 
 > [!NOTE]
-> No user interface exists yet. The placeholders below will be replaced with real screenshots once the corresponding screens are implemented.
+> So far the UI has only the home, sign-up, login and profile pages (try them in the [live demo](https://diffcraft-three.vercel.app)). The review screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
 
 | Screen                                                             | Status  |
 | ------------------------------------------------------------------ | ------- |
@@ -291,9 +308,9 @@ flowchart LR
 
 ## Technology Stack
 
-**In use now:** Next.js, TypeScript, Tailwind CSS, Node.js, Fastify, Zod, PostgreSQL with Drizzle ORM (schema, migrations and the `pg` driver), Vitest, Docker (local PostgreSQL and Redis) and GitHub Actions CI.
+**In use now:** Next.js, TypeScript, Tailwind CSS, Node.js, Fastify (with `@fastify/cookie`), Zod, PostgreSQL with Drizzle ORM (schema, migrations and the `pg` driver), Argon2id (`@node-rs/argon2`), esbuild (API production bundle), Vitest, Docker (local PostgreSQL and Redis), GitHub Actions CI, and Vercel, Render and Neon for deployment.
 
-**Planned:** Socket.IO, BullMQ, the LLM provider integration and OpenAPI generation. Redis runs locally but no application code uses it yet.
+**Planned:** Socket.IO, BullMQ, the LLM provider integration and OpenAPI generation. Redis runs locally but no application code uses it until Stage 7.
 
 | Layer            | Technology                                    | Rationale                                                                                                            |
 | ---------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -338,12 +355,13 @@ On reconnect, the client re-joins its rooms and re-fetches the review state over
 ## Database Design
 
 > [!NOTE]
-> The schema below is a **proposal**. It will change during implementation and will not be considered final until it exists as Drizzle schema and migrations.
+> **Implemented:** the `users` and `sessions` tables (Drizzle schema in `apps/api/src/db/schema`, migrations in `apps/api/drizzle`). Every other table below is a **proposal**. It will change during implementation and will not be considered final until it exists as Drizzle schema and migrations.
 
-### Entity-relationship diagram (proposed)
+### Entity-relationship diagram (`users` and `sessions` implemented; the rest proposed)
 
 ```mermaid
 erDiagram
+    users ||--o{ sessions : "has"
     users ||--o{ workspace_members : "has"
     workspaces ||--o{ workspace_members : "has"
     workspaces ||--o{ reviews : "contains"
@@ -362,11 +380,19 @@ erDiagram
     review_files |o--o{ ai_findings : "located in"
 
     users {
-        uuid id PK
-        citext email UK
+        uuid id PK "uuidv7()"
+        text email UK "unique on lower(email)"
         text display_name
         text password_hash
         timestamptz created_at
+        timestamptz updated_at
+    }
+    sessions {
+        text id PK "SHA-256 of the session token"
+        uuid user_id FK
+        timestamptz created_at
+        timestamptz expires_at
+        timestamptz last_used_at
     }
     workspaces {
         uuid id PK
@@ -466,17 +492,18 @@ erDiagram
 
 ### Table responsibilities
 
-| Table               | Responsibility                                                                                                                       |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `users`             | Identity and credentials (password hash only; never plaintext).                                                                      |
-| `workspaces`        | Top-level tenancy boundary. Every review belongs to exactly one workspace.                                                           |
-| `workspace_members` | Join table between users and workspaces carrying the member's **role**. The basis for authorization.                                 |
-| `reviews`           | A unit of review: title, author, status, current revision and an optimistic-lock `version`.                                          |
-| `review_files`      | Per-file changes for a given revision, including paths, change type, the unified patch and line counts.                              |
-| `review_comments`   | Line-anchored or review-level comments. `parent_comment_id` (self-reference) forms threads; resolution is stored on the thread root. |
-| `review_approvals`  | Reviewer decisions per revision (`approved` / `changes_requested`). A new revision invalidates earlier decisions by default.         |
-| `ai_analysis_jobs`  | Lifecycle and audit record for each analysis request: status, attempts, error code, model and prompt version.                        |
-| `ai_findings`       | Structured findings from a job, linked to the review and — when applicable — a specific file, side and line range.                   |
+| Table               | Responsibility                                                                                                                          |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`             | Identity and credentials (password hash only; never plaintext). **Implemented.**                                                        |
+| `sessions`          | Server-side sessions. Stores only a SHA-256 hash of each token, with a 7-day absolute expiry. Cascades on user delete. **Implemented.** |
+| `workspaces`        | Top-level tenancy boundary. Every review belongs to exactly one workspace.                                                              |
+| `workspace_members` | Join table between users and workspaces carrying the member's **role**. The basis for authorization.                                    |
+| `reviews`           | A unit of review: title, author, status, current revision and an optimistic-lock `version`.                                             |
+| `review_files`      | Per-file changes for a given revision, including paths, change type, the unified patch and line counts.                                 |
+| `review_comments`   | Line-anchored or review-level comments. `parent_comment_id` (self-reference) forms threads; resolution is stored on the thread root.    |
+| `review_approvals`  | Reviewer decisions per revision (`approved` / `changes_requested`). A new revision invalidates earlier decisions by default.            |
+| `ai_analysis_jobs`  | Lifecycle and audit record for each analysis request: status, attempts, error code, model and prompt version.                           |
+| `ai_findings`       | Structured findings from a job, linked to the review and — when applicable — a specific file, side and line range.                      |
 
 Reviewer assignment and notifications will likely require additional tables (`review_reviewers`, `notifications`), which are included in the roadmap.
 
@@ -493,7 +520,7 @@ Reviewer assignment and notifications will likely require additional tables (`re
 
 | Constraint                                               | Purpose                                                                                 |
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `users(email)` (case-insensitive)                        | One account per email address.                                                          |
+| `users(lower(email))`                                    | One account per email address, case-insensitive. **Implemented.**                       |
 | `workspaces(slug)`                                       | Stable, unique URLs.                                                                    |
 | `workspace_members(workspace_id, user_id)` (primary key) | A user has exactly one role per workspace.                                              |
 | `review_files(review_id, revision, new_path)`            | No duplicate file entries within a revision.                                            |
@@ -538,12 +565,12 @@ List endpoints use **keyset (cursor) pagination** on `(created_at, id)` or `(upd
 ## API Design
 
 > [!NOTE]
-> **All endpoints below are proposed** unless marked **Implemented** (so far only `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
+> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
 
-Conventions (proposed):
+Conventions (the base path, error shape, `401` and `422` are **Implemented**; the rest are proposed):
 
 - Base path `/api/v1`; JSON request and response bodies.
-- Errors use a consistent shape: `{ "error": { "code": "...", "message": "...", "details": {...} } }`.
+- Errors use a consistent shape: `{ "error": { "code": "...", "message": "...", "details": {...} } }` (`ErrorResponseSchema` in `packages/shared`; unexpected errors become a generic `500 internal_error`).
 - `401` when unauthenticated; `403` when authenticated but not permitted; `404` when the resource does not exist **or** the caller cannot see it (to avoid leaking existence across workspaces).
 - `409` for optimistic-lock conflicts and invalid state transitions; `422` for validation failures; `429` for rate limits.
 - List endpoints accept `?cursor=` and `?limit=`.
@@ -552,12 +579,12 @@ Conventions (proposed):
 
 ### Authentication
 
-| Method | Path                    | Purpose                                    | Auth                  |
-| ------ | ----------------------- | ------------------------------------------ | --------------------- |
-| `POST` | `/api/v1/auth/register` | Create an account.                         | Public (rate-limited) |
-| `POST` | `/api/v1/auth/login`    | Start a session (sets an httpOnly cookie). | Public (rate-limited) |
-| `POST` | `/api/v1/auth/logout`   | End the current session.                   | User                  |
-| `GET`  | `/api/v1/auth/me`       | Return the current user.                   | User                  |
+| Method | Path                    | Purpose                                    | Auth                                | Status          |
+| ------ | ----------------------- | ------------------------------------------ | ----------------------------------- | --------------- |
+| `POST` | `/api/v1/auth/register` | Create an account.                         | Public (rate limiting planned)      | **Implemented** |
+| `POST` | `/api/v1/auth/login`    | Start a session (sets an HttpOnly cookie). | Public (rate limiting planned)      | **Implemented** |
+| `POST` | `/api/v1/auth/logout`   | End the current session.                   | Public (clears the session, if any) | **Implemented** |
+| `GET`  | `/api/v1/auth/me`       | Return the current user.                   | User                                | **Implemented** |
 
 ### Workspaces and membership
 
@@ -640,17 +667,24 @@ Conventions (proposed):
 
 ## Authentication and Authorization
 
-> Status: **Planned**. The approach below is the current design direction.
+> Status: **Implemented** for authentication (Stage 1). Workspace roles and authorization guards are **Planned** (Stage 2).
 
-### Authentication
+### Authentication (Implemented)
 
-- Email/password registration with passwords hashed using a memory-hard algorithm (e.g. Argon2id).
-- Server-side sessions identified by an **httpOnly, Secure, SameSite** cookie, rather than tokens stored in browser-accessible storage. Sessions can be revoked server-side.
-- CSRF protection for cookie-authenticated, state-changing requests (SameSite cookies plus an origin check or CSRF token).
-- Login and registration endpoints are rate-limited.
+Code: `apps/api/src/modules/auth` and `apps/api/src/plugins/csrf.ts`.
+
+- **Passwords** are hashed with Argon2id (`@node-rs/argon2`). Sign-up requires 10–128 characters; emails are trimmed and lowercased.
+- **Server-side sessions.** Login creates a random 256-bit token. The browser gets the raw token in a cookie; the `sessions` table stores only its SHA-256 hash, so a database leak does not expose usable tokens. Logout deletes the session row, so sessions can be revoked server-side.
+- **Session cookie** `diffcraft_session`: `HttpOnly`, `SameSite=Lax`, `Path=/`, and `Secure` in production. Nothing is kept in browser-accessible storage.
+- **7-day absolute expiry.** A session ends 7 days after login however much it is used; an expired session is deleted when it is next presented.
+- **CSRF Origin check.** `POST`, `PUT`, `PATCH` and `DELETE` requests whose `Origin` header doesn't match `WEB_ORIGIN` are rejected with `403`. Together with `SameSite=Lax` this blocks cross-site form posts.
+- **Timing-safe login.** An unknown email and a wrong password return the same `401 invalid_credentials`, and Argon2 verification runs against a dummy hash when the email is unknown, so response time does not reveal whether an account exists.
+- **Session fixation defence.** Login always issues a new session and deletes any session the browser already had.
+- **Same-origin cookies.** The browser only calls relative `/api/...` URLs on the web app, and Next.js rewrites them to the API, so there is no CORS and the cookie belongs to the web app's origin.
+- **Not yet:** login and registration are **not rate-limited** (planned, Stage 9), and registration reveals whether an email is taken (`409`) until email verification is added. See [Known Limitations](#known-limitations).
 - OAuth sign-in (e.g. GitHub) is a future enhancement.
 
-### Authorization model
+### Authorization model (Planned, Stage 2)
 
 Authorization is evaluated in two layers:
 
@@ -669,7 +703,9 @@ Authorization is evaluated in two layers:
 - Only the **author** can submit new revisions.
 - Comment edits are limited to the comment's author.
 
-### Enforcement
+### Enforcement (Planned, Stage 2)
+
+Today the only guard is `requireAuth`, which returns `401` without a valid session (used by `GET /api/v1/auth/me`).
 
 - Every protected route resolves the target resource **with its workspace** and checks membership before any other logic — never trusting a `workspaceId` supplied by the client alone.
 - Authorization is implemented as reusable Fastify `preHandler` guards, so routes cannot accidentally skip it.
@@ -930,48 +966,59 @@ Status recomputation rules (proposed):
 
 ## Security Considerations
 
-> These are **design goals**. None are implemented or verified yet, and no security guarantees are claimed.
+> Rows marked **Implemented** exist in the code and have tests. The rest are **design goals**. No security audit has been done, and no security guarantees are claimed.
 
-| Area                         | Intended safeguard                                                                                                                                                             |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Authentication               | Argon2id password hashing; httpOnly/Secure/SameSite session cookies; session revocation; CSRF protection.                                                                      |
-| Resource-level authorization | Membership and role checks on every route and socket room, with resources loaded through their workspace.                                                                      |
-| Input validation             | Zod schemas for bodies, params, query strings, socket payloads and environment variables; unknown fields rejected.                                                             |
-| SQL injection                | All queries through Drizzle's parameterized query builder; no string-concatenated SQL.                                                                                         |
-| Rate limiting                | Per-IP and per-user limits (e.g. `@fastify/rate-limit` backed by Redis), stricter on auth and analysis endpoints.                                                              |
-| Submitted code               | Treated strictly as text: never executed, compiled or evaluated. Size limits on patches and files. Rendered with escaping (no `dangerouslySetInnerHTML` for code or comments). |
-| Prompt injection             | Code is passed to the model as delimited, untrusted data; model output cannot trigger actions and is validated against a schema before storage.                                |
-| Secret disclosure            | Redaction of likely secrets before LLM calls; logs exclude code, prompts and tokens; `.env` files git-ignored; secrets loaded from environment only.                           |
-| LLM API keys                 | Stored only server-side (worker environment); never sent to the browser or exposed via `NEXT_PUBLIC_*` variables.                                                              |
-| AI request safety            | Timeouts, bounded retries, cost and size limits per request and workspace.                                                                                                     |
-| Duplicate jobs               | Database-level unique idempotency key plus queue-level job IDs.                                                                                                                |
-| Concurrent updates           | Optimistic locking on reviews, row locks for status recomputation, idempotent resolution.                                                                                      |
-| Transport and headers        | HTTPS in deployment; security headers (e.g. `@fastify/helmet`); strict CORS allow-list.                                                                                        |
-| Information leakage          | `404` for inaccessible resources; generic error messages to clients, details only in server logs.                                                                              |
+| Area                         | Safeguard                                                                                                                                                                                                                      | Status             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
+| Authentication               | Argon2id password hashing; hashed session tokens; HttpOnly/SameSite=Lax cookies (Secure in production); session revocation on logout; CSRF Origin check; timing-safe login. See [Authentication](#authentication-implemented). | **Implemented**    |
+| Resource-level authorization | Membership and role checks on every route and socket room, with resources loaded through their workspace.                                                                                                                      | Planned            |
+| Input validation             | Zod schemas for auth request bodies and environment variables (**Implemented**; unknown fields are currently stripped, not rejected). Params, query strings and socket payloads are added with their routes.                   | Partly implemented |
+| SQL injection                | All queries through Drizzle's parameterized query builder; no string-concatenated SQL.                                                                                                                                         | **Implemented**    |
+| Rate limiting                | Per-IP and per-user limits (e.g. `@fastify/rate-limit` backed by Redis), stricter on auth and analysis endpoints. **Nothing is rate-limited yet.**                                                                             | Planned            |
+| Submitted code               | Treated strictly as text: never executed, compiled or evaluated. Size limits on patches and files. Rendered with escaping (no `dangerouslySetInnerHTML` for code or comments).                                                 | Planned            |
+| Prompt injection             | Code is passed to the model as delimited, untrusted data; model output cannot trigger actions and is validated against a schema before storage.                                                                                | Planned            |
+| Secret disclosure            | `.env` files git-ignored, secrets loaded from environment only, and config errors list variable names, never values (**Implemented**). Redaction before LLM calls and logs that exclude code and prompts come later.           | Partly implemented |
+| LLM API keys                 | Stored only server-side (worker environment); never sent to the browser or exposed via `NEXT_PUBLIC_*` variables.                                                                                                              | Planned            |
+| AI request safety            | Timeouts, bounded retries, cost and size limits per request and workspace.                                                                                                                                                     | Planned            |
+| Duplicate jobs               | Database-level unique idempotency key plus queue-level job IDs.                                                                                                                                                                | Planned            |
+| Concurrent updates           | Optimistic locking on reviews, row locks for status recomputation, idempotent resolution.                                                                                                                                      | Planned            |
+| Transport and headers        | HTTPS in deployment (Vercel and Render) and no CORS needed, since the browser only talks to the web app's origin (**Implemented**). Security headers (e.g. `@fastify/helmet`) come later.                                      | Partly implemented |
+| Information leakage          | Generic `500` messages to clients with details only in server logs, and one error for unknown email or wrong password (**Implemented**). `404` for inaccessible resources comes with authorization.                            | Partly implemented |
 
 ---
 
 ## Testing Strategy
 
-> Status: **Planned**. No tests exist yet, and no coverage figures are claimed.
+> Status: **Implemented** for the levels marked below; the rest are **Planned**. No coverage figures are claimed.
 
-| Level             | Scope                                                                                                                                                                                   | Tooling (intended)                                               |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Unit              | Status recomputation, permission rules, diff parsing and line mapping, idempotency key generation, finding-to-line mapping, redaction.                                                  | Vitest                                                           |
-| Schema / contract | Shared Zod schemas for API, socket events and AI output; OpenAPI generation.                                                                                                            | Vitest                                                           |
-| API integration   | Routes exercised with Fastify's `inject` against a real PostgreSQL test database, covering authorization (including cross-workspace access attempts), validation and conflict handling. | Vitest, PostgreSQL in Docker                                     |
-| Database          | Migrations apply cleanly; constraints and cascades behave as designed.                                                                                                                  | Vitest + Drizzle migrations                                      |
-| Real-time         | Socket handshake auth, room authorization, emit-after-commit (no event on failed writes).                                                                                               | Vitest + `socket.io-client`                                      |
-| Worker            | Retry/backoff classification, timeout handling, invalid-output handling and idempotent completion, using a **mocked LLM provider** (no network calls in tests).                         | Vitest                                                           |
-| Frontend          | Diff rendering, thread interactions, reconnect re-fetch behaviour.                                                                                                                      | Vitest + Testing Library; end-to-end tests are a later addition. |
+All tests use Vitest, sit next to the file they test (`*.test.ts`), and run with `pnpm test` from the root. The API's Vitest global setup migrates the separate `diffcraft_test` database first. Tests that need it are skipped when `TEST_DATABASE_URL` is unset.
 
-Planned CI checks: type-checking, linting, unit and integration tests, and migration verification on every pull request.
+### Exists now
+
+| Level             | What is covered today                                                                                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit              | API config validation, logger, password hashing, error handler, CSRF Origin check.                                                                                           |
+| API integration   | Auth routes, sessions and the auth service, `/health`, `/ready` and the unique email index, exercised with Fastify's `inject` against a real PostgreSQL test database.       |
+| Schema / contract | Shared Zod schemas in `packages/shared` (health, readiness, auth requests and responses, the Zod error formatter).                                                           |
+| Web helpers       | `apps/web/src/lib`: the API client, API health fetch, server-side current-user lookup and form error mapping.                                                                |
+| CI                | GitHub Actions runs typecheck, lint, format check, the full test suite against a PostgreSQL 18 service container, and the API and web builds on every PR and push to `main`. |
+
+### Planned
+
+| Level           | Scope                                                                                                                                                           | Tooling (intended)          |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Unit            | Status recomputation, permission rules, diff parsing and line mapping, idempotency key generation, finding-to-line mapping, redaction.                          | Vitest                      |
+| API integration | Authorization (including cross-workspace access attempts) and conflict handling for workspace and review routes.                                                | Vitest, PostgreSQL          |
+| Real-time       | Socket handshake auth, room authorization, emit-after-commit (no event on failed writes).                                                                       | Vitest + `socket.io-client` |
+| Worker          | Retry/backoff classification, timeout handling, invalid-output handling and idempotent completion, using a **mocked LLM provider** (no network calls in tests). | Vitest                      |
+| Frontend        | Component tests for diff rendering, thread interactions and reconnect re-fetch behaviour.                                                                       | Vitest + Testing Library    |
+| End-to-end      | Full browser flows against a running web app and API.                                                                                                           | To be chosen                |
 
 ---
 
 ## Local Development Setup
 
-> Status: **Implemented** for the Stage 0 skeleton and the Stage 1 database layer.
+> Status: **Implemented** for Stage 0 (foundation) and Stage 1 (database and auth).
 
 ### Prerequisites
 
@@ -1045,28 +1092,29 @@ All variables live in one root `.env` file (copied from `.env.example`). The API
 | `REDIS_PORT`        | docker-compose           | Host port for Redis (bound to `127.0.0.1`).                                           | `6379`                                                           |
 | `DATABASE_URL`      | api, drizzle-kit         | PostgreSQL connection string for the API and `pnpm db:*`. **Required.**               | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft`      |
 | `TEST_DATABASE_URL` | api tests                | Separate test database; migrated before the API tests. Optional (tests skip without). | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft_test` |
-| `REDIS_URL`         | _not read yet_ (Stage 1) | Redis connection string for the API and worker.                                       | `redis://localhost:6379`                                         |
+| `REDIS_URL`         | _not read yet_ (Stage 7) | Redis connection string for the API and worker (Socket.IO adapter, presence, BullMQ). | `redis://localhost:6379`                                         |
 
 The API validates its variables with a Zod schema at startup and exits with a list of invalid names (never their values). The web app validates `API_URL` the same way.
 
 ### Planned
 
-| Variable              | Used by     | Description                                    | Example placeholder              |
-| --------------------- | ----------- | ---------------------------------------------- | -------------------------------- |
-| `SESSION_SECRET`      | api         | Secret used to sign session cookies.           | `<generate-a-long-random-value>` |
-| `LLM_PROVIDER`        | worker      | Identifier of the configured provider adapter. | `<provider-name>`                |
-| `LLM_API_KEY`         | worker      | Provider API key. **Server-side only.**        | `<your-llm-api-key>`             |
-| `LLM_MODEL`           | worker      | Model identifier.                              | `<model-id>`                     |
-| `LLM_TIMEOUT_MS`      | worker      | Per-request timeout.                           | `60000`                          |
-| `AI_JOB_MAX_ATTEMPTS` | worker      | Maximum attempts per analysis job.             | `3`                              |
-| `AI_MAX_DIFF_BYTES`   | api, worker | Upper bound on diff size per analysis.         | `200000`                         |
-| `WORKER_CONCURRENCY`  | worker      | Concurrent jobs per worker process.            | `2`                              |
+No session secret is needed: session tokens are random values looked up by their hash, not signed cookies.
+
+| Variable              | Used by     | Description                                    | Example placeholder  |
+| --------------------- | ----------- | ---------------------------------------------- | -------------------- |
+| `LLM_PROVIDER`        | worker      | Identifier of the configured provider adapter. | `<provider-name>`    |
+| `LLM_API_KEY`         | worker      | Provider API key. **Server-side only.**        | `<your-llm-api-key>` |
+| `LLM_MODEL`           | worker      | Model identifier.                              | `<model-id>`         |
+| `LLM_TIMEOUT_MS`      | worker      | Per-request timeout.                           | `60000`              |
+| `AI_JOB_MAX_ATTEMPTS` | worker      | Maximum attempts per analysis job.             | `3`                  |
+| `AI_MAX_DIFF_BYTES`   | api, worker | Upper bound on diff size per analysis.         | `200000`             |
+| `WORKER_CONCURRENCY`  | worker      | Concurrent jobs per worker process.            | `2`                  |
 
 ---
 
 ## Docker Setup
 
-> Status: **Implemented** for local infrastructure only. No application code connects to these services yet (that starts in Stage 1).
+> Status: **Implemented** for local infrastructure only. The API uses the Postgres service; nothing uses Redis until Stage 7.
 
 `docker-compose.yml` at the repo root runs two services for local development:
 
@@ -1094,23 +1142,45 @@ Per-app Dockerfiles for `api`, `worker` and `web` are **Planned** (Stage 9).
 
 ## Project Structure
 
-The tree below is the **current** repository (excluding `node_modules` and build output). Entries marked _(planned)_ do not exist yet.
+The tree below is the **current** repository (excluding `node_modules` and build output). Entries marked _(planned)_ do not exist yet. Test files (`*.test.ts`) sit next to the file they test and are left out of the tree.
 
 ```text
 diffCraft/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                    # CI: typecheck, lint, format check, test, web build
+│       └── ci.yml                    # CI: typecheck, lint, format check, test, API and web builds
 ├── apps/
 │   ├── api/                          # Fastify API
+│   │   ├── drizzle/                  # Generated SQL migrations (0000_init.sql) and Drizzle metadata
+│   │   ├── scripts/
+│   │   │   └── build.ts              # esbuild bundle of server.ts and migrate.ts into dist/
 │   │   ├── src/
-│   │   │   ├── app.ts                # buildApp(): creates the Fastify instance (no listen)
+│   │   │   ├── app.ts                # buildApp(): registers plugins and routes (no listen)
 │   │   │   ├── server.ts             # Entry point: config, listen, graceful shutdown
+│   │   │   ├── migrate.ts            # Applies pending migrations (run on start in production)
 │   │   │   ├── config.ts             # Zod-validated environment config
-│   │   │   ├── config.test.ts
-│   │   │   ├── health.test.ts
-│   │   │   └── routes/
-│   │   │       └── health.ts         # GET /health (liveness)
+│   │   │   ├── logger.ts             # Logger options
+│   │   │   ├── errors.ts             # AppError and ValidationError
+│   │   │   ├── db/
+│   │   │   │   └── schema/           # Drizzle schema: users.ts, sessions.ts, index.ts
+│   │   │   ├── modules/
+│   │   │   │   └── auth/
+│   │   │   │       ├── routes.ts     # POST register/login/logout, GET me under /api/v1/auth
+│   │   │   │       ├── service.ts    # registerUser, verifyCredentials (timing-safe)
+│   │   │   │       ├── session.ts    # Session tokens, hashing, cookie options, 7-day expiry
+│   │   │   │       ├── password.ts   # Argon2id hash and verify
+│   │   │   │       └── require-auth.ts # requireAuth preHandler (401 without a valid session)
+│   │   │   ├── plugins/
+│   │   │   │   ├── csrf.ts           # Origin check on state-changing requests
+│   │   │   │   ├── db.ts             # pg pool + Drizzle instance as app.db
+│   │   │   │   └── error-handler.ts  # Consistent error responses; generic 500s
+│   │   │   ├── routes/
+│   │   │   │   ├── health.ts         # GET /health (liveness)
+│   │   │   │   └── ready.ts          # GET /ready (readiness, checks the database)
+│   │   │   └── test/
+│   │   │       ├── db.ts             # Test database helpers
+│   │   │       └── global-setup.ts   # Migrates diffcraft_test before the tests
+│   │   ├── drizzle.config.ts
 │   │   ├── package.json
 │   │   ├── tsconfig.json
 │   │   └── vitest.config.ts
@@ -1118,14 +1188,20 @@ diffCraft/
 │   │   ├── src/
 │   │   │   ├── app/
 │   │   │   │   ├── layout.tsx
-│   │   │   │   ├── page.tsx          # Home page: shows API health (server component)
-│   │   │   │   └── globals.css
+│   │   │   │   ├── page.tsx          # Home page: API health plus log in / sign up / profile links
+│   │   │   │   ├── globals.css
+│   │   │   │   ├── login/            # page.tsx, login-form.tsx
+│   │   │   │   ├── register/         # page.tsx, register-form.tsx (sign-up)
+│   │   │   │   └── profile/          # page.tsx, logout-button.tsx
+│   │   │   ├── components/           # form-field.tsx, page-card.tsx, styles.ts
 │   │   │   └── lib/
+│   │   │       ├── api-client.ts     # Browser calls to the API via relative /api URLs
 │   │   │       ├── api-health.ts     # Fetches and validates GET /health
-│   │   │       ├── api-health.test.ts
+│   │   │       ├── auth.server.ts    # Server-side current-user lookup
+│   │   │       ├── form-errors.ts    # Client-side form validation; API errors → field messages
 │   │   │       └── env.server.ts     # Server-only, Zod-validated API_URL
 │   │   ├── AGENTS.md                 # Generated by Next.js for AI coding tools
-│   │   ├── next.config.ts            # Loads the root .env, transpiles @diffcraft/shared
+│   │   ├── next.config.ts            # Loads the root .env, /api rewrite to the API, transpiles @diffcraft/shared
 │   │   ├── postcss.config.mjs
 │   │   ├── package.json
 │   │   ├── tsconfig.json
@@ -1135,8 +1211,10 @@ diffCraft/
 │   └── shared/                       # Zod schemas and inferred types (raw TS, no build step)
 │       ├── src/
 │       │   ├── index.ts
+│       │   ├── auth.ts               # Register/login requests, public user, error response
 │       │   ├── health.ts             # HealthResponseSchema
-│       │   └── health.test.ts
+│       │   ├── ready.ts              # Readiness response
+│       │   └── zod-issues.ts         # Zod error formatter
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── vitest.config.ts
@@ -1145,8 +1223,6 @@ diffCraft/
 │       └── init/
 │           └── 01-create-test-db.sql # Creates diffcraft_test on first start
 ├── docs/
-│   ├── learning/
-│   │   └── stage-0.md                # Stage 0 revision notes
 │   └── architecture.md               # (planned) Extended architecture notes and decision records
 ├── .env.example                      # All environment variables with local placeholder values
 ├── .gitattributes                    # LF line endings everywhere
@@ -1170,7 +1246,7 @@ As the API grows, `apps/api/src` is expected to gain `plugins/`, `modules/`, `db
 
 ## Deployment
 
-> Status: **In progress.** The API and web app are prepared for production; nothing is deployed yet.
+> Status: **Implemented.** The web app, API and database are deployed. Live demo: [diffcraft-three.vercel.app](https://diffcraft-three.vercel.app).
 
 | Part             | Host   | Plan                     |
 | ---------------- | ------ | ------------------------ |
@@ -1215,7 +1291,28 @@ Migrations run on start because the API is a single free instance. With several 
 
 ## Deployment Architecture
 
-> **Proposed deployment architecture.** No deployment configuration exists yet. The target platform has not been chosen.
+### Current deployment (Implemented)
+
+```mermaid
+flowchart LR
+    U["Users' browsers"]
+    WEB["Vercel<br/>Next.js web app"]
+    API["Render free web service<br/>Fastify API (single instance)"]
+    PG[("Neon<br/>PostgreSQL 18")]
+
+    U -- "HTTPS: pages and relative /api/... calls" --> WEB
+    WEB -- "/api/:path* rewrite (HTTPS)" --> API
+    API -- "SQL over TLS" --> PG
+```
+
+- The browser only ever talks to the Vercel origin. Next.js rewrites `/api/:path*` to the Render API (`API_URL`), so the session cookie belongs to the web app's origin and no CORS is needed.
+- The API is a single free Render instance. It sleeps after inactivity (cold starts of about a minute) and applies pending migrations on start (`start:prod`).
+- Neon hosts PostgreSQL 18; the API uses its direct (non-pooled) connection string.
+- No Redis and no worker are deployed yet.
+
+### Future architecture (Planned)
+
+> **Planned, not deployed.** This is the target once real-time (Stage 7) and AI analysis (Stage 8) need several API instances, Redis and a worker.
 
 ```mermaid
 flowchart TB
@@ -1256,24 +1353,24 @@ Notes:
 
 - Only the worker needs outbound access to the LLM provider and holds its API key.
 - Socket.IO across multiple API instances requires the Redis adapter and either sticky sessions or WebSocket-only transport.
-- Migrations run as a separate release step, not on application start.
+- Migrations run as a separate release step, not on application start (unlike the current single-instance setup).
 
 ---
 
 ## Development Roadmap
 
-| Stage                             | Scope                                                                                                                                  | Status          |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| **0. Foundation**                 | pnpm monorepo; shared TypeScript, ESLint, Prettier and Vitest config; shared package; API and web skeletons; local Docker Compose; CI. | **Implemented** |
-| **1. Database and auth**          | Drizzle schema and migrations; DB and Redis connections; `/ready` probe; registration, login and sessions.                             | Planned         |
-| **2. Workspaces and roles**       | Workspaces, membership and invitations; role-based authorization guards.                                                               | Planned         |
-| **3. Reviews and diff ingestion** | Review creation from patch upload; diff parsing and storage; changed-file list; revisions.                                             | Planned         |
-| **4. Diff viewer**                | Unified and side-by-side diff views; file navigation; stable line references.                                                          | Planned         |
-| **5. Comments and threads**       | Line-anchored comments, replies, resolution and outdated detection.                                                                    | Planned         |
-| **6. Approvals and lifecycle**    | Reviewer assignment; approve / request changes; status recomputation; review history.                                                  | Planned         |
-| **7. Real-time**                  | Socket.IO with session auth and rooms; emit-after-commit; presence; notifications; Redis adapter.                                      | Planned         |
-| **8. AI analysis**                | Job model; BullMQ queue and worker; provider adapter; context building and redaction; schema-validated findings; retries; findings UI. | Planned         |
-| **9. Hardening and deployment**   | Rate limiting, security headers, integration tests, production builds and Dockerfiles, deployment configuration, observability.        | Planned         |
+| Stage                             | Scope                                                                                                                                                                                | Status          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| **0. Foundation**                 | pnpm monorepo; shared TypeScript, ESLint, Prettier and Vitest config; shared package; API and web skeletons; local Docker Compose; CI.                                               | **Implemented** |
+| **1. Database and auth**          | Drizzle schema and migrations; database connection; `/ready` probe; registration, login and sessions; sign-up, login and profile pages; free-tier deployment (Vercel, Render, Neon). | **Implemented** |
+| **2. Workspaces and roles**       | Workspaces, membership and invitations; role-based authorization guards.                                                                                                             | Planned         |
+| **3. Reviews and diff ingestion** | Review creation from patch upload; diff parsing and storage; changed-file list; revisions.                                                                                           | Planned         |
+| **4. Diff viewer**                | Unified and side-by-side diff views; file navigation; stable line references.                                                                                                        | Planned         |
+| **5. Comments and threads**       | Line-anchored comments, replies, resolution and outdated detection.                                                                                                                  | Planned         |
+| **6. Approvals and lifecycle**    | Reviewer assignment; approve / request changes; status recomputation; review history.                                                                                                | Planned         |
+| **7. Real-time**                  | First use of Redis: Socket.IO with session auth and rooms; emit-after-commit; presence (Redis TTL keys); notifications; Socket.IO Redis adapter.                                     | Planned         |
+| **8. AI analysis**                | Job model; BullMQ queue (on Redis) and worker; provider adapter; context building and redaction; schema-validated findings; retries; findings UI.                                    | Planned         |
+| **9. Hardening and deployment**   | Rate limiting, security headers, end-to-end tests, Dockerfiles, multi-instance deployment, observability.                                                                            | Planned         |
 
 ---
 
