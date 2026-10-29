@@ -152,14 +152,17 @@ diffCraft/
 │   │   │   ├── logger.ts             # Logger options
 │   │   │   ├── errors.ts             # AppError and ValidationError
 │   │   │   ├── db/
-│   │   │   │   └── schema/           # Drizzle schema: users.ts, sessions.ts, index.ts
+│   │   │   │   ├── errors.ts         # isUniqueViolation (Postgres error helper)
+│   │   │   │   └── schema/           # Drizzle schema: users.ts, sessions.ts, workspaces.ts, index.ts
 │   │   │   ├── modules/
-│   │   │   │   └── auth/
-│   │   │   │       ├── routes.ts     # POST register/login/logout, GET me under /api/v1/auth
-│   │   │   │       ├── service.ts    # registerUser, verifyCredentials (timing-safe)
-│   │   │   │       ├── session.ts    # Session tokens, hashing, cookie options, 7-day expiry
-│   │   │   │       ├── password.ts   # Argon2id hash and verify
-│   │   │   │       └── require-auth.ts # requireAuth preHandler (401 without a valid session)
+│   │   │   │   ├── auth/
+│   │   │   │   │   ├── routes.ts     # POST register/login/logout, GET me under /api/v1/auth
+│   │   │   │   │   ├── service.ts    # registerUser, verifyCredentials (timing-safe)
+│   │   │   │   │   ├── session.ts    # Session tokens, hashing, cookie options, 7-day expiry
+│   │   │   │   │   ├── password.ts   # Argon2id hash and verify
+│   │   │   │   │   └── require-auth.ts # requireAuth preHandler (401 without a valid session)
+│   │   │   │   └── workspaces/
+│   │   │   │       └── service.ts    # slugify, createWorkspace, listWorkspacesForUser, getMembership (routes: planned)
 │   │   │   ├── plugins/
 │   │   │   │   ├── csrf.ts           # Origin check on state-changing requests
 │   │   │   │   ├── db.ts             # pg pool + Drizzle instance as app.db
@@ -204,6 +207,7 @@ diffCraft/
 │       │   ├── auth.ts               # Register/login requests, public user, error response
 │       │   ├── health.ts             # HealthResponseSchema
 │       │   ├── ready.ts              # Readiness response
+│       │   ├── workspaces.ts         # Workspace roles, create request, workspace
 │       │   └── zod-issues.ts         # Zod error formatter
 │       ├── package.json
 │       ├── tsconfig.json
@@ -241,7 +245,7 @@ diffCraft/
 └── README.md                         # Front page: overview, quick start, links to docs/
 ```
 
-As the API grows, `apps/api/src` is expected to gain `plugins/`, `modules/`, `db/` (Drizzle schema and migrations) and `realtime/` folders _(planned)_. The worker may first live as a second entrypoint inside `apps/api` to share the database layer, and be split out later.
+As the API grows, each feature gets its own `modules/<feature>/` folder, and `apps/api/src` is expected to gain a `realtime/` folder _(planned)_. The worker may first live as a second entrypoint inside `apps/api` to share the database layer, and be split out later.
 
 ---
 
@@ -253,13 +257,13 @@ All tests use Vitest, sit next to the file they test (`*.test.ts`), and run with
 
 ### Exists now
 
-| Level             | What is covered today                                                                                                                                                        |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit              | API config validation, logger, password hashing, error handler, CSRF Origin check.                                                                                           |
-| API integration   | Auth routes, sessions and the auth service, `/health`, `/ready` and the unique email index, exercised with Fastify's `inject` against a real PostgreSQL test database.       |
-| Schema / contract | Shared Zod schemas in `packages/shared` (health, readiness, auth requests and responses, the Zod error formatter).                                                           |
-| Web helpers       | `apps/web/src/lib`: the API client, API health fetch, server-side current-user lookup and form error mapping.                                                                |
-| CI                | GitHub Actions runs typecheck, lint, format check, the full test suite against a PostgreSQL 18 service container, and the API and web builds on every PR and push to `main`. |
+| Level             | What is covered today                                                                                                                                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit              | API config validation, logger, password hashing, error handler, CSRF Origin check.                                                                                                                                                                                                                           |
+| API integration   | Auth routes, sessions and the auth service, `/health`, `/ready`, the unique email index, and the workspaces service and its constraints (slug retry, transaction atomicity, composite key, role `CHECK`, `CASCADE` / `SET NULL`), exercised with Fastify's `inject` against a real PostgreSQL test database. |
+| Schema / contract | Shared Zod schemas in `packages/shared` (health, readiness, auth requests and responses, the Zod error formatter).                                                                                                                                                                                           |
+| Web helpers       | `apps/web/src/lib`: the API client, API health fetch, server-side current-user lookup and form error mapping.                                                                                                                                                                                                |
+| CI                | GitHub Actions runs typecheck, lint, format check, the full test suite against a PostgreSQL 18 service container, and the API and web builds on every PR and push to `main`.                                                                                                                                 |
 
 ### Planned
 

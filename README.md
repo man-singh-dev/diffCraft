@@ -139,7 +139,7 @@ pnpm dev                             # web http://localhost:3000, API http://loc
 | ----------------------------- | --------------- |
 | 0. Foundation                 | **Implemented** |
 | 1. Database and auth          | **Implemented** |
-| 2. Workspaces and roles       | Planned         |
+| 2. Workspaces and roles       | **In progress** |
 | 3. Reviews and diff ingestion | Planned         |
 | 4. Diff viewer                | Planned         |
 | 5. Comments and threads       | Planned         |

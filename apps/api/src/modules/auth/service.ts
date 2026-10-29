@@ -1,12 +1,12 @@
 import type { LoginRequest, PublicUser, RegisterRequest } from '@diffcraft/shared';
 import { eq, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
+import { isUniqueViolation } from '../../db/errors.js';
 import { users, type User } from '../../db/schema/index.js';
 import { AppError } from '../../errors.js';
 import type { Database } from '../../plugins/db.js';
 import { hashPassword, verifyPassword } from './password.js';
 
-const UNIQUE_VIOLATION = '23505';
 const EMAIL_UNIQUE_INDEX = 'users_email_lower_unique';
 
 // A real Argon2id hash with the same parameters as hashPassword. Verified against when the
@@ -84,17 +84,4 @@ export function toPublicUser(
     displayName: user.displayName,
     createdAt: user.createdAt.toISOString(),
   };
-}
-
-/** True for a Postgres unique violation on `constraint`; Drizzle wraps the pg error in `cause`. */
-function isUniqueViolation(error: unknown, constraint: string): boolean {
-  const pgError = error instanceof Error && error.cause ? error.cause : error;
-  return (
-    typeof pgError === 'object' &&
-    pgError !== null &&
-    'code' in pgError &&
-    pgError.code === UNIQUE_VIOLATION &&
-    'constraint' in pgError &&
-    pgError.constraint === constraint
-  );
 }
