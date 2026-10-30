@@ -21,6 +21,18 @@ export interface FieldIssue {
   message: string;
 }
 
+export class NotFoundError extends AppError {
+  constructor(code = 'not_found', message = 'Not found.') {
+    super(404, code, message);
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor() {
+    super(403, 'forbidden', 'You do not have permission to do this.');
+  }
+}
+
 /** 422 for a request body that fails its Zod schema. */
 export class ValidationError extends AppError {
   constructor(issues: readonly z.core.$ZodIssue[]) {

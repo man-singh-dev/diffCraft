@@ -4,6 +4,8 @@ import type { Config } from './config.js';
 import { loggerOptions } from './logger.js';
 import { requestUserPlugin } from './modules/auth/require-auth.js';
 import { authRoutes } from './modules/auth/routes.js';
+import { requestWorkspacePlugin } from './modules/workspaces/require-workspace-role.js';
+import { workspaceRoutes } from './modules/workspaces/routes.js';
 import { csrfPlugin } from './plugins/csrf.js';
 import { dbPlugin } from './plugins/db.js';
 import { errorHandlerPlugin } from './plugins/error-handler.js';
@@ -26,6 +28,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
   // No `secret`: the session cookie is a random token checked against the database, not signed.
   await app.register(cookie);
   await app.register(requestUserPlugin);
+  await app.register(requestWorkspacePlugin);
 
   await app.register(healthRoutes);
   await app.register(readyRoutes);
@@ -33,6 +36,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     prefix: '/api/v1/auth',
     secureCookies: config.NODE_ENV === 'production',
   });
+  await app.register(workspaceRoutes, { prefix: '/api/v1/workspaces' });
 
   return app;
 }

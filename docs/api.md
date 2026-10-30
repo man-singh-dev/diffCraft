@@ -9,9 +9,9 @@ The REST API design: conventions, every implemented and proposed endpoint, and w
 ## API Design
 
 > [!NOTE]
-> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
+> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
 
-Conventions (the base path, error shape, `401` and `422` are **Implemented**; the rest are proposed):
+Conventions (the base path, error shape, `401`, `403`, `404` and `422` are **Implemented**; the rest are proposed):
 
 - Base path `/api/v1`; JSON request and response bodies.
 - Errors use a consistent shape: `{ "error": { "code": "...", "message": "...", "details": {...} } }` (`ErrorResponseSchema` in `packages/shared`; unexpected errors become a generic `500 internal_error`).
@@ -32,17 +32,29 @@ Conventions (the base path, error shape, `401` and `422` are **Implemented**; th
 
 ### Workspaces and membership
 
-| Method   | Path                                              | Purpose                                     | Auth                              |
-| -------- | ------------------------------------------------- | ------------------------------------------- | --------------------------------- |
-| `GET`    | `/api/v1/workspaces`                              | List workspaces the user belongs to.        | User                              |
-| `POST`   | `/api/v1/workspaces`                              | Create a workspace (creator becomes owner). | User                              |
-| `GET`    | `/api/v1/workspaces/:workspaceId`                 | Get workspace details.                      | Member                            |
-| `PATCH`  | `/api/v1/workspaces/:workspaceId`                 | Update workspace settings.                  | Admin                             |
-| `DELETE` | `/api/v1/workspaces/:workspaceId`                 | Delete a workspace.                         | Owner                             |
-| `GET`    | `/api/v1/workspaces/:workspaceId/members`         | List members and roles.                     | Member                            |
-| `POST`   | `/api/v1/workspaces/:workspaceId/members`         | Invite or add a member with a role.         | Admin                             |
-| `PATCH`  | `/api/v1/workspaces/:workspaceId/members/:userId` | Change a member's role.                     | Admin (owner role changes: Owner) |
-| `DELETE` | `/api/v1/workspaces/:workspaceId/members/:userId` | Remove a member (or leave).                 | Admin, or the member themself     |
+| Method   | Path                                              | Purpose                                                                                          | Auth                              | Status          |
+| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------- | --------------- |
+| `GET`    | `/api/v1/workspaces`                              | List the caller's workspaces with their role in each, newest first. `200 Workspace[]`.           | User                              | **Implemented** |
+| `POST`   | `/api/v1/workspaces`                              | Create a workspace; the creator becomes owner. Body `{ name }` (trimmed, 1–80). `201 Workspace`. | User                              | **Implemented** |
+| `GET`    | `/api/v1/workspaces/:workspaceId`                 | Get one workspace, with the caller's role. `200 Workspace`.                                      | Member (viewer and up)            | **Implemented** |
+| `PATCH`  | `/api/v1/workspaces/:workspaceId`                 | Rename. Body `{ name }` (trimmed, 1–80). The slug does not change. `200 Workspace`.              | Admin                             | **Implemented** |
+| `DELETE` | `/api/v1/workspaces/:workspaceId`                 | Delete the workspace and all its memberships. `204`.                                             | Owner                             | **Implemented** |
+| `GET`    | `/api/v1/workspaces/:workspaceId/members`         | List members and roles.                                                                          | Member                            | Planned         |
+| `POST`   | `/api/v1/workspaces/:workspaceId/members`         | Invite or add a member with a role.                                                              | Admin                             | Planned         |
+| `PATCH`  | `/api/v1/workspaces/:workspaceId/members/:userId` | Change a member's role.                                                                          | Admin (owner role changes: Owner) | Planned         |
+| `DELETE` | `/api/v1/workspaces/:workspaceId/members/:userId` | Remove a member (or leave).                                                                      | Admin, or the member themself     | Planned         |
+
+`Workspace` is `{ id, name, slug, createdAt, role }` (`WorkspaceSchema` in `packages/shared`), where `role` is the caller's role. Errors on the `/:workspaceId` routes:
+
+| Status | Code                  | When                                                                                          |
+| ------ | --------------------- | --------------------------------------------------------------------------------------------- |
+| `401`  | `unauthenticated`     | No valid session.                                                                             |
+| `404`  | `workspace_not_found` | The id is not a UUID, the workspace doesn't exist, or the caller is not a member (same body). |
+| `403`  | `forbidden`           | The caller is a member, but their role is below the route's minimum.                          |
+| `403`  | `forbidden_origin`    | `POST`, `PATCH` or `DELETE` from an `Origin` other than `WEB_ORIGIN`.                         |
+| `422`  | `validation_error`    | Invalid body on `POST` or `PATCH`.                                                            |
+
+See [security.md](security.md#enforcement) for how the guard works.
 
 ### Reviews
 

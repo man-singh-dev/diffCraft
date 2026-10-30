@@ -162,7 +162,9 @@ diffCraft/
 │   │   │   │   │   ├── password.ts   # Argon2id hash and verify
 │   │   │   │   │   └── require-auth.ts # requireAuth preHandler (401 without a valid session)
 │   │   │   │   └── workspaces/
-│   │   │   │       └── service.ts    # slugify, createWorkspace, listWorkspacesForUser, getMembership (routes: planned)
+│   │   │   │       ├── routes.ts     # POST/GET /, GET/PATCH/DELETE /:workspaceId under /api/v1/workspaces
+│   │   │   │       ├── service.ts    # slugify, create/list/get/rename/delete, getMembership
+│   │   │   │       └── require-workspace-role.ts # requireWorkspaceRole(minimum) preHandler (404 / 403)
 │   │   │   ├── plugins/
 │   │   │   │   ├── csrf.ts           # Origin check on state-changing requests
 │   │   │   │   ├── db.ts             # pg pool + Drizzle instance as app.db
@@ -172,6 +174,7 @@ diffCraft/
 │   │   │   │   └── ready.ts          # GET /ready (readiness, checks the database)
 │   │   │   └── test/
 │   │   │       ├── db.ts             # Test database helpers
+│   │   │       ├── fixtures.ts       # createUserWithSession, addMember
 │   │   │       └── global-setup.ts   # Migrates diffcraft_test before the tests
 │   │   ├── drizzle.config.ts
 │   │   ├── package.json

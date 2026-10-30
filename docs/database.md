@@ -9,7 +9,7 @@ The database design: implemented and proposed tables, constraints, indexes, tran
 ## Database Design
 
 > [!NOTE]
-> **Implemented:** the `users`, `sessions`, `workspaces` and `workspace_members` tables (Drizzle schema in `apps/api/src/db/schema`, migrations in `apps/api/drizzle`). The workspace tables have a data layer (`apps/api/src/modules/workspaces/service.ts`) but no HTTP routes yet. Every other table below is a **proposal**. It will change during implementation and will not be considered final until it exists as Drizzle schema and migrations.
+> **Implemented:** the `users`, `sessions`, `workspaces` and `workspace_members` tables (Drizzle schema in `apps/api/src/db/schema`, migrations in `apps/api/drizzle`). The workspace tables are served by `/api/v1/workspaces` (see [api.md](api.md#workspaces-and-membership)). Every other table below is a **proposal**. It will change during implementation and will not be considered final until it exists as Drizzle schema and migrations.
 
 ### Entity-relationship diagram (`users`, `sessions`, `workspaces` and `workspace_members` implemented; the rest proposed)
 

@@ -1,9 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import {
   CreateWorkspaceRequestSchema,
+  hasAtLeastRole,
+  UpdateWorkspaceRequestSchema,
+  WORKSPACE_ROLES,
+  type WorkspaceRole,
   WorkspaceRoleSchema,
   WorkspaceSchema,
 } from './workspaces.js';
+
+describe('hasAtLeastRole', () => {
+  const order: WorkspaceRole[] = ['viewer', 'member', 'admin', 'owner'];
+
+  it('ranks viewer < member < admin < owner', () => {
+    for (const [i, role] of order.entries()) {
+      for (const [j, minimum] of order.entries()) {
+        expect(hasAtLeastRole(role, minimum), `${role} >= ${minimum}`).toBe(i >= j);
+      }
+    }
+  });
+
+  it('covers every role', () => {
+    expect([...order].sort()).toEqual([...WORKSPACE_ROLES].sort());
+  });
+});
+
+describe('UpdateWorkspaceRequestSchema', () => {
+  it('trims the name and enforces length 1–80', () => {
+    expect(UpdateWorkspaceRequestSchema.parse({ name: '  New  ' })).toEqual({ name: 'New' });
+    expect(UpdateWorkspaceRequestSchema.safeParse({ name: '  ' }).success).toBe(false);
+    expect(UpdateWorkspaceRequestSchema.safeParse({ name: 'a'.repeat(81) }).success).toBe(false);
+    expect(UpdateWorkspaceRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
 
 describe('WorkspaceRoleSchema', () => {
   it('accepts the four roles', () => {

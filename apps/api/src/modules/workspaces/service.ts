@@ -87,6 +87,29 @@ export async function listWorkspacesForUser(db: Database, userId: string): Promi
   return rows.map(({ workspace, role }) => toWorkspace(workspace, role));
 }
 
+export async function getWorkspace(
+  db: Database,
+  id: string,
+  role: WorkspaceRole,
+): Promise<Workspace | null> {
+  const [row] = await db.select().from(workspaces).where(eq(workspaces.id, id));
+  return row ? toWorkspace(row, role) : null;
+}
+
+export async function renameWorkspace(
+  db: Database,
+  id: string,
+  name: string,
+  role: WorkspaceRole,
+): Promise<Workspace | null> {
+  const [row] = await db.update(workspaces).set({ name }).where(eq(workspaces.id, id)).returning();
+  return row ? toWorkspace(row, role) : null;
+}
+
+export async function deleteWorkspace(db: Database, id: string): Promise<void> {
+  await db.delete(workspaces).where(eq(workspaces.id, id));
+}
+
 /** The user's role in the workspace, or null if they are not a member. */
 export async function getMembership(
   db: Database,
