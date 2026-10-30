@@ -14,9 +14,7 @@ export interface CsrfPluginOptions {
 }
 export const csrfPlugin = fp<CsrfPluginOptions>(
   async (app, { webOrigin }) => {
-    // Normalised, so a configured "http://localhost:3000/" still matches the header.
     const allowedOrigin = new URL(webOrigin).origin;
-
     app.addHook('onRequest', async (request) => {
       if (!STATE_CHANGING_METHODS.has(request.method)) return;
       const origin = request.headers.origin;

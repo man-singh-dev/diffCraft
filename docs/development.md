@@ -164,6 +164,8 @@ diffCraft/
 │   │   │   │   └── workspaces/
 │   │   │   │       ├── routes.ts     # POST/GET /, GET/PATCH/DELETE /:workspaceId under /api/v1/workspaces
 │   │   │   │       ├── service.ts    # slugify, create/list/get/rename/delete, getMembership
+│   │   │   │       ├── member-routes.ts  # /:workspaceId/members: list, add, change role, remove, leave
+│   │   │   │       ├── member-service.ts # Member rules, last-owner check, workspace row lock
 │   │   │   │       └── require-workspace-role.ts # requireWorkspaceRole(minimum) preHandler (404 / 403)
 │   │   │   ├── plugins/
 │   │   │   │   ├── csrf.ts           # Origin check on state-changing requests
@@ -184,14 +186,21 @@ diffCraft/
 │   │   ├── src/
 │   │   │   ├── app/
 │   │   │   │   ├── layout.tsx
-│   │   │   │   ├── page.tsx          # Home page: API health plus log in / sign up / profile links
+│   │   │   │   ├── page.tsx          # Home page: API health plus log in / sign up / workspaces links
 │   │   │   │   ├── globals.css
 │   │   │   │   ├── login/            # page.tsx, login-form.tsx
 │   │   │   │   ├── register/         # page.tsx, register-form.tsx (sign-up)
-│   │   │   │   └── profile/          # page.tsx, logout-button.tsx
-│   │   │   ├── components/           # form-field.tsx, page-card.tsx, styles.ts
+│   │   │   │   └── (app)/            # Logged-in pages (route group: not part of the URL)
+│   │   │   │       ├── layout.tsx    # Adds the nav bar
+│   │   │   │       ├── profile/      # page.tsx
+│   │   │   │       └── workspaces/   # page.tsx (list), create-workspace-form.tsx
+│   │   │   │           └── [workspaceId]/ # page.tsx, not-found.tsx, member-controls.tsx, add-member-form.tsx,
+│   │   │   │                              # rename-workspace-form.tsx, delete-workspace.tsx, leave-workspace.tsx
+│   │   │   ├── components/           # form-field.tsx, page-card.tsx, styles.ts, nav.tsx, logout-button.tsx, role-badge.tsx
 │   │   │   └── lib/
 │   │   │       ├── api-client.ts     # Browser calls to the API via relative /api URLs
+│   │   │       ├── api-errors.ts     # API error codes → friendly messages
+│   │   │       ├── api.server.ts     # Server-side GETs with the session cookie (workspaces, members)
 │   │   │       ├── api-health.ts     # Fetches and validates GET /health
 │   │   │       ├── auth.server.ts    # Server-side current-user lookup
 │   │   │       ├── form-errors.ts    # Client-side form validation; API errors → field messages
@@ -210,7 +219,7 @@ diffCraft/
 │       │   ├── auth.ts               # Register/login requests, public user, error response
 │       │   ├── health.ts             # HealthResponseSchema
 │       │   ├── ready.ts              # Readiness response
-│       │   ├── workspaces.ts         # Workspace roles, create request, workspace
+│       │   ├── workspaces.ts         # Workspace roles, canManageMember, workspace and member schemas
 │       │   └── zod-issues.ts         # Zod error formatter
 │       ├── package.json
 │       ├── tsconfig.json

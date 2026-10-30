@@ -7,7 +7,7 @@ import { RegisterForm } from './register-form';
 export const metadata: Metadata = { title: 'Sign up · DiffCraft' };
 
 export default async function RegisterPage() {
-  if (await getCurrentUser()) redirect('/profile');
+  if (await getCurrentUser()) redirect('/workspaces');
 
   return (
     <PageCard title="Create your account" description="Join DiffCraft to start reviewing code.">

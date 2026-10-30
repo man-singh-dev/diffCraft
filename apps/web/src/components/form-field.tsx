@@ -1,3 +1,5 @@
+import { inputClass } from './styles';
+
 /** A labelled input with an optional hint and error, both linked to it with aria-describedby. */
 export function FormField({
   id,
@@ -20,7 +22,7 @@ export function FormField({
         name={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30 aria-invalid:border-red-500"
+        className={inputClass}
         {...inputProps}
       />
       {error && (
@@ -31,6 +33,49 @@ export function FormField({
       {hint && !error && (
         <p id={hintId} className="text-xs text-slate-500">
           {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A labelled select, with the same error wiring as FormField. */
+export function SelectField({
+  id,
+  label,
+  error,
+  options,
+  ...selectProps
+}: {
+  id: string;
+  label: string;
+  error?: string;
+  options: readonly { value: string; label: string }[];
+} & React.ComponentProps<'select'>) {
+  const errorId = error ? `${id}-error` : undefined;
+
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-sm font-medium text-slate-300">
+        {label}
+      </label>
+      <select
+        id={id}
+        name={id}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={errorId}
+        className={inputClass}
+        {...selectProps}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {error && (
+        <p id={errorId} className="text-xs text-red-400">
+          {error}
         </p>
       )}
     </div>

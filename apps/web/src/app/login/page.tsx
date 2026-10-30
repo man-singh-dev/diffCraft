@@ -7,7 +7,7 @@ import { LoginForm } from './login-form';
 export const metadata: Metadata = { title: 'Log in · DiffCraft' };
 
 export default async function LoginPage() {
-  if (await getCurrentUser()) redirect('/profile');
+  if (await getCurrentUser()) redirect('/workspaces');
 
   return (
     <PageCard title="Welcome back" description="Log in to your DiffCraft account.">

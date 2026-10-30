@@ -2,11 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { FormError } from '@/components/form-field';
-import { secondaryButton } from '@/components/styles';
 import { logout } from '@/lib/api-client';
 
-export function LogoutButton() {
+export function LogoutButton({ className }: { className: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,11 +24,15 @@ export function LogoutButton() {
   }
 
   return (
-    <div className="space-y-3">
-      {error && <FormError>{error}</FormError>}
-      <button type="button" onClick={handleClick} disabled={pending} className={secondaryButton}>
+    <span className="inline-flex items-center gap-2">
+      {error && (
+        <span role="alert" className="text-xs text-red-400">
+          {error}
+        </span>
+      )}
+      <button type="button" onClick={handleClick} disabled={pending} className={className}>
         {pending ? 'Logging out…' : 'Log out'}
       </button>
-    </div>
+    </span>
   );
 }

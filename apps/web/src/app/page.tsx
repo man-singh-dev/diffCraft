@@ -53,8 +53,8 @@ export default async function HomePage() {
 
       {/* Account */}
       {user ? (
-        <Link href="/profile" className={primaryButton}>
-          Go to your profile
+        <Link href="/workspaces" className={primaryButton}>
+          Go to your workspaces
         </Link>
       ) : (
         <div className="flex gap-3">

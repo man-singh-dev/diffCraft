@@ -30,7 +30,7 @@ More in [docs/architecture.md](docs/architecture.md).
 ## Screenshots
 
 > [!NOTE]
-> So far the UI has only the home, sign-up, login and profile pages (try them in the [live demo](https://diffcraft-three.vercel.app)). The review screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
+> So far the UI has the home, sign-up, login, profile and workspace pages (try them in the [live demo](https://diffcraft-three.vercel.app)). The review screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
 
 | Screen                                                             | Status  |
 | ------------------------------------------------------------------ | ------- |
@@ -50,14 +50,15 @@ More in [docs/architecture.md](docs/architecture.md).
 **Implemented**
 
 - Email/password sign-up, login, logout and a profile page.
+- Workspaces with owner, admin, member and viewer roles: create, rename and delete them, and add, re-role and remove members, in the API and the web app. A workspace always keeps at least one owner ([security](docs/security.md#member-management-implemented)).
 - Server-side sessions in HttpOnly cookies, with Argon2id password hashing and a CSRF Origin check ([security](docs/security.md)).
-- PostgreSQL schema and migrations for users and sessions ([database](docs/database.md)).
+- PostgreSQL schema and migrations for users, sessions, workspaces and memberships ([database](docs/database.md)).
 - `GET /health` and `GET /ready` probes, and a home page showing API health.
 - CI on every PR, and a live deployment on Vercel, Render and Neon ([deployment](docs/deployment.md)).
 
 **Planned**
 
-- Workspaces with roles and invitations.
+- Email invitations for people without an account.
 - Reviews from patch uploads, with unified and side-by-side diff views.
 - Line-anchored comments, threads, resolution, and approve / request-changes decisions.
 - Real-time updates and presence over Socket.IO ([design](docs/design/realtime.md)).

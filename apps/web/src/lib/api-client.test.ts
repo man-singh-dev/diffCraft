@@ -1,5 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { login, logout, register } from './api-client.js';
+import {
+  addMember,
+  changeMemberRole,
+  createWorkspace,
+  deleteWorkspace,
+  leaveWorkspace,
+  login,
+  logout,
+  register,
+  removeMember,
+  renameWorkspace,
+} from './api-client.js';
 
 const USER = {
   id: '01a17e5e-aa56-7985-be46-bf5f1c7e7fde',
@@ -128,5 +139,145 @@ describe('logout', () => {
   it('turns a network error into a failure', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Failed to fetch'));
     expect(await logout(fetchImpl)).toMatchObject({ ok: false, code: 'network_error' });
+  });
+});
+
+const WORKSPACE = {
+  id: '01a17e5e-aa56-7985-be46-bf5f1c7e7fd0',
+  name: 'Team',
+  slug: 'team',
+  createdAt: '2026-10-27T17:18:15.633Z',
+  role: 'owner',
+};
+const MEMBER = {
+  userId: USER.id,
+  email: USER.email,
+  displayName: 'Ada',
+  role: 'admin',
+  joinedAt: '2026-10-27T17:18:15.633Z',
+};
+const WS = `/api/v1/workspaces/${WORKSPACE.id}`;
+
+describe('workspace and member calls', () => {
+  it.each([
+    {
+      name: 'createWorkspace',
+      call: (f: typeof fetch) => createWorkspace({ name: 'Team' }, f),
+      method: 'POST',
+      url: '/api/v1/workspaces',
+      body: { name: 'Team' },
+      response: [201, WORKSPACE],
+    },
+    {
+      name: 'renameWorkspace',
+      call: (f: typeof fetch) => renameWorkspace(WORKSPACE.id, { name: 'New' }, f),
+      method: 'PATCH',
+      url: WS,
+      body: { name: 'New' },
+      response: [200, WORKSPACE],
+    },
+    {
+      name: 'deleteWorkspace',
+      call: (f: typeof fetch) => deleteWorkspace(WORKSPACE.id, f),
+      method: 'DELETE',
+      url: WS,
+      body: undefined,
+      response: [204],
+    },
+    {
+      name: 'addMember',
+      call: (f: typeof fetch) => addMember(WORKSPACE.id, { email: USER.email, role: 'admin' }, f),
+      method: 'POST',
+      url: `${WS}/members`,
+      body: { email: USER.email, role: 'admin' },
+      response: [201, MEMBER],
+    },
+    {
+      name: 'changeMemberRole',
+      call: (f: typeof fetch) => changeMemberRole(WORKSPACE.id, USER.id, { role: 'admin' }, f),
+      method: 'PATCH',
+      url: `${WS}/members/${USER.id}`,
+      body: { role: 'admin' },
+      response: [200, MEMBER],
+    },
+    {
+      name: 'removeMember',
+      call: (f: typeof fetch) => removeMember(WORKSPACE.id, USER.id, f),
+      method: 'DELETE',
+      url: `${WS}/members/${USER.id}`,
+      body: undefined,
+      response: [204],
+    },
+    {
+      name: 'leaveWorkspace',
+      call: (f: typeof fetch) => leaveWorkspace(WORKSPACE.id, f),
+      method: 'POST',
+      url: `${WS}/members/leave`,
+      body: undefined,
+      response: [204],
+    },
+  ] as const)('$name sends $method $url', async ({ call, method, url, body, response }) => {
+    const [status, responseBody] = response;
+    const fetchImpl = makeFetch(status, responseBody);
+
+    expect(await call(fetchImpl)).toEqual({ ok: true, data: responseBody });
+    const [calledUrl, init] = fetchImpl.mock.calls[0]!;
+    expect(calledUrl).toBe(url);
+    expect(init?.method).toBe(method);
+    if (body === undefined) expect(init?.body).toBeUndefined();
+    else expect(JSON.parse(init?.body as string)).toEqual(body);
+  });
+
+  it('encodes ids so they cannot change the path', async () => {
+    const fetchImpl = makeFetch(204);
+    await removeMember('a/b', '../x', fetchImpl);
+    expect(fetchImpl.mock.calls[0]![0]).toBe('/api/v1/workspaces/a%2Fb/members/..%2Fx');
+  });
+
+  it.each([
+    [409, 'last_owner'],
+    [409, 'already_member'],
+    [404, 'user_not_found'],
+    [403, 'forbidden'],
+  ])('returns %i %s as a failure with the API code', async (status, code) => {
+    const result = await changeMemberRole(
+      WORKSPACE.id,
+      USER.id,
+      { role: 'viewer' },
+      makeFetch(status, errorBody(code, 'API message')),
+    );
+    expect(result).toEqual({ ok: false, status, code, message: 'API message', fieldErrors: {} });
+  });
+
+  it('turns a 422 on addMember into field errors', async () => {
+    const details = [{ field: 'email', message: 'Invalid email address' }];
+    const result = await addMember(
+      WORKSPACE.id,
+      { email: 'x@example.com', role: 'member' },
+      makeFetch(422, errorBody('validation_error', 'The request body is invalid.', details)),
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      status: 422,
+      fieldErrors: { email: details[0]!.message },
+    });
+  });
+
+  it('turns a network error on a DELETE into a failure', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Failed to fetch'));
+    expect(await deleteWorkspace(WORKSPACE.id, fetchImpl)).toMatchObject({
+      ok: false,
+      status: 0,
+      code: 'network_error',
+    });
+  });
+
+  it('treats a member response with the wrong shape as a failure', async () => {
+    const result = await addMember(
+      WORKSPACE.id,
+      { email: USER.email, role: 'member' },
+      makeFetch(201, { ...MEMBER, role: 'superadmin' }),
+    );
+    expect(result).toMatchObject({ ok: false, code: 'unexpected_response' });
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AddMemberRequestSchema,
+  canManageMember,
   CreateWorkspaceRequestSchema,
   hasAtLeastRole,
   UpdateMemberRoleRequestSchema,
@@ -136,6 +137,43 @@ describe('WorkspaceMemberSchema', () => {
   it('rejects a non-UUID userId, an unknown role and a non-ISO joinedAt', () => {
     for (const override of [{ userId: 'abc' }, { role: 'superadmin' }, { joinedAt: 'today' }]) {
       expect(WorkspaceMemberSchema.safeParse({ ...validMember, ...override }).success).toBe(false);
+    }
+  });
+});
+
+describe('canManageMember', () => {
+  const nonOwners: WorkspaceRole[] = ['admin', 'member', 'viewer'];
+
+  it('lets an owner add, change and remove anyone, to and from any role', () => {
+    for (const target of [null, ...WORKSPACE_ROLES]) {
+      for (const next of [undefined, ...WORKSPACE_ROLES]) {
+        expect(canManageMember('owner', target, next), `${target} → ${next}`).toBe(true);
+      }
+    }
+  });
+
+  it('lets an admin manage admins, members and viewers, but never grant owner', () => {
+    for (const target of [null, ...nonOwners]) {
+      for (const next of [undefined, ...nonOwners]) {
+        expect(canManageMember('admin', target, next), `${target} → ${next}`).toBe(true);
+      }
+      expect(canManageMember('admin', target, 'owner'), `${target} → owner`).toBe(false);
+    }
+  });
+
+  it('does not let an admin change or remove an owner', () => {
+    for (const next of [undefined, ...WORKSPACE_ROLES]) {
+      expect(canManageMember('admin', 'owner', next), `owner → ${next}`).toBe(false);
+    }
+  });
+
+  it('never lets a member or viewer manage anyone', () => {
+    for (const actor of ['member', 'viewer'] as const) {
+      for (const target of [null, ...WORKSPACE_ROLES]) {
+        for (const next of [undefined, ...WORKSPACE_ROLES]) {
+          expect(canManageMember(actor, target, next), `${actor}: ${target} → ${next}`).toBe(false);
+        }
+      }
     }
   });
 });

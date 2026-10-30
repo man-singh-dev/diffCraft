@@ -20,6 +20,20 @@ export function hasAtLeastRole(role: WorkspaceRole, minimum: WorkspaceRole): boo
   return ROLE_RANK[role] >= ROLE_RANK[minimum];
 }
 
+/**
+ * Whether `actorRole` may add (`targetRole` null), change or remove (`nextRole` undefined) a
+ * member. Admins manage admins, members and viewers; anything that grants, takes away or
+ * touches the owner role needs an owner. Shared so the web UI offers only what the API allows.
+ */
+export function canManageMember(
+  actorRole: WorkspaceRole,
+  targetRole: WorkspaceRole | null,
+  nextRole?: WorkspaceRole,
+): boolean {
+  if (!hasAtLeastRole(actorRole, 'admin')) return false;
+  return (targetRole !== 'owner' && nextRole !== 'owner') || actorRole === 'owner';
+}
+
 /** A workspace as seen by one user: `role` is that user's role in it. */
 export const WorkspaceSchema = z.object({
   id: z.uuid(),

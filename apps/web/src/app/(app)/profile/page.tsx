@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { PageCard } from '@/components/page-card';
 import { getCurrentUser } from '@/lib/auth.server';
-import { LogoutButton } from './logout-button';
 
 export const metadata: Metadata = { title: 'Profile · DiffCraft' };
 
@@ -31,8 +30,6 @@ export default async function ProfilePage() {
           </dd>
         </div>
       </dl>
-
-      <LogoutButton />
     </PageCard>
   );
 }

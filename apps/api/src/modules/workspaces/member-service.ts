@@ -1,6 +1,6 @@
 import {
   type AddMemberRequest,
-  hasAtLeastRole,
+  canManageMember,
   type WorkspaceMember,
   type WorkspaceRole,
 } from '@diffcraft/shared';
@@ -57,19 +57,13 @@ function toMember(row: { joinedAt: Date } & Omit<WorkspaceMember, 'joinedAt'>): 
   return { ...row, joinedAt: row.joinedAt.toISOString() };
 }
 
-/**
- * Admins manage admins, members and viewers; anything that grants, takes away or touches the
- * owner role needs an owner. `nextRole` is undefined for a removal.
- */
+/** canManageMember as a 403; `nextRole` is undefined for a removal. */
 export function assertCanManage(
   actorRole: WorkspaceRole,
   targetRole: WorkspaceRole | null,
   nextRole?: WorkspaceRole,
 ): void {
-  if (!hasAtLeastRole(actorRole, 'admin')) throw new ForbiddenError();
-  if ((targetRole === 'owner' || nextRole === 'owner') && actorRole !== 'owner') {
-    throw new ForbiddenError();
-  }
+  if (!canManageMember(actorRole, targetRole, nextRole)) throw new ForbiddenError();
 }
 
 /** Members of the workspace: owners first, then by join date. */

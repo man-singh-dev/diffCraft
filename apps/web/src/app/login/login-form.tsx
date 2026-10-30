@@ -40,7 +40,7 @@ export function LoginForm() {
     }
 
     // Stays pending while navigating. refresh() makes server components re-read the new cookie.
-    router.push('/profile');
+    router.push('/workspaces');
     router.refresh();
   }
 
