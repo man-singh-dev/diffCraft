@@ -9,7 +9,7 @@ The REST API design: conventions, every implemented and proposed endpoint, and w
 ## API Design
 
 > [!NOTE]
-> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
+> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, the five member endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
 
 Conventions (the base path, error shape, `401`, `403`, `404` and `422` are **Implemented**; the rest are proposed):
 
@@ -32,19 +32,21 @@ Conventions (the base path, error shape, `401`, `403`, `404` and `422` are **Imp
 
 ### Workspaces and membership
 
-| Method   | Path                                              | Purpose                                                                                          | Auth                              | Status          |
-| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------- | --------------- |
-| `GET`    | `/api/v1/workspaces`                              | List the caller's workspaces with their role in each, newest first. `200 Workspace[]`.           | User                              | **Implemented** |
-| `POST`   | `/api/v1/workspaces`                              | Create a workspace; the creator becomes owner. Body `{ name }` (trimmed, 1–80). `201 Workspace`. | User                              | **Implemented** |
-| `GET`    | `/api/v1/workspaces/:workspaceId`                 | Get one workspace, with the caller's role. `200 Workspace`.                                      | Member (viewer and up)            | **Implemented** |
-| `PATCH`  | `/api/v1/workspaces/:workspaceId`                 | Rename. Body `{ name }` (trimmed, 1–80). The slug does not change. `200 Workspace`.              | Admin                             | **Implemented** |
-| `DELETE` | `/api/v1/workspaces/:workspaceId`                 | Delete the workspace and all its memberships. `204`.                                             | Owner                             | **Implemented** |
-| `GET`    | `/api/v1/workspaces/:workspaceId/members`         | List members and roles.                                                                          | Member                            | Planned         |
-| `POST`   | `/api/v1/workspaces/:workspaceId/members`         | Invite or add a member with a role.                                                              | Admin                             | Planned         |
-| `PATCH`  | `/api/v1/workspaces/:workspaceId/members/:userId` | Change a member's role.                                                                          | Admin (owner role changes: Owner) | Planned         |
-| `DELETE` | `/api/v1/workspaces/:workspaceId/members/:userId` | Remove a member (or leave).                                                                      | Admin, or the member themself     | Planned         |
+| Method   | Path                                              | Purpose                                                                                          | Auth                             | Status          |
+| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------- | --------------- |
+| `GET`    | `/api/v1/workspaces`                              | List the caller's workspaces with their role in each, newest first. `200 Workspace[]`.           | User                             | **Implemented** |
+| `POST`   | `/api/v1/workspaces`                              | Create a workspace; the creator becomes owner. Body `{ name }` (trimmed, 1–80). `201 Workspace`. | User                             | **Implemented** |
+| `GET`    | `/api/v1/workspaces/:workspaceId`                 | Get one workspace, with the caller's role. `200 Workspace`.                                      | Member (viewer and up)           | **Implemented** |
+| `PATCH`  | `/api/v1/workspaces/:workspaceId`                 | Rename. Body `{ name }` (trimmed, 1–80). The slug does not change. `200 Workspace`.              | Admin                            | **Implemented** |
+| `DELETE` | `/api/v1/workspaces/:workspaceId`                 | Delete the workspace and all its memberships. `204`.                                             | Owner                            | **Implemented** |
+| `GET`    | `/api/v1/workspaces/:workspaceId/members`         | List members, owners first, then by join date. `200 WorkspaceMember[]`.                          | Member (viewer and up)           | **Implemented** |
+| `POST`   | `/api/v1/workspaces/:workspaceId/members`         | Add an existing user by email. Body `{ email, role }`. `201 WorkspaceMember`.                    | Admin (adding an owner: Owner)   | **Implemented** |
+| `PATCH`  | `/api/v1/workspaces/:workspaceId/members/:userId` | Change a member's role. Body `{ role }`. `200 WorkspaceMember`.                                  | Admin (to or from owner: Owner)  | **Implemented** |
+| `DELETE` | `/api/v1/workspaces/:workspaceId/members/:userId` | Remove another member. `204`. Not for yourself: use `/leave`.                                    | Admin (removing an owner: Owner) | **Implemented** |
+| `POST`   | `/api/v1/workspaces/:workspaceId/members/leave`   | The caller leaves the workspace. `204`.                                                          | Member (viewer and up)           | **Implemented** |
+| `POST`   | `/api/v1/workspaces/:workspaceId/invitations`     | Invite someone who has no account yet.                                                           | Admin                            | Planned         |
 
-`Workspace` is `{ id, name, slug, createdAt, role }` (`WorkspaceSchema` in `packages/shared`), where `role` is the caller's role. Errors on the `/:workspaceId` routes:
+`Workspace` is `{ id, name, slug, createdAt, role }` (`WorkspaceSchema` in `packages/shared`), where `role` is the caller's role. `WorkspaceMember` is `{ userId, email, displayName, role, joinedAt }` (`WorkspaceMemberSchema`). Errors on the `/:workspaceId` routes:
 
 | Status | Code                  | When                                                                                          |
 | ------ | --------------------- | --------------------------------------------------------------------------------------------- |
@@ -53,6 +55,12 @@ Conventions (the base path, error shape, `401`, `403`, `404` and `422` are **Imp
 | `403`  | `forbidden`           | The caller is a member, but their role is below the route's minimum.                          |
 | `403`  | `forbidden_origin`    | `POST`, `PATCH` or `DELETE` from an `Origin` other than `WEB_ORIGIN`.                         |
 | `422`  | `validation_error`    | Invalid body on `POST` or `PATCH`.                                                            |
+| `404`  | `member_not_found`    | `:userId` is not a UUID or not a member of this workspace.                                    |
+| `404`  | `user_not_found`      | Adding a member: no account has this email.                                                   |
+| `403`  | `forbidden`           | Members: a non-owner adds an owner, changes a role to or from owner, or removes an owner.     |
+| `409`  | `already_member`      | Adding a member who is already in the workspace.                                              |
+| `409`  | `last_owner`          | Demoting or removing the last owner, or the last owner leaving.                               |
+| `400`  | `cannot_remove_self`  | `DELETE /members/:userId` with your own id; use `POST /members/leave`.                        |
 
 See [security.md](security.md#enforcement) for how the guard works.
 

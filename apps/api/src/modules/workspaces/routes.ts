@@ -6,6 +6,7 @@ import {
 import type { FastifyPluginAsync } from 'fastify';
 import { ValidationError } from '../../errors.js';
 import { authUser, requireAuth } from '../auth/require-auth.js';
+import { memberRoutes } from './member-routes.js';
 import {
   requestWorkspace,
   requireWorkspaceRole,
@@ -68,4 +69,6 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(204).send();
     },
   );
+
+  await app.register(memberRoutes, { prefix: '/:workspaceId/members' });
 };

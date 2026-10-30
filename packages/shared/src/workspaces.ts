@@ -29,3 +29,23 @@ export const WorkspaceSchema = z.object({
   role: WorkspaceRoleSchema,
 });
 export type Workspace = z.infer<typeof WorkspaceSchema>;
+
+export const AddMemberRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.email().max(254)),
+  role: WorkspaceRoleSchema,
+});
+export type AddMemberRequest = z.infer<typeof AddMemberRequestSchema>;
+
+export const UpdateMemberRoleRequestSchema = z.object({
+  role: WorkspaceRoleSchema,
+});
+export type UpdateMemberRoleRequest = z.infer<typeof UpdateMemberRoleRequestSchema>;
+
+export const WorkspaceMemberSchema = z.object({
+  userId: z.uuid(),
+  email: z.email(),
+  displayName: z.string(),
+  role: WorkspaceRoleSchema,
+  joinedAt: z.iso.datetime(),
+});
+export type WorkspaceMember = z.infer<typeof WorkspaceMemberSchema>;

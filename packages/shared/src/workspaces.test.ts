@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AddMemberRequestSchema,
   CreateWorkspaceRequestSchema,
   hasAtLeastRole,
+  UpdateMemberRoleRequestSchema,
   UpdateWorkspaceRequestSchema,
   WORKSPACE_ROLES,
+  WorkspaceMemberSchema,
   type WorkspaceRole,
   WorkspaceRoleSchema,
   WorkspaceSchema,
@@ -87,5 +90,52 @@ describe('WorkspaceSchema', () => {
     expect(WorkspaceSchema.safeParse({ ...validWorkspace, createdAt: 'today' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('AddMemberRequestSchema', () => {
+  it('trims and lowercases the email', () => {
+    expect(AddMemberRequestSchema.parse({ email: '  Ann@Example.COM ', role: 'member' })).toEqual({
+      email: 'ann@example.com',
+      role: 'member',
+    });
+  });
+
+  it('rejects an invalid email, an unknown role and missing fields', () => {
+    const valid = { email: 'ann@example.com', role: 'viewer' };
+    expect(AddMemberRequestSchema.safeParse({ ...valid, email: 'not-an-email' }).success).toBe(
+      false,
+    );
+    expect(AddMemberRequestSchema.safeParse({ ...valid, role: 'superadmin' }).success).toBe(false);
+    expect(AddMemberRequestSchema.safeParse({ email: valid.email }).success).toBe(false);
+    expect(AddMemberRequestSchema.safeParse({ role: valid.role }).success).toBe(false);
+  });
+});
+
+describe('UpdateMemberRoleRequestSchema', () => {
+  it('accepts a role and rejects anything else', () => {
+    expect(UpdateMemberRoleRequestSchema.parse({ role: 'admin' })).toEqual({ role: 'admin' });
+    expect(UpdateMemberRoleRequestSchema.safeParse({ role: 'Admin' }).success).toBe(false);
+    expect(UpdateMemberRoleRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('WorkspaceMemberSchema', () => {
+  const validMember = {
+    userId: '0199f3a4-5b6c-7d8e-9f01-23456789abcd',
+    email: 'ann@example.com',
+    displayName: 'Ann',
+    role: 'admin',
+    joinedAt: '2026-10-30T10:00:00.000Z',
+  };
+
+  it('parses a valid member', () => {
+    expect(WorkspaceMemberSchema.parse(validMember)).toEqual(validMember);
+  });
+
+  it('rejects a non-UUID userId, an unknown role and a non-ISO joinedAt', () => {
+    for (const override of [{ userId: 'abc' }, { role: 'superadmin' }, { joinedAt: 'today' }]) {
+      expect(WorkspaceMemberSchema.safeParse({ ...validMember, ...override }).success).toBe(false);
+    }
   });
 });
