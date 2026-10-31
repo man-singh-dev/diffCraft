@@ -1,0 +1,8 @@
+diff --git a/greet.ts b/greet.ts
+deleted file mode 100644
+index 9a84a84..0000000
+--- a/greet.ts
++++ /dev/null
+@@ -1,2 +0,0 @@
+-export const greet = (name: string) =>
+-  `Hello, ${name}!`;

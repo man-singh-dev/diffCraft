@@ -1,0 +1,16 @@
+diff --git a/old-name.txt b/new-name.txt
+similarity index 87%
+rename from old-name.txt
+rename to new-name.txt
+index 71ac1b5..797b965 100644
+--- a/old-name.txt
++++ b/new-name.txt
+@@ -1,7 +1,7 @@
+ a
+ b
+ c
+-d
++D
+ e
+ f
+ g

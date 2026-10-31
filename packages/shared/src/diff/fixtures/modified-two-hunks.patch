@@ -1,0 +1,22 @@
+diff --git a/numbers.txt b/numbers.txt
+index ac9837c..8287ffb 100644
+--- a/numbers.txt
++++ b/numbers.txt
+@@ -1,6 +1,6 @@
+ line 1
+ line 2
+-line 3
++line three
+ line 4
+ line 5
+ line 6
+@@ -24,7 +24,8 @@ line 23
+ line 24
+ line 25
+ line 26
+-line 27
++line twenty-seven
+ line 28
++line 28.5
+ line 29
+ line 30

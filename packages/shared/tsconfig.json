@@ -4,10 +4,12 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "noEmit": true,
+    // For the tests and scripts; src/ itself must stay free of Node APIs.
+    "types": ["node"],
     // Allows '.ts' extensions in relative imports, so Bundler-based consumers
     // (Next.js) and NodeNext consumers (the API) can both resolve shared source.
     // Only valid because noEmit is true.
     "allowImportingTsExtensions": true
   },
-  "include": ["src"]
+  "include": ["src", "scripts"]
 }

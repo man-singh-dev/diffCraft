@@ -1,0 +1,2 @@
+# Fixtures must stay byte-for-byte (CRLF, trailing tabs and spaces).
+*.patch -text

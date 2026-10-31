@@ -217,10 +217,12 @@ diffCraft/
 │       ├── src/
 │       │   ├── index.ts
 │       │   ├── auth.ts               # Register/login requests, public user, error response
+│       │   ├── diff/                 # parsePatch (unified diff → files/hunks/lines), schemas, fixtures/
 │       │   ├── health.ts             # HealthResponseSchema
 │       │   ├── ready.ts              # Readiness response
 │       │   ├── workspaces.ts         # Workspace roles, canManageMember, workspace and member schemas
 │       │   └── zod-issues.ts         # Zod error formatter
+│       ├── scripts/parse-patch.ts    # Try the parser: node packages/shared/scripts/parse-patch.ts <file>
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── vitest.config.ts
