@@ -141,7 +141,7 @@ diffCraft/
 │       └── ci.yml                    # CI: typecheck, lint, format check, test, API and web builds
 ├── apps/
 │   ├── api/                          # Fastify API
-│   │   ├── drizzle/                  # Generated SQL migrations (0000_init.sql) and Drizzle metadata
+│   │   ├── drizzle/                  # Generated SQL migrations (0000_init … 0002_reviews) and Drizzle metadata
 │   │   ├── scripts/
 │   │   │   └── build.ts              # esbuild bundle of server.ts and migrate.ts into dist/
 │   │   ├── src/
@@ -153,7 +153,7 @@ diffCraft/
 │   │   │   ├── errors.ts             # AppError and ValidationError
 │   │   │   ├── db/
 │   │   │   │   ├── errors.ts         # isUniqueViolation (Postgres error helper)
-│   │   │   │   └── schema/           # Drizzle schema: users.ts, sessions.ts, workspaces.ts, index.ts
+│   │   │   │   └── schema/           # Drizzle schema: users, sessions, workspaces, reviews, sql-list.ts
 │   │   │   ├── modules/
 │   │   │   │   ├── auth/
 │   │   │   │   │   ├── routes.ts     # POST register/login/logout, GET me under /api/v1/auth
@@ -161,6 +161,8 @@ diffCraft/
 │   │   │   │   │   ├── session.ts    # Session tokens, hashing, cookie options, 7-day expiry
 │   │   │   │   │   ├── password.ts   # Argon2id hash and verify
 │   │   │   │   │   └── require-auth.ts # requireAuth preHandler (401 without a valid session)
+│   │   │   │   ├── reviews/
+│   │   │   │   │   └── service.ts    # createReview (parse, number, store files), getReview, files, hunks
 │   │   │   │   └── workspaces/
 │   │   │   │       ├── routes.ts     # POST/GET /, GET/PATCH/DELETE /:workspaceId under /api/v1/workspaces
 │   │   │   │       ├── service.ts    # slugify, create/list/get/rename/delete, getMembership
@@ -176,7 +178,7 @@ diffCraft/
 │   │   │   │   └── ready.ts          # GET /ready (readiness, checks the database)
 │   │   │   └── test/
 │   │   │       ├── db.ts             # Test database helpers
-│   │   │       ├── fixtures.ts       # createUserWithSession, addMember
+│   │   │       ├── fixtures.ts       # createUserWithSession, addMember, failInsertInTransaction
 │   │   │       └── global-setup.ts   # Migrates diffcraft_test before the tests
 │   │   ├── drizzle.config.ts
 │   │   ├── package.json
@@ -220,6 +222,7 @@ diffCraft/
 │       │   ├── diff/                 # parsePatch (unified diff → files/hunks/lines), schemas, fixtures/
 │       │   ├── health.ts             # HealthResponseSchema
 │       │   ├── ready.ts              # Readiness response
+│       │   ├── reviews.ts            # Review statuses, create request, review and review-file schemas
 │       │   ├── workspaces.ts         # Workspace roles, canManageMember, workspace and member schemas
 │       │   └── zod-issues.ts         # Zod error formatter
 │       ├── scripts/parse-patch.ts    # Try the parser: node packages/shared/scripts/parse-patch.ts <file>

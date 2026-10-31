@@ -4,6 +4,8 @@ import { users, workspaceMembers } from '../db/schema/index.js';
 import { createSession, SESSION_COOKIE_NAME } from '../modules/auth/session.js';
 import type { Database } from '../plugins/db.js';
 
+type Table = Parameters<Database['insert']>[0];
+
 export interface TestUser {
   id: string;
   email: string;
@@ -30,4 +32,36 @@ export async function addMember(
   role: WorkspaceRole,
 ): Promise<void> {
   await db.insert(workspaceMembers).values({ workspaceId, userId, role });
+}
+
+/**
+ * Wraps `db` so that, inside a transaction, inserting into `table` throws `message`. Earlier
+ * statements in that transaction really run, so a test can check they were rolled back.
+ */
+export function failInsertInTransaction(db: Database, table: Table, message: string): Database {
+  const passThrough = <T extends object>(target: T, prop: string | symbol): unknown => {
+    const value: unknown = Reflect.get(target, prop);
+    return typeof value === 'function' ? value.bind(target) : value;
+  };
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop !== 'transaction') return passThrough(target, prop);
+      return ((run, config) =>
+        target.transaction(
+          (tx) =>
+            run(
+              new Proxy(tx, {
+                get(txTarget, txProp) {
+                  if (txProp !== 'insert') return passThrough(txTarget, txProp);
+                  return (insertTable: Table) => {
+                    if (insertTable === table) throw new Error(message);
+                    return txTarget.insert(insertTable);
+                  };
+                },
+              }),
+            ),
+          config,
+        )) as Database['transaction'];
+    },
+  });
 }

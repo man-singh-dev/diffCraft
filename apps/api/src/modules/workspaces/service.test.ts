@@ -6,8 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { loadConfig } from '../../config.js';
 import { users, workspaceMembers, workspaces } from '../../db/schema/index.js';
-import type { Database } from '../../plugins/db.js';
 import { describeWithDb, testDatabaseUrl } from '../../test/db.js';
+import { failInsertInTransaction } from '../../test/fixtures.js';
 import {
   createWorkspace,
   getMembership,
@@ -40,35 +40,6 @@ describe('slugify', () => {
     expect(slugify(`${'a'.repeat(39)} bbb`)).toBe('a'.repeat(39));
   });
 });
-
-/** Wraps `db` so that, inside a transaction, inserting a membership throws. */
-function failMembershipInsert(db: Database): Database {
-  const passThrough = <T extends object>(target: T, prop: string | symbol): unknown => {
-    const value: unknown = Reflect.get(target, prop);
-    return typeof value === 'function' ? value.bind(target) : value;
-  };
-  return new Proxy(db, {
-    get(target, prop) {
-      if (prop !== 'transaction') return passThrough(target, prop);
-      return ((run, config) =>
-        target.transaction(
-          (tx) =>
-            run(
-              new Proxy(tx, {
-                get(txTarget, txProp) {
-                  if (txProp !== 'insert') return passThrough(txTarget, txProp);
-                  return (table: unknown) => {
-                    if (table === workspaceMembers) throw new Error('forced membership failure');
-                    return txTarget.insert(table as typeof workspaces);
-                  };
-                },
-              }),
-            ),
-          config,
-        )) as Database['transaction'];
-    },
-  });
-}
 
 describeWithDb('workspaces service and tables', () => {
   let app: FastifyInstance;
@@ -126,9 +97,13 @@ describeWithDb('workspaces service and tables', () => {
     const userId = await createUser();
     const name = uniqueName();
 
-    await expect(createWorkspace(failMembershipInsert(app.db), userId, { name })).rejects.toThrow(
-      'forced membership failure',
-    );
+    await expect(
+      createWorkspace(
+        failInsertInTransaction(app.db, workspaceMembers, 'forced membership failure'),
+        userId,
+        { name },
+      ),
+    ).rejects.toThrow('forced membership failure');
 
     const rows = await app.db.select().from(workspaces).where(eq(workspaces.name, name));
     expect(rows).toEqual([]);

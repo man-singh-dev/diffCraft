@@ -270,6 +270,25 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 
 ---
 
+## Reviews
+
+**Implemented as a data layer** (`apps/api/src/modules/reviews/service.ts`); the HTTP routes and pages come in the next steps. A review is a patch uploaded to a workspace, stored with its parsed files.
+
+| Table          | Holds                                                                                                                                                                                                    |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reviews`      | One row per review: workspace, per-workspace `number`, author (`NULL` once the account is deleted), title, description, status (`open` or `closed`), the raw `patch`, and file/addition/deletion totals. |
+| `review_files` | One row per file in the patch, in patch order (`position`, 0-based): paths, change type, binary flag, counts, and the parsed hunks as `jsonb`.                                                           |
+
+**Creating a review:** the patch is parsed with `parsePatch` _before_ a transaction is opened, so a bad patch (a `DiffParseError`) costs no database work and writes nothing. Then one transaction takes the next number, inserts the review and inserts all its files in a single multi-row `INSERT`. If any step fails, nothing is kept and the number is not used up.
+
+**Why a counter for `number`:** reviews are numbered 1, 2, 3 … per workspace, like issues. `workspaces.last_review_number` is incremented with `UPDATE … SET last_review_number = last_review_number + 1 … RETURNING`. That `UPDATE` locks the workspace row until the transaction ends, so two concurrent creates get different numbers. `SELECT max(number) + 1` would let both read the same maximum. `UNIQUE (workspace_id, number)` backs this up.
+
+**Why `jsonb` for hunks:** a file's hunks are always read whole, one file at a time, and never searched or joined. Tables for hunks and lines would mean up to 20,000 rows per review for no benefit. The raw `patch` is kept as well, so files can be re-parsed if the parser or the stored shape changes.
+
+**Isolation between workspaces:** `getReview` matches the review id _and_ the workspace id, and `getReviewFileHunks` matches the file id _and_ the review id, so ids from another workspace find nothing.
+
+---
+
 ## Review Lifecycle
 
 Review status and comment resolution are **independent**. Resolving every thread does not approve a review, and approving a review does not resolve threads (although a workspace setting could later require all threads to be resolved before approval).
