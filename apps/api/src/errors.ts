@@ -33,14 +33,14 @@ export class ForbiddenError extends AppError {
   }
 }
 
-/** 422 for a request body that fails its Zod schema. */
+/** 422 for a request body (or query string) that fails its Zod schema. */
 export class ValidationError extends AppError {
-  constructor(issues: readonly z.core.$ZodIssue[]) {
+  constructor(issues: readonly z.core.$ZodIssue[], message = 'The request body is invalid.') {
     // Only path and message are copied: Zod issues can carry the input, which may be a password.
     const details: FieldIssue[] = issues.map((issue) => ({
       field: issue.path.join('.'),
       message: issue.message,
     }));
-    super(422, 'validation_error', 'The request body is invalid.', details);
+    super(422, 'validation_error', message, details);
   }
 }

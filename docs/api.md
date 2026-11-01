@@ -9,15 +9,16 @@ The REST API design: conventions, every implemented and proposed endpoint, and w
 ## API Design
 
 > [!NOTE]
-> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, the five member endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
+> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, the five member endpoints, the seven review endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
 
-Conventions (the base path, error shape, `401`, `403`, `404` and `422` are **Implemented**; the rest are proposed):
+Conventions (the base path, error shape, `400`, `401`, `403`, `404`, `413`, `422` and cursor pagination are **Implemented**; the rest are proposed):
 
 - Base path `/api/v1`; JSON request and response bodies.
 - Errors use a consistent shape: `{ "error": { "code": "...", "message": "...", "details": {...} } }` (`ErrorResponseSchema` in `packages/shared`; unexpected errors become a generic `500 internal_error`).
 - `401` when unauthenticated; `403` when authenticated but not permitted; `404` when the resource does not exist **or** the caller cannot see it (to avoid leaking existence across workspaces).
 - `409` for optimistic-lock conflicts and invalid state transitions; `422` for validation failures; `429` for rate limits.
-- List endpoints accept `?cursor=` and `?limit=`.
+- List endpoints accept `?cursor=` and `?limit=` and answer `{ items, nextCursor }` (see [Pagination](#pagination)).
+- Request bodies are limited to 1 MiB (`413 payload_too_large`), except `POST /reviews` (3 MiB, see [Reviews](#reviews)).
 
 **Auth column legend:** _Public_ = no session required · _User_ = any authenticated user · _Member_ = member of the workspace that owns the resource · _Admin_ = workspace owner or admin · _Author_ = review author · _Participant_ = review author or assigned reviewer.
 
@@ -66,22 +67,55 @@ See [security.md](security.md#enforcement) for how the guard works.
 
 ### Reviews
 
-| Method  | Path                                      | Purpose                                                            | Auth                |
-| ------- | ----------------------------------------- | ------------------------------------------------------------------ | ------------------- |
-| `GET`   | `/api/v1/workspaces/:workspaceId/reviews` | List reviews with filters (`status`, `author`, `assignee`).        | Member              |
-| `POST`  | `/api/v1/workspaces/:workspaceId/reviews` | Create a review with an initial diff.                              | Member (not viewer) |
-| `GET`   | `/api/v1/reviews/:reviewId`               | Get review details, status, reviewers and unresolved-thread count. | Member              |
-| `PATCH` | `/api/v1/reviews/:reviewId`               | Update title/description, or close/reopen. Requires `version`.     | Author or Admin     |
-| `POST`  | `/api/v1/reviews/:reviewId/revisions`     | Submit a new revision (new diff).                                  | Author              |
-| `GET`   | `/api/v1/reviews/:reviewId/history`       | Status changes, decisions, revisions and analyses over time.       | Member              |
-| `PUT`   | `/api/v1/reviews/:reviewId/reviewers`     | Set assigned reviewers.                                            | Author or Admin     |
+Reviews are addressed by their per-workspace **number** (`#12`), not their UUID. Every review route is nested under the workspace, so the workspace guard (and its `404` for non-members) runs first. `R` below stands for `/api/v1/workspaces/:workspaceId/reviews`.
 
-### Review files and diffs
+| Method   | Path                                 | Purpose                                                                                      | Auth                            | Status          |
+| -------- | ------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------- | --------------- |
+| `POST`   | `R`                                  | Create a review from a unified diff. Body `{ title, description?, patch }`. `201 Review`.    | Member (not viewer)             | **Implemented** |
+| `GET`    | `R`                                  | List reviews, newest first, filtered and paginated (query below). `200 ReviewListResponse`.  | Member (viewer and up)          | **Implemented** |
+| `GET`    | `R/:reviewNumber`                    | Get one review. `200 Review`.                                                                | Member (viewer and up)          | **Implemented** |
+| `PATCH`  | `R/:reviewNumber`                    | Edit, close or reopen. Body `{ title?, description?, status? }`, at least one. `200 Review`. | Author (member and up) or Admin | **Implemented** |
+| `DELETE` | `R/:reviewNumber`                    | Delete the review and its files. `204`. The number is not reused.                            | Author (member and up) or Admin | **Implemented** |
+| `GET`    | `R/:reviewNumber/files`              | The review's files in patch order, without hunks. `200 ReviewFile[]`.                        | Member (viewer and up)          | **Implemented** |
+| `GET`    | `R/:reviewNumber/files/:fileId/diff` | One file with its parsed hunks. `200 { file: ReviewFile, hunks }`.                           | Member (viewer and up)          | **Implemented** |
+| `POST`   | `R/:reviewNumber/revisions`          | Submit a new revision (new diff).                                                            | Author                          | Planned         |
+| `GET`    | `R/:reviewNumber/history`            | Status changes, decisions, revisions and analyses over time.                                 | Member                          | Planned         |
+| `PUT`    | `R/:reviewNumber/reviewers`          | Set assigned reviewers.                                                                      | Author or Admin                 | Planned         |
 
-| Method | Path                                           | Purpose                                                               | Auth   |
-| ------ | ---------------------------------------------- | --------------------------------------------------------------------- | ------ |
-| `GET`  | `/api/v1/reviews/:reviewId/files`              | List changed files for a revision (`?revision=`) with counts.         | Member |
-| `GET`  | `/api/v1/reviews/:reviewId/files/:fileId/diff` | Get parsed hunks for one file (supports unified and split rendering). | Member |
+`Review` is `{ id, workspaceId, number, title, description, status, author, filesChanged, additions, deletions, createdAt }` (`ReviewSchema` in `packages/shared`); `author` is `{ id, displayName }`, or `null` once the account is deleted. `ReviewFile` is `{ id, position, oldPath, newPath, changeType, isBinary, additions, deletions }`.
+
+**Who may edit:** `PATCH` and `DELETE` are allowed for the review's author if they are a member or above, and for any admin or owner. A viewer, or a member acting on someone else's review, gets `403 forbidden`. The rule is `canEditReview` in `packages/shared`, so the web UI can hide the same buttons.
+
+**Create:** `title` is trimmed, 1–200 characters; `description` up to 10,000 (blank or `null` means none); neither may contain NUL. The patch is checked by the shared `parsePatch`: at most 1 MiB of UTF-8, 300 files, 20,000 lines and 5,000 characters per line. One leading byte order mark (U+FEFF) is ignored. This route accepts JSON bodies up to **3 MiB** (every other route: 1 MiB) because JSON escaping can nearly double a patch's size; the 1 MiB patch limit still applies to the decoded text.
+
+**List query** (`ListReviewsQuerySchema`):
+
+| Parameter | Values                                | Default |
+| --------- | ------------------------------------- | ------- |
+| `status`  | `open` or `closed`                    | all     |
+| `author`  | `me` or a user UUID                   | all     |
+| `limit`   | integer 1–50                          | 20      |
+| `cursor`  | the `nextCursor` of the previous page | none    |
+
+#### Pagination
+
+Lists are ordered by `created_at DESC, id DESC` and paginated by keyset, not offset: the next page is the rows strictly after the `(created_at, id)` of the last item, served by the `(workspace_id, created_at DESC, id DESC)` index. Rows created while paging don't shift pages, and nothing is repeated or skipped. `nextCursor` is `null` on the last page.
+
+The cursor is opaque to clients. It is the base64url encoding of `{"createdAt":"2026-01-01T00:00:00.000900Z","id":"<uuid>"}`, where `createdAt` is the database value in UTC with all **six** fractional digits. It never goes through a JS `Date` (milliseconds only), which would skip or repeat rows created within the same millisecond. A cursor the API didn't produce is `400 invalid_cursor`; start again without one. Cursors don't carry the filters, so send the same `status` and `author` with every page.
+
+Errors on the review routes (in addition to the workspace errors above):
+
+| Status | Code                    | When                                                                                                                               |
+| ------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `404`  | `review_not_found`      | `:reviewNumber` is not a positive integer up to 2147483647 (checked before any query), or no such review exists in this workspace. |
+| `404`  | `review_file_not_found` | `:fileId` is not a UUID, or not a file of this review.                                                                             |
+| `403`  | `forbidden`             | `POST` by a viewer; `PATCH`/`DELETE` by a viewer, or by a member on someone else's review.                                         |
+| `400`  | `invalid_patch`         | The parser rejected the patch. `details: { reason, line }`: `reason` is the parser's code (below), `line` is 1-based or `null`.    |
+| `400`  | `invalid_cursor`        | `cursor` can't be decoded.                                                                                                         |
+| `413`  | `payload_too_large`     | The JSON body is over 3 MiB (`POST` reviews) or 1 MiB (every other route).                                                         |
+| `422`  | `validation_error`      | Invalid body, or invalid list query (`limit`, `status`, `author`).                                                                 |
+
+`invalid_patch` reasons: `empty_patch`, `too_large`, `too_many_files`, `too_many_lines`, `line_too_long`, `not_a_patch`, `malformed_header`, `malformed_hunk`, `count_mismatch`, and `unsupported_encoding` (the text contains NUL characters, usually a UTF-16 or binary file: save it as UTF-8. Postgres `text` can't store NUL, so such input never reaches the database).
 
 ### Comments and replies
 

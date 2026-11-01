@@ -6,6 +6,7 @@ import {
 import type { FastifyPluginAsync } from 'fastify';
 import { ValidationError } from '../../errors.js';
 import { authUser, requireAuth } from '../auth/require-auth.js';
+import { reviewRoutes } from '../reviews/routes.js';
 import { memberRoutes } from './member-routes.js';
 import {
   requestWorkspace,
@@ -71,4 +72,5 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
   );
 
   await app.register(memberRoutes, { prefix: '/:workspaceId/members' });
+  await app.register(reviewRoutes, { prefix: '/:workspaceId/reviews' });
 };

@@ -26,7 +26,8 @@ export type DiffParseErrorCode =
   | 'not_a_patch'
   | 'malformed_header'
   | 'malformed_hunk'
-  | 'count_mismatch';
+  | 'count_mismatch'
+  | 'unsupported_encoding';
 
 const MESSAGES: Record<DiffParseErrorCode, string> = {
   empty_patch: 'The patch is empty.',
@@ -38,6 +39,8 @@ const MESSAGES: Record<DiffParseErrorCode, string> = {
   malformed_header: 'A file header is malformed.',
   malformed_hunk: 'A hunk is malformed.',
   count_mismatch: "A hunk's lines don't match the counts in its @@ header.",
+  unsupported_encoding:
+    'The patch contains NUL characters. Is it UTF-16 or binary? Save it as UTF-8.',
 };
 
 export class DiffParseError extends Error {
@@ -57,12 +60,18 @@ export class DiffParseError extends Error {
  * Parses a unified diff: git output (`git diff`, `git format-patch`) or plain `diff -u`.
  * Throws a DiffParseError for input it can't trust. Content is only ever treated as text.
  */
-export function parsePatch(text: string, limits: Partial<DiffLimits> = {}): ParsedPatch {
+export function parsePatch(input: string, limits: Partial<DiffLimits> = {}): ParsedPatch {
   const max: DiffLimits = { ...DEFAULT_DIFF_LIMITS, ...limits };
+  // Editors on Windows often save UTF-8 with a byte order mark; it is not part of the diff.
+  const text = input.startsWith('\uFEFF') ? input.slice(1) : input;
   // The cheap length check first: UTF-8 is never shorter than UTF-16.
   if (text.length > max.maxBytes || utf8Length(text) > max.maxBytes) {
     throw new DiffParseError('too_large', null);
   }
+  // A UTF-16 file read as UTF-8 has a NUL in almost every other byte, and binary data has them
+  // too. Text with NULs is never a usable diff, and Postgres text columns can't store them.
+  const nul = text.indexOf('\0');
+  if (nul !== -1) throw new DiffParseError('unsupported_encoding', lineNumberAt(text, nul));
   if (text.trim() === '') throw new DiffParseError('empty_patch', null);
 
   const lines = splitLines(text);
@@ -316,6 +325,13 @@ function splitLines(text: string): string[] {
   const lines = text.split('\n');
   if (lines.at(-1) === '') lines.pop();
   return lines.map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
+}
+
+/** 1-based line of the character at `index`. */
+function lineNumberAt(text: string, index: number): number {
+  let line = 1;
+  for (let k = text.indexOf('\n'); k !== -1 && k < index; k = text.indexOf('\n', k + 1)) line++;
+  return line;
 }
 
 function utf8Length(text: string): number {

@@ -267,6 +267,27 @@ describe('parsePatch: other input', () => {
   });
 });
 
+describe('parsePatch: byte order mark', () => {
+  const text = '--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n';
+
+  it('ignores one leading BOM', () => {
+    expect(parsePatch(`\uFEFF${text}`)).toEqual(parsePatch(text));
+  });
+
+  it('does not count the BOM towards the size limit', () => {
+    const bytes = new TextEncoder().encode(text).length;
+    expect(() => parsePatch(`\uFEFF${text}`, { maxBytes: bytes })).not.toThrow();
+  });
+
+  it('strips only one: a second BOM is part of the text', () => {
+    expect(parseError(`\uFEFF\uFEFF${text}`)).toMatchObject({ code: 'not_a_patch' });
+  });
+
+  it('treats a BOM-only patch as empty', () => {
+    expect(parseError('\uFEFF')).toMatchObject({ code: 'empty_patch', line: null });
+  });
+});
+
 describe('parsePatch: errors', () => {
   it.each(['', '   \n\n'])('rejects empty input %j', (text) => {
     expect(parseError(text)).toMatchObject({ code: 'empty_patch', line: null });
@@ -338,6 +359,18 @@ describe('parsePatch: errors', () => {
       code: 'line_too_long',
       line: 5,
     });
+  });
+
+  it.each([
+    ['at the start (UTF-16 read as UTF-8)', '-\0-\0-\0 \0a\0\n', 1],
+    ['on a later line', '--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+a\0b\n', 5],
+    ['after a BOM', '\uFEFF\0', 1],
+  ])('rejects NUL characters %s as unsupported_encoding', (_, text, line) => {
+    const error = parseError(text);
+    expect(error).toMatchObject({ code: 'unsupported_encoding', line });
+    expect(error.message).toContain(
+      'The patch contains NUL characters. Is it UTF-16 or binary? Save it as UTF-8.',
+    );
   });
 
   it('uses the default limits', () => {

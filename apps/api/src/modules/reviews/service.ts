@@ -1,14 +1,17 @@
 import {
   parsePatch,
   type CreateReviewRequest,
-  type DiffHunk,
   type Review,
   type ReviewFile,
+  type ReviewFileDiff,
+  type ReviewStatus,
+  type UpdateReviewRequest,
 } from '@diffcraft/shared';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { reviewFiles, reviews, users, workspaces, type ReviewRow } from '../../db/schema/index.js';
 import type { Database } from '../../plugins/db.js';
 import { WorkspaceNotFoundError } from '../workspaces/require-workspace-role.js';
+import { encodeCursor, type ReviewCursor } from './cursor.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 
@@ -104,51 +107,178 @@ async function nextReviewNumber(tx: Tx, workspaceId: string): Promise<number> {
   return counter.number;
 }
 
-/** Matches both ids, so a review can't be read through a workspace it isn't in. */
-export async function getReview(
-  db: Database,
-  workspaceId: string,
-  reviewId: string,
-): Promise<Review | null> {
-  const [result] = await db
-    .select({ review: reviews, authorId: users.id, authorName: users.displayName })
-    .from(reviews)
-    .leftJoin(users, eq(reviews.authorId, users.id))
-    .where(and(eq(reviews.id, reviewId), eq(reviews.workspaceId, workspaceId)));
-  if (!result) return null;
-  const { review, authorId, authorName } = result;
+// A review with its author, for every read. Left join: the author may have been deleted.
+const reviewWithAuthor = {
+  review: reviews,
+  authorId: users.id,
+  authorName: users.displayName,
+};
+
+function fromJoinedRow({
+  review,
+  authorId,
+  authorName,
+}: {
+  review: ReviewRow;
+  authorId: string | null;
+  authorName: string | null;
+}): Review {
   return toReview(
     review,
     authorId !== null && authorName !== null ? { id: authorId, displayName: authorName } : null,
   );
 }
 
-/** The review's files in patch order, without their hunks. */
-export async function listReviewFiles(db: Database, reviewId: string): Promise<ReviewFile[]> {
-  return db
+async function findReview(db: Database, where: SQL | undefined): Promise<Review | null> {
+  const [row] = await db
+    .select(reviewWithAuthor)
+    .from(reviews)
+    .leftJoin(users, eq(reviews.authorId, users.id))
+    .where(where);
+  return row ? fromJoinedRow(row) : null;
+}
+
+/** Matches both ids, so a review can't be read through a workspace it isn't in. */
+export async function getReview(
+  db: Database,
+  workspaceId: string,
+  reviewId: string,
+): Promise<Review | null> {
+  return findReview(db, and(eq(reviews.id, reviewId), eq(reviews.workspaceId, workspaceId)));
+}
+
+/** By the per-workspace number used in URLs ("#12"). */
+export async function getReviewByNumber(
+  db: Database,
+  workspaceId: string,
+  number: number,
+): Promise<Review | null> {
+  return findReview(db, and(eq(reviews.workspaceId, workspaceId), eq(reviews.number, number)));
+}
+
+export interface ListReviewsOptions {
+  status?: ReviewStatus;
+  authorId?: string;
+  limit: number;
+  cursor?: ReviewCursor;
+}
+
+/**
+ * One page of the workspace's reviews, newest first, with keyset pagination on
+ * (created_at, id), which the reviews_workspace_id_created_at_id_idx index serves.
+ */
+export async function listReviews(
+  db: Database,
+  workspaceId: string,
+  { status, authorId, limit, cursor }: ListReviewsOptions,
+): Promise<{ items: Review[]; nextCursor: string | null }> {
+  const rows = await db
     .select({
-      id: reviewFiles.id,
-      position: reviewFiles.position,
-      oldPath: reviewFiles.oldPath,
-      newPath: reviewFiles.newPath,
-      changeType: reviewFiles.changeType,
-      isBinary: reviewFiles.isBinary,
-      additions: reviewFiles.additions,
-      deletions: reviewFiles.deletions,
+      ...reviewWithAuthor,
+      // Microseconds, as text: the cursor must not lose precision in a JS Date.
+      cursorCreatedAt: sql<string>`to_char(${reviews.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
     })
+    .from(reviews)
+    .leftJoin(users, eq(reviews.authorId, users.id))
+    .where(
+      and(
+        eq(reviews.workspaceId, workspaceId),
+        status !== undefined ? eq(reviews.status, status) : undefined,
+        authorId !== undefined ? eq(reviews.authorId, authorId) : undefined,
+        cursor !== undefined
+          ? sql`(${reviews.createdAt}, ${reviews.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
+          : undefined,
+      ),
+    )
+    .orderBy(desc(reviews.createdAt), desc(reviews.id))
+    // One extra row says whether there is a next page.
+    .limit(limit + 1);
+
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    items: page.map(fromJoinedRow),
+    nextCursor:
+      rows.length > limit && last
+        ? encodeCursor({ createdAt: last.cursorCreatedAt, id: last.review.id })
+        : null,
+  };
+}
+
+/** Applies the fields that are set; null if the review is not in the workspace. */
+export async function updateReview(
+  db: Database,
+  workspaceId: string,
+  reviewId: string,
+  changes: UpdateReviewRequest,
+): Promise<Review | null> {
+  const [row] = await db
+    .update(reviews)
+    .set({
+      ...(changes.title !== undefined && { title: changes.title }),
+      ...(changes.description !== undefined && { description: changes.description }),
+      ...(changes.status !== undefined && { status: changes.status }),
+    })
+    .where(and(eq(reviews.id, reviewId), eq(reviews.workspaceId, workspaceId)))
+    .returning({ id: reviews.id });
+  return row ? getReview(db, workspaceId, row.id) : null;
+}
+
+/** Deletes the review and (by cascade) its files; false if it is not in the workspace. */
+export async function deleteReview(
+  db: Database,
+  workspaceId: string,
+  reviewId: string,
+): Promise<boolean> {
+  const deleted = await db
+    .delete(reviews)
+    .where(and(eq(reviews.id, reviewId), eq(reviews.workspaceId, workspaceId)))
+    .returning({ id: reviews.id });
+  return deleted.length > 0;
+}
+
+const reviewFileColumns = {
+  id: reviewFiles.id,
+  position: reviewFiles.position,
+  oldPath: reviewFiles.oldPath,
+  newPath: reviewFiles.newPath,
+  changeType: reviewFiles.changeType,
+  isBinary: reviewFiles.isBinary,
+  additions: reviewFiles.additions,
+  deletions: reviewFiles.deletions,
+};
+
+// review_files has no workspace_id, so these join reviews to scope by workspace as well.
+const fileInWorkspace = (workspaceId: string, reviewId: string) =>
+  and(eq(reviewFiles.reviewId, reviewId), eq(reviews.workspaceId, workspaceId));
+
+/** The review's files in patch order, without their hunks. */
+export async function listReviewFiles(
+  db: Database,
+  workspaceId: string,
+  reviewId: string,
+): Promise<ReviewFile[]> {
+  return db
+    .select(reviewFileColumns)
     .from(reviewFiles)
-    .where(eq(reviewFiles.reviewId, reviewId))
+    .innerJoin(reviews, eq(reviewFiles.reviewId, reviews.id))
+    .where(fileInWorkspace(workspaceId, reviewId))
     .orderBy(asc(reviewFiles.position));
 }
 
-export async function getReviewFileHunks(
+/** One file with its hunks; null unless it belongs to this review in this workspace. */
+export async function getReviewFileDiff(
   db: Database,
+  workspaceId: string,
   reviewId: string,
   fileId: string,
-): Promise<DiffHunk[] | null> {
+): Promise<ReviewFileDiff | null> {
   const [row] = await db
-    .select({ hunks: reviewFiles.hunks })
+    .select({ ...reviewFileColumns, hunks: reviewFiles.hunks })
     .from(reviewFiles)
-    .where(and(eq(reviewFiles.id, fileId), eq(reviewFiles.reviewId, reviewId)));
-  return row?.hunks ?? null;
+    .innerJoin(reviews, eq(reviewFiles.reviewId, reviews.id))
+    .where(and(eq(reviewFiles.id, fileId), fileInWorkspace(workspaceId, reviewId)));
+  if (!row) return null;
+  const { hunks, ...file } = row;
+  return { file, hunks };
 }

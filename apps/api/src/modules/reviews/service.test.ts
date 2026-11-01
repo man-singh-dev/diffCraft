@@ -9,7 +9,7 @@ import { reviewFiles, reviews, users, workspaces } from '../../db/schema/index.j
 import { describeWithDb, testDatabaseUrl } from '../../test/db.js';
 import { createUserWithSession, failInsertInTransaction } from '../../test/fixtures.js';
 import { createWorkspace } from '../workspaces/service.js';
-import { createReview, getReview, getReviewFileHunks, listReviewFiles } from './service.js';
+import { createReview, getReview, getReviewFileDiff, listReviewFiles } from './service.js';
 
 // Three files in patch order: modified (two hunks), added, deleted.
 const PATCH = `diff --git a/src/app.ts b/src/app.ts
@@ -102,7 +102,7 @@ describeWithDb('reviews service and tables', () => {
     const [stored] = await reviewsIn(workspaceId);
     expect(stored?.patch).toBe(PATCH);
 
-    const files = await listReviewFiles(app.db, review.id);
+    const files = await listReviewFiles(app.db, workspaceId, review.id);
     expect(
       files.map((f) => [f.position, f.oldPath, f.newPath, f.changeType, f.additions, f.deletions]),
     ).toEqual([
@@ -114,9 +114,10 @@ describeWithDb('reviews service and tables', () => {
 
     const parsed = parsePatch(PATCH);
     for (const [index, file] of files.entries()) {
-      await expect(getReviewFileHunks(app.db, review.id, file.id)).resolves.toEqual(
-        parsed.files[index]!.hunks,
-      );
+      await expect(getReviewFileDiff(app.db, workspaceId, review.id, file.id)).resolves.toEqual({
+        file,
+        hunks: parsed.files[index]!.hunks,
+      });
     }
   });
 
@@ -202,14 +203,19 @@ describeWithDb('reviews service and tables', () => {
     await expect(getReview(app.db, ws.workspaceId, randomUUID())).resolves.toBeNull();
   });
 
-  it('finds hunks only for a file of the given review', async () => {
+  it('finds hunks only for a file of the given review in the given workspace', async () => {
     const ws = await setup();
+    const other = await setup();
     const review = await createReview(app.db, { ...ws, input: input() });
     const otherReview = await createReview(app.db, { ...ws, input: input() });
-    const [file] = await listReviewFiles(app.db, review.id);
+    const [file] = await listReviewFiles(app.db, ws.workspaceId, review.id);
+    const diff = (workspaceId: string, reviewId: string, fileId: string) =>
+      getReviewFileDiff(app.db, workspaceId, reviewId, fileId);
 
-    await expect(getReviewFileHunks(app.db, otherReview.id, file!.id)).resolves.toBeNull();
-    await expect(getReviewFileHunks(app.db, review.id, randomUUID())).resolves.toBeNull();
+    await expect(diff(ws.workspaceId, otherReview.id, file!.id)).resolves.toBeNull();
+    await expect(diff(ws.workspaceId, review.id, randomUUID())).resolves.toBeNull();
+    await expect(diff(other.workspaceId, review.id, file!.id)).resolves.toBeNull();
+    await expect(listReviewFiles(app.db, other.workspaceId, review.id)).resolves.toEqual([]);
   });
 
   it('deletes reviews and their files with the workspace', async () => {
@@ -232,6 +238,6 @@ describeWithDb('reviews service and tables', () => {
 
     const after = await getReview(app.db, ws.workspaceId, review.id);
     expect(after).toEqual({ ...review, author: null });
-    await expect(listReviewFiles(app.db, review.id)).resolves.toHaveLength(3);
+    await expect(listReviewFiles(app.db, ws.workspaceId, review.id)).resolves.toHaveLength(3);
   });
 });
