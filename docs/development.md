@@ -162,7 +162,10 @@ diffCraft/
 │   │   │   │   │   ├── password.ts   # Argon2id hash and verify
 │   │   │   │   │   └── require-auth.ts # requireAuth preHandler (401 without a valid session)
 │   │   │   │   ├── reviews/
-│   │   │   │   │   └── service.ts    # createReview (parse, number, store files), getReview, files, hunks
+│   │   │   │   │   ├── routes.ts     # /:workspaceId/reviews: create, list, get, edit, delete, files, diff
+│   │   │   │   │   ├── service.ts    # createReview (parse, number, store files), list (keyset), update, delete
+│   │   │   │   │   ├── cursor.ts     # Opaque list cursor (created_at with microseconds, id)
+│   │   │   │   │   └── errors.ts     # review_not_found, invalid_patch, invalid_cursor, …
 │   │   │   │   └── workspaces/
 │   │   │   │       ├── routes.ts     # POST/GET /, GET/PATCH/DELETE /:workspaceId under /api/v1/workspaces
 │   │   │   │       ├── service.ts    # slugify, create/list/get/rename/delete, getMembership
@@ -197,12 +200,19 @@ diffCraft/
 │   │   │   │       ├── profile/      # page.tsx
 │   │   │   │       └── workspaces/   # page.tsx (list), create-workspace-form.tsx
 │   │   │   │           └── [workspaceId]/ # page.tsx, not-found.tsx, member-controls.tsx, add-member-form.tsx,
-│   │   │   │                              # rename-workspace-form.tsx, delete-workspace.tsx, leave-workspace.tsx
-│   │   │   ├── components/           # form-field.tsx, page-card.tsx, styles.ts, nav.tsx, logout-button.tsx, role-badge.tsx
+│   │   │   │               │              # rename-workspace-form.tsx, delete-workspace.tsx, leave-workspace.tsx
+│   │   │   │               └── reviews/  # page.tsx (list, filters), load-more-reviews.tsx
+│   │   │   │                   ├── new/  # page.tsx, new-review-form.tsx, patch-preview.tsx
+│   │   │   │                   └── [reviewNumber]/ # page.tsx, not-found.tsx, review-controls.tsx
+│   │   │   ├── components/           # form-field.tsx, page-card.tsx, styles.ts, nav.tsx, logout-button.tsx,
+│   │   │   │                         # role-badge.tsx, review-ui.tsx (status/change badges, review row)
 │   │   │   └── lib/
 │   │   │       ├── api-client.ts     # Browser calls to the API via relative /api URLs
 │   │   │       ├── api-errors.ts     # API error codes → friendly messages
-│   │   │       ├── api.server.ts     # Server-side GETs with the session cookie (workspaces, members)
+│   │   │       ├── review-errors.ts  # Review and patch-parse errors → friendly messages
+│   │   │       ├── review-params.ts  # Review number guard, list filters from the URL
+│   │   │       ├── decode-patch-file.ts # Patch file bytes → text (UTF-8 / UTF-16 by BOM, 1 MiB limit)
+│   │   │       ├── api.server.ts     # Server-side GETs with the session cookie (workspaces, members, reviews)
 │   │   │       ├── api-health.ts     # Fetches and validates GET /health
 │   │   │       ├── auth.server.ts    # Server-side current-user lookup
 │   │   │       ├── form-errors.ts    # Client-side form validation; API errors → field messages
@@ -222,7 +232,7 @@ diffCraft/
 │       │   ├── diff/                 # parsePatch (unified diff → files/hunks/lines), schemas, fixtures/
 │       │   ├── health.ts             # HealthResponseSchema
 │       │   ├── ready.ts              # Readiness response
-│       │   ├── reviews.ts            # Review statuses, create request, review and review-file schemas
+│       │   ├── reviews.ts            # Review schemas (create, update, list query/response), canEditReview
 │       │   ├── workspaces.ts         # Workspace roles, canManageMember, workspace and member schemas
 │       │   └── zod-issues.ts         # Zod error formatter
 │       ├── scripts/parse-patch.ts    # Try the parser: node packages/shared/scripts/parse-patch.ts <file>

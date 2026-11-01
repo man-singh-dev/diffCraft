@@ -1,8 +1,14 @@
 import 'server-only';
 
 import {
+  ReviewFileSchema,
+  ReviewListResponseSchema,
+  ReviewSchema,
   WorkspaceMemberSchema,
   WorkspaceSchema,
+  type Review,
+  type ReviewFile,
+  type ReviewListResponse,
   type Workspace,
   type WorkspaceMember,
 } from '@diffcraft/shared';
@@ -10,6 +16,7 @@ import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { SESSION_COOKIE_NAME } from './auth.server';
 import { env } from './env.server';
+import { isReviewNumber, reviewListQuery, type ReviewFilters } from './review-params';
 
 /** `status` is the HTTP status, or 0 when there was no usable response (network, timeout, bad body). */
 export type ServerApiResult<T> = { ok: true; data: T } | { ok: false; status: number };
@@ -67,4 +74,32 @@ export async function getWorkspace(workspaceId: string): Promise<ServerApiResult
 export async function getMembers(workspaceId: string): Promise<ServerApiResult<WorkspaceMember[]>> {
   if (!isUuid(workspaceId)) return NOT_FOUND;
   return apiGet(`/api/v1/workspaces/${workspaceId}/members`, WorkspaceMemberSchema.array());
+}
+
+export async function getReviews(
+  workspaceId: string,
+  filters: ReviewFilters & { cursor?: string | null },
+): Promise<ServerApiResult<ReviewListResponse>> {
+  if (!isUuid(workspaceId)) return NOT_FOUND;
+  const query = reviewListQuery(filters, filters.cursor);
+  return apiGet(`/api/v1/workspaces/${workspaceId}/reviews${query}`, ReviewListResponseSchema);
+}
+
+export async function getReview(
+  workspaceId: string,
+  reviewNumber: string,
+): Promise<ServerApiResult<Review>> {
+  if (!isUuid(workspaceId) || !isReviewNumber(reviewNumber)) return NOT_FOUND;
+  return apiGet(`/api/v1/workspaces/${workspaceId}/reviews/${reviewNumber}`, ReviewSchema);
+}
+
+export async function getReviewFiles(
+  workspaceId: string,
+  reviewNumber: string,
+): Promise<ServerApiResult<ReviewFile[]>> {
+  if (!isUuid(workspaceId) || !isReviewNumber(reviewNumber)) return NOT_FOUND;
+  return apiGet(
+    `/api/v1/workspaces/${workspaceId}/reviews/${reviewNumber}/files`,
+    ReviewFileSchema.array(),
+  );
 }

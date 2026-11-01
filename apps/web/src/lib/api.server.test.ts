@@ -1,12 +1,22 @@
 import { WorkspaceSchema } from '@diffcraft/shared';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest';
 
 // server-only throws outside a React Server Components build; cookies() needs a request.
 vi.mock('server-only', () => ({}));
 const cookieStore = { get: vi.fn<(name: string) => { value: string } | undefined>() };
 vi.mock('next/headers', () => ({ cookies: () => Promise.resolve(cookieStore) }));
 
-const { fetchApi, getMembers, getWorkspace, getWorkspaces } = await import('./api.server.js');
+const { fetchApi, getMembers, getReview, getReviewFiles, getReviews, getWorkspace, getWorkspaces } =
+  await import('./api.server.js');
 
 const API_URL = 'http://api.test.invalid';
 const TOKEN = 'a'.repeat(43);
@@ -101,6 +111,117 @@ describe('getWorkspaces, getWorkspace and getMembers', () => {
 
       expect(await getWorkspace(id)).toEqual({ ok: false, status: 404 });
       expect(await getMembers(id)).toEqual({ ok: false, status: 404 });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe('getReviews, getReview and getReviewFiles', () => {
+  // Created in beforeAll: the block above restores its fetch spy when it ends.
+  let fetchSpy: MockInstance<typeof fetch>;
+  const REVIEW = {
+    id: '01a17e5e-aa56-7985-be46-bf5f1c7e7fd3',
+    workspaceId: WORKSPACE.id,
+    number: 7,
+    title: 'Fix login',
+    description: 'Line one\nLine two',
+    status: 'open',
+    author: null,
+    filesChanged: 1,
+    additions: 1,
+    deletions: 0,
+    createdAt: '2026-10-27T17:18:15.633Z',
+  };
+  const FILE = {
+    id: '01a17e5e-aa56-7985-be46-bf5f1c7e7fd4',
+    position: 0,
+    oldPath: null,
+    newPath: 'src/new.ts',
+    changeType: 'added',
+    isBinary: false,
+    additions: 1,
+    deletions: 0,
+  };
+  const respond = (status: number, body: unknown) =>
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(body), { status })),
+    );
+  const calledPath = () => {
+    const url = new URL(String(fetchSpy.mock.calls[0]![0]));
+    return `${url.pathname}${url.search}`;
+  };
+
+  beforeAll(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  beforeEach(() => {
+    cookieStore.get.mockReset();
+    cookieStore.get.mockReturnValue({ value: TOKEN });
+    fetchSpy.mockReset();
+  });
+
+  afterAll(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('getReviews sends the filters (mine as author=me) and parses the page', async () => {
+    const page = { items: [REVIEW], nextCursor: 'next' };
+    respond(200, page);
+    expect(await getReviews(WORKSPACE.id, { status: 'closed', mine: true })).toEqual({
+      ok: true,
+      data: page,
+    });
+    expect(calledPath()).toBe(`/api/v1/workspaces/${WORKSPACE.id}/reviews?status=closed&author=me`);
+  });
+
+  it('getReview and getReviewFiles parse their responses', async () => {
+    respond(200, REVIEW);
+    expect(await getReview(WORKSPACE.id, '7')).toEqual({ ok: true, data: REVIEW });
+    expect(calledPath()).toBe(`/api/v1/workspaces/${WORKSPACE.id}/reviews/7`);
+
+    fetchSpy.mockReset();
+    respond(200, [FILE]);
+    expect(await getReviewFiles(WORKSPACE.id, '7')).toEqual({ ok: true, data: [FILE] });
+    expect(calledPath()).toBe(`/api/v1/workspaces/${WORKSPACE.id}/reviews/7/files`);
+  });
+
+  it('passes a 404 through', async () => {
+    respond(404, { error: { code: 'review_not_found', message: 'Review not found.' } });
+    expect(await getReview(WORKSPACE.id, '7')).toEqual({ ok: false, status: 404 });
+  });
+
+  it('passes a 422 through', async () => {
+    respond(422, { error: { code: 'validation_error', message: 'Invalid.' } });
+    expect(await getReviews(WORKSPACE.id, { status: null, mine: false })).toEqual({
+      ok: false,
+      status: 422,
+    });
+  });
+
+  it('returns status 0 for a review with the wrong shape', async () => {
+    respond(200, { ...REVIEW, number: 0 });
+    expect(await getReview(WORKSPACE.id, '7')).toEqual({ ok: false, status: 0 });
+  });
+
+  it.each(['0', '01', '-1', '1.5', 'abc', '..', '7/files', '2147483648'])(
+    'returns 404 without calling the API for the review number %j',
+    async (reviewNumber) => {
+      expect(await getReview(WORKSPACE.id, reviewNumber)).toEqual({ ok: false, status: 404 });
+      expect(await getReviewFiles(WORKSPACE.id, reviewNumber)).toEqual({ ok: false, status: 404 });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['..', 'abc'])(
+    'returns 404 without calling the API for the workspace id %j',
+    async (workspaceId) => {
+      expect(await getReviews(workspaceId, { status: null, mine: false })).toEqual({
+        ok: false,
+        status: 404,
+      });
+      expect(await getReview(workspaceId, '7')).toEqual({ ok: false, status: 404 });
+      expect(await getReviewFiles(workspaceId, '7')).toEqual({ ok: false, status: 404 });
       expect(fetchSpy).not.toHaveBeenCalled();
     },
   );

@@ -1,9 +1,11 @@
 import { canManageMember, hasAtLeastRole, WORKSPACE_ROLES } from '@diffcraft/shared';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { FormError } from '@/components/form-field';
 import { PageCard } from '@/components/page-card';
 import { RoleBadge } from '@/components/role-badge';
+import { secondaryButton } from '@/components/styles';
 import { getMembers, getWorkspace } from '@/lib/api.server';
 import { getCurrentUser } from '@/lib/auth.server';
 import { AddMemberForm } from './add-member-form';
@@ -56,6 +58,10 @@ export default async function WorkspacePage(props: PageProps<'/workspaces/[works
           </dd>
         </div>
       </dl>
+
+      <Link href={`/workspaces/${workspace.data.id}/reviews`} className={secondaryButton}>
+        Reviews
+      </Link>
 
       <section aria-labelledby="members" className="space-y-3">
         <h2 id="members" className={sectionHeading}>

@@ -1,20 +1,27 @@
 import {
   ErrorResponseSchema,
   PublicUserSchema,
+  ReviewListResponseSchema,
+  ReviewSchema,
   WorkspaceMemberSchema,
   WorkspaceSchema,
   type AddMemberRequest,
+  type CreateReviewRequest,
   type CreateWorkspaceRequest,
   type LoginRequest,
   type PublicUser,
   type RegisterRequest,
+  type Review,
+  type ReviewListResponse,
   type UpdateMemberRoleRequest,
+  type UpdateReviewRequest,
   type UpdateWorkspaceRequest,
   type Workspace,
   type WorkspaceMember,
 } from '@diffcraft/shared';
 import { z } from 'zod';
 import { toFieldErrors, type FieldErrors } from './form-errors';
+import { reviewListQuery, type ReviewFilters } from './review-params';
 
 // Browser-side calls to the API. Only relative URLs: next.config.ts forwards /api/* to the API.
 
@@ -25,6 +32,8 @@ export interface ApiFailure {
   code: string;
   message: string;
   fieldErrors: FieldErrors;
+  /** error.details, for codes that carry more than a message (e.g. invalid_patch). */
+  details?: unknown;
 }
 export type ApiResult<T> = { ok: true; data: T } | ApiFailure;
 
@@ -80,6 +89,7 @@ async function request<T>(
     return {
       ...failure(res.status, code, message),
       fieldErrors: issues?.success ? toFieldErrors(issues.data) : {},
+      ...(details !== undefined && res.status !== 422 && { details }),
     };
   }
 
@@ -167,4 +177,44 @@ export function leaveWorkspace(
 ): Promise<ApiResult<void>> {
   const path = `${workspacePath(workspaceId)}/members/leave`;
   return request<void>('POST', path, undefined, null, fetchImpl);
+}
+
+const reviewsPath = (workspaceId: string) => `${workspacePath(workspaceId)}/reviews`;
+const reviewPath = (workspaceId: string, reviewNumber: number) =>
+  `${reviewsPath(workspaceId)}/${encodeURIComponent(reviewNumber)}`;
+
+/** One page of reviews, for "Load more" (the first page is rendered on the server). */
+export function listReviews(
+  workspaceId: string,
+  filters: ReviewFilters,
+  cursor: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<ReviewListResponse>> {
+  const path = `${reviewsPath(workspaceId)}${reviewListQuery(filters, cursor)}`;
+  return request('GET', path, undefined, ReviewListResponseSchema, fetchImpl);
+}
+
+export function createReview(
+  workspaceId: string,
+  input: CreateReviewRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<Review>> {
+  return request('POST', reviewsPath(workspaceId), input, ReviewSchema, fetchImpl);
+}
+
+export function updateReview(
+  workspaceId: string,
+  reviewNumber: number,
+  input: UpdateReviewRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<Review>> {
+  return request('PATCH', reviewPath(workspaceId, reviewNumber), input, ReviewSchema, fetchImpl);
+}
+
+export function deleteReview(
+  workspaceId: string,
+  reviewNumber: number,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<void>> {
+  return request<void>('DELETE', reviewPath(workspaceId, reviewNumber), undefined, null, fetchImpl);
 }

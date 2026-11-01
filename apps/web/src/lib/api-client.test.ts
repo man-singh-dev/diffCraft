@@ -2,14 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   addMember,
   changeMemberRole,
+  createReview,
   createWorkspace,
+  deleteReview,
   deleteWorkspace,
   leaveWorkspace,
+  listReviews,
   login,
   logout,
   register,
   removeMember,
   renameWorkspace,
+  updateReview,
 } from './api-client.js';
 
 const USER = {
@@ -279,5 +283,127 @@ describe('workspace and member calls', () => {
       makeFetch(201, { ...MEMBER, role: 'superadmin' }),
     );
     expect(result).toMatchObject({ ok: false, code: 'unexpected_response' });
+  });
+});
+
+const REVIEW = {
+  id: '01a17e5e-aa56-7985-be46-bf5f1c7e7fd3',
+  workspaceId: '01a17e5e-aa56-7985-be46-bf5f1c7e7fd0',
+  number: 7,
+  title: 'Fix login',
+  description: null,
+  status: 'open',
+  author: { id: USER.id, displayName: 'Ada' },
+  filesChanged: 2,
+  additions: 3,
+  deletions: 1,
+  createdAt: '2026-10-27T17:18:15.633Z',
+};
+const REVIEWS = `/api/v1/workspaces/${REVIEW.workspaceId}/reviews`;
+const CREATE_INPUT = { title: 'Fix login', description: null, patch: '--- a/x\n+++ b/x\n' };
+
+describe('review calls', () => {
+  it.each([
+    {
+      name: 'createReview',
+      call: (f: typeof fetch) => createReview(REVIEW.workspaceId, CREATE_INPUT, f),
+      method: 'POST',
+      url: REVIEWS,
+      body: CREATE_INPUT,
+      response: [201, REVIEW],
+    },
+    {
+      name: 'updateReview',
+      call: (f: typeof fetch) => updateReview(REVIEW.workspaceId, 7, { status: 'closed' }, f),
+      method: 'PATCH',
+      url: `${REVIEWS}/7`,
+      body: { status: 'closed' },
+      response: [200, { ...REVIEW, status: 'closed' }],
+    },
+    {
+      name: 'deleteReview',
+      call: (f: typeof fetch) => deleteReview(REVIEW.workspaceId, 7, f),
+      method: 'DELETE',
+      url: `${REVIEWS}/7`,
+      body: undefined,
+      response: [204],
+    },
+    {
+      name: 'listReviews',
+      call: (f: typeof fetch) =>
+        listReviews(REVIEW.workspaceId, { status: 'open', mine: true }, 'abc', f),
+      method: 'GET',
+      url: `${REVIEWS}?status=open&author=me&cursor=abc`,
+      body: undefined,
+      response: [200, { items: [REVIEW], nextCursor: null }],
+    },
+  ] as const)('$name sends $method $url', async ({ call, method, url, body, response }) => {
+    const [status, responseBody] = response;
+    const fetchImpl = makeFetch(status, responseBody);
+
+    expect(await call(fetchImpl)).toEqual({ ok: true, data: responseBody });
+    const [calledUrl, init] = fetchImpl.mock.calls[0]!;
+    expect(calledUrl).toBe(url);
+    expect(init?.method).toBe(method);
+    if (body === undefined) expect(init?.body).toBeUndefined();
+    else expect(JSON.parse(init?.body as string)).toEqual(body);
+  });
+
+  it('returns 404 review_not_found as a failure', async () => {
+    const result = await updateReview(
+      REVIEW.workspaceId,
+      7,
+      { title: 'x' },
+      makeFetch(404, errorBody('review_not_found', 'Review not found.')),
+    );
+    expect(result).toEqual({
+      ok: false,
+      status: 404,
+      code: 'review_not_found',
+      message: 'Review not found.',
+      fieldErrors: {},
+    });
+  });
+
+  it('turns a 422 into field errors (and keeps no details)', async () => {
+    const details = [{ field: 'title', message: 'Too small' }];
+    const result = await createReview(
+      REVIEW.workspaceId,
+      CREATE_INPUT,
+      makeFetch(422, errorBody('validation_error', 'The request body is invalid.', details)),
+    );
+    expect(result).toEqual({
+      ok: false,
+      status: 422,
+      code: 'validation_error',
+      message: 'The request body is invalid.',
+      fieldErrors: { title: 'Too small' },
+    });
+  });
+
+  it('keeps the details of a 400 invalid_patch', async () => {
+    const details = { reason: 'count_mismatch', line: 4 };
+    const result = await createReview(
+      REVIEW.workspaceId,
+      CREATE_INPUT,
+      makeFetch(400, errorBody('invalid_patch', 'Bad hunk.', details)),
+    );
+    expect(result).toMatchObject({ ok: false, status: 400, code: 'invalid_patch', details });
+  });
+
+  it('treats a 200 list with the wrong shape as a failure', async () => {
+    const result = await listReviews(
+      REVIEW.workspaceId,
+      { status: null, mine: false },
+      'abc',
+      makeFetch(200, { items: [{ ...REVIEW, status: 'merged' }], nextCursor: null }),
+    );
+    expect(result).toMatchObject({ ok: false, code: 'unexpected_response' });
+  });
+
+  it('encodes the workspace id in the path', async () => {
+    const fetchImpl = makeFetch(204);
+    await deleteReview('../auth', 1, fetchImpl);
+    expect(fetchImpl.mock.calls[0]![0]).toBe('/api/v1/workspaces/..%2Fauth/reviews/1');
   });
 });

@@ -39,6 +39,51 @@ export function FormField({
   );
 }
 
+/** A labelled textarea, with the same hint and error wiring as FormField. */
+export function TextAreaField({
+  id,
+  label,
+  hint,
+  error,
+  className = '',
+  ...textareaProps
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  error?: string;
+} & React.ComponentProps<'textarea'>) {
+  const hintId = hint ? `${id}-hint` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  const describedBy = [errorId, hintId].filter(Boolean).join(' ') || undefined;
+
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-sm font-medium text-slate-300">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        name={id}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={`${inputClass} ${className}`}
+        {...textareaProps}
+      />
+      {error && (
+        <p id={errorId} className="text-xs text-red-400">
+          {error}
+        </p>
+      )}
+      {hint && !error && (
+        <p id={hintId} className="text-xs text-slate-500">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** A labelled select, with the same error wiring as FormField. */
 export function SelectField({
   id,

@@ -30,14 +30,14 @@ More in [docs/architecture.md](docs/architecture.md).
 ## Screenshots
 
 > [!NOTE]
-> So far the UI has the home, sign-up, login, profile and workspace pages (try them in the [live demo](https://diffcraft-three.vercel.app)). The review screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
+> So far the UI has the home, sign-up, login, profile, workspace and review pages (review list, new review, review details with its file list). The diff viewer, comment and AI screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
 
-| Screen                                                             | Status  |
-| ------------------------------------------------------------------ | ------- |
-| _Placeholder:_ Review list with status filters                     | Planned |
-| _Placeholder:_ Side-by-side diff with inline comment thread        | Planned |
-| _Placeholder:_ AI findings panel with severity and line references | Planned |
-| _Placeholder:_ Review approval / change-request panel              | Planned |
+| Screen                                                             | Status                         |
+| ------------------------------------------------------------------ | ------------------------------ |
+| _Placeholder:_ Review list with status filters                     | Implemented, no screenshot yet |
+| _Placeholder:_ Side-by-side diff with inline comment thread        | Planned                        |
+| _Placeholder:_ AI findings panel with severity and line references | Planned                        |
+| _Placeholder:_ Review approval / change-request panel              | Planned                        |
 
 <!-- Example once available:
 ![Diff viewer](docs/images/diff-viewer.png)
@@ -51,15 +51,16 @@ More in [docs/architecture.md](docs/architecture.md).
 
 - Email/password sign-up, login, logout and a profile page.
 - Workspaces with owner, admin, member and viewer roles: create, rename and delete them, and add, re-role and remove members, in the API and the web app. A workspace always keeps at least one owner ([security](docs/security.md#member-management-implemented)).
+- Reviews from a pasted or uploaded unified diff (UTF-8 or UTF-16, up to 1 MiB) with a live parse preview; a review list with status and "only mine" filters; review pages with the changed files; edit, close, reopen and delete for the author or an admin ([API](docs/api.md#reviews)).
 - Server-side sessions in HttpOnly cookies, with Argon2id password hashing and a CSRF Origin check ([security](docs/security.md)).
-- PostgreSQL schema and migrations for users, sessions, workspaces and memberships ([database](docs/database.md)).
+- PostgreSQL schema and migrations for users, sessions, workspaces, memberships, reviews and review files ([database](docs/database.md)).
 - `GET /health` and `GET /ready` probes, and a home page showing API health.
 - CI on every PR, and a live deployment on Vercel, Render and Neon ([deployment](docs/deployment.md)).
 
 **Planned**
 
 - Email invitations for people without an account.
-- Reviews from patch uploads, with unified and side-by-side diff views.
+- Unified and side-by-side diff views, and review revisions.
 - Line-anchored comments, threads, resolution, and approve / request-changes decisions.
 - Real-time updates and presence over Socket.IO ([design](docs/design/realtime.md)).
 - AI analysis in a background worker, producing structured, line-referenced findings ([design](docs/design/ai-analysis.md)).
@@ -141,7 +142,7 @@ pnpm dev                             # web http://localhost:3000, API http://loc
 | 0. Foundation                 | **Implemented** |
 | 1. Database and auth          | **Implemented** |
 | 2. Workspaces and roles       | **In progress** |
-| 3. Reviews and diff ingestion | Planned         |
+| 3. Reviews and diff ingestion | **In progress** |
 | 4. Diff viewer                | Planned         |
 | 5. Comments and threads       | Planned         |
 | 6. Approvals and lifecycle    | Planned         |
