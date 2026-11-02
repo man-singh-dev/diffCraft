@@ -268,6 +268,16 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 
 **Why the hunk counts are trusted:** a hunk's lines are read by the counts in its `@@ -a,b +c,d @@` header, not by guessing from line prefixes. A removed SQL comment (`-- note`) appears in the patch as `--- note`, and an added `++i;` as `+++i;`, which look exactly like file headers. Counting is how `git apply` and `patch` read hunks, so the parser agrees with them; if the lines don't match the counts, the patch is rejected (`count_mismatch`) instead of being guessed at. The regular expressions are anchored with bounded repeats, so parsing time stays linear on hostile input.
 
+### Diff view model
+
+**Implemented** (not rendered yet; the viewer comes later in Stage 4). Pure functions in `packages/shared/src/diff/view/` turn a file's hunks into rows for the web app: `buildUnifiedRows` (one column) and `buildSplitRows` (side by side). Both contain hunk header rows, line rows and gap rows for lines that aren't in the patch (before the first hunk and between hunks; none after the last, since the file length is unknown). Every row has a key that is stable and unique within the file.
+
+**Pairing:** within a hunk, a run of deleted lines directly followed by a run of added lines is a change block; the i-th deletion is paired with the i-th addition, and leftovers stay unpaired. Context lines end a block. In the split view a pair shares one row, and a leftover has an empty cell on the other side.
+
+**Word-level highlighting:** `diffWords` splits paired lines into words, whitespace runs and single other characters, and marks the tokens outside their longest common subsequence as changed. To avoid slow tables and scattered "confetti" highlighting, the whole line is marked changed instead when either line has more than 200 tokens or 1,000 characters, or when under 40% of the characters are in common tokens. Joining the segments always gives back the original text.
+
+**Line anchors:** `lineAnchor(fileId, side, number)` gives `f-<fileId>-L12` (old side) or `f-<fileId>-R12` (new side); deleted lines use the old side and context and added lines the new side. `parseLineAnchor` accepts only a UUID, `L`/`R` and a positive int4, and returns `null` for anything else.
+
 ---
 
 ## Reviews
