@@ -137,18 +137,20 @@ pnpm dev                             # web http://localhost:3000, API http://loc
 
 ## Roadmap
 
-| Stage                         | Status          |
-| ----------------------------- | --------------- |
-| 0. Foundation                 | **Implemented** |
-| 1. Database and auth          | **Implemented** |
-| 2. Workspaces and roles       | **In progress** |
-| 3. Reviews and diff ingestion | **In progress** |
-| 4. Diff viewer                | Planned         |
-| 5. Comments and threads       | Planned         |
-| 6. Approvals and lifecycle    | Planned         |
-| 7. Real-time                  | Planned         |
-| 8. AI analysis                | Planned         |
-| 9. Hardening and deployment   | Planned         |
+| Stage                            | Status          |
+| -------------------------------- | --------------- |
+| 0. Foundation                    | **Implemented** |
+| 1. Database and auth             | **Implemented** |
+| 2. Workspaces and roles          | **In progress** |
+| 3. Reviews and diff ingestion    | **Implemented** |
+| 4. Diff viewer                   | Planned         |
+| 5. Comments and threads          | Planned         |
+| 6. Approvals and lifecycle       | Planned         |
+| 7. Real-time                     | Planned         |
+| 8. AI analysis                   | Planned         |
+| 9. Hardening and deployment      | Planned         |
+| 10. GitHub integration and OAuth | Planned         |
+| 11. Email and search             | Planned         |
 
 Scope of each stage: [docs/roadmap.md](docs/roadmap.md#development-roadmap).
 
@@ -158,7 +160,7 @@ Scope of each stage: [docs/roadmap.md](docs/roadmap.md#development-roadmap).
 
 - **Cold starts.** The API runs on a free Render instance that sleeps after inactivity, so the first request after a quiet period can take about a minute.
 - **No rate limiting yet.** Login and registration are not rate-limited. Rate limiting is planned (Stage 9).
-- **Email enumeration on register.** `POST /api/v1/auth/register` returns `409` when the email is already registered, which reveals whether an account exists. This stays until email verification is added.
+- **Email enumeration on register.** `POST /api/v1/auth/register` returns `409` when the email is already registered, which reveals whether an account exists. This is planned to be fixed with email verification in Stage 11.
 - **No custom domain yet.** The app is served from its default Vercel URL.
 
 ---

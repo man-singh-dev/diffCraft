@@ -124,7 +124,7 @@ flowchart LR
     F -- Approve --> H[Review approved]
 ```
 
-1. An author creates a review in a workspace and submits a diff (initially as a unified diff / patch upload; Git provider integration is a future enhancement).
+1. An author creates a review in a workspace and submits a diff (initially as a unified diff / patch upload; GitHub pull request import is planned for Stage 10).
 2. The author assigns reviewers. Assigned reviewers are notified in real time.
 3. Reviewers navigate the diff and leave line-anchored comments; others reply in threads.
 4. Any participant with permission may request an AI analysis. The request is processed in the background, and findings appear on the relevant lines once ready.
@@ -402,3 +402,5 @@ Notes:
 - Only the worker needs outbound access to the LLM provider and holds its API key.
 - Socket.IO across multiple API instances requires the Redis adapter and either sticky sessions or WebSocket-only transport.
 - Migrations run as a separate release step, not on application start (unlike the current single-instance setup).
+- Transactional email (Stage 11) is sent by a background job on the same queue, not inline in API requests.
+- The GitHub App (Stage 10) calls a webhook endpoint on the API, which verifies the HMAC signature and processes each delivery idempotently.
