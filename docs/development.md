@@ -141,7 +141,7 @@ diffCraft/
 │       └── ci.yml                    # CI: typecheck, lint, format check, test, API and web builds
 ├── apps/
 │   ├── api/                          # Fastify API
-│   │   ├── drizzle/                  # Generated SQL migrations (0000_init … 0002_reviews) and Drizzle metadata
+│   │   ├── drizzle/                  # Generated SQL migrations (0000_init … 0003_comments) and Drizzle metadata
 │   │   ├── scripts/
 │   │   │   └── build.ts              # esbuild bundle of server.ts and migrate.ts into dist/
 │   │   ├── src/
@@ -153,7 +153,7 @@ diffCraft/
 │   │   │   ├── errors.ts             # AppError and ValidationError
 │   │   │   ├── db/
 │   │   │   │   ├── errors.ts         # isUniqueViolation (Postgres error helper)
-│   │   │   │   └── schema/           # Drizzle schema: users, sessions, workspaces, reviews, sql-list.ts
+│   │   │   │   └── schema/           # Drizzle schema: users, sessions, workspaces, reviews, comments, sql-list.ts
 │   │   │   ├── modules/
 │   │   │   │   ├── auth/
 │   │   │   │   │   ├── routes.ts     # POST register/login/logout, GET me under /api/v1/auth
@@ -161,6 +161,10 @@ diffCraft/
 │   │   │   │   │   ├── session.ts    # Session tokens, hashing, cookie options, 7-day expiry
 │   │   │   │   │   ├── password.ts   # Argon2id hash and verify
 │   │   │   │   │   └── require-auth.ts # requireAuth preHandler (401 without a valid session)
+│   │   │   │   ├── comments/
+│   │   │   │   │   ├── service.ts    # Threads and comments: create (anchor checked), list (2 queries), reply,
+│   │   │   │   │   │                 # edit, soft delete, resolve / reopen; all scoped by workspace
+│   │   │   │   │   └── errors.ts     # invalid_anchor
 │   │   │   │   ├── reviews/
 │   │   │   │   │   ├── routes.ts     # /:workspaceId/reviews: create, list, get, edit, delete, files, diff
 │   │   │   │   │   ├── service.ts    # createReview (parse, number, store files), list (keyset), update, delete
@@ -237,6 +241,8 @@ diffCraft/
 │       ├── src/
 │       │   ├── index.ts
 │       │   ├── auth.ts               # Register/login requests, public user, error response
+│       │   ├── comments.ts           # Thread and comment schemas, canComment / canEditComment / canDeleteComment /
+│       │   │                         # canResolveThread
 │       │   ├── diff/                 # parsePatch (unified diff → files/hunks/lines), schemas, fixtures/,
 │       │   │                         # view/ (unified/split rows, word diff, line anchors, mergePieces)
 │       │   ├── health.ts             # HealthResponseSchema

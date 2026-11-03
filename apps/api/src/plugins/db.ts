@@ -3,7 +3,8 @@ import fp from 'fastify-plugin';
 import pg from 'pg';
 import * as schema from '../db/schema/index.js';
 
-export type Database = NodePgDatabase<typeof schema>;
+// What drizzle() returns: `$client` is the pool (tests spy on it to count queries).
+export type Database = NodePgDatabase<typeof schema> & { $client: pg.Pool };
 
 declare module 'fastify' {
   interface FastifyInstance {

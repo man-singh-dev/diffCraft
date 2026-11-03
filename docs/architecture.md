@@ -317,6 +317,20 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 
 ---
 
+## Comments and threads
+
+**Implemented as a data layer** (`apps/api/src/modules/comments/service.ts`); the HTTP routes and the UI come next. A thread is about the review as a whole, or anchored to one line on one side (`old` or `new`) of one file. It holds comments, oldest first, and is `open` or `resolved`. Tables: [database.md](database.md#table-responsibilities).
+
+- **Anchors are checked against the diff:** the file must belong to the review and not be binary, and the line must exist on that side of its hunks (deleted and context lines are on the old side, added and context lines on the new). The line's text is stored with the thread, so it can still be shown if the line changes in a later revision.
+- **One transaction** inserts a thread and its first comment, so a thread never exists without one.
+- **Scoped by workspace:** every query matches the thread or comment through its review _and_ the review's workspace, so an id from another workspace finds nothing.
+- **Two queries per review:** `listThreads` loads the threads, then all their comments with `WHERE thread_id IN (…)`, and groups them in memory, however many threads there are.
+- **Soft delete:** a deleted comment keeps its row and place in the thread, with an empty body.
+- **Idempotent resolution:** setting a thread's status only changes it if it differs, so resolving twice keeps the first resolver and time; reopening clears both.
+- **Permissions** are shared pure functions (`canComment`, `canEditComment`, `canDeleteComment`, `canResolveThread`), so the UI will offer only what the API allows. Admins can delete anyone's comment but edit only their own.
+
+---
+
 ## Review Lifecycle
 
 Review status and comment resolution are **independent**. Resolving every thread does not approve a review, and approving a review does not resolve threads (although a workspace setting could later require all threads to be resolved before approval).
