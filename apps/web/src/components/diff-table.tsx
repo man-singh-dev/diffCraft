@@ -49,12 +49,21 @@ const emptyCell = 'bg-slate-950/70';
 const GROUP_TARGET = 'group-target:bg-yellow-400/20';
 const SELF_TARGET = 'target:bg-yellow-400/20';
 
+/**
+ * Changed words are emphasised only on a real word-level diff (some pieces changed, some not).
+ * A line changed as a whole already has its line background; emphasising every piece adds noise.
+ */
+export function hasWordDiff(pieces: Piece[]): boolean {
+  return pieces.some((p) => p.changed) && pieces.some((p) => !p.changed);
+}
+
 function Pieces({ pieces, type }: { pieces: Piece[]; type: LineType }) {
+  const emphasise = type !== 'context' && hasWordDiff(pieces);
   return pieces.map((piece, i) => (
     <span
       key={i}
       style={piece.color ? { color: piece.color } : undefined}
-      className={piece.changed && type !== 'context' ? `rounded-sm ${CHANGED_BG[type]}` : undefined}
+      className={emphasise && piece.changed ? `rounded-sm ${CHANGED_BG[type]}` : undefined}
     >
       {piece.text}
     </span>
