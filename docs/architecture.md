@@ -270,7 +270,7 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 
 ### Diff view model
 
-**Implemented** (not rendered yet; the viewer comes later in Stage 4). Pure functions in `packages/shared/src/diff/view/` turn a file's hunks into rows for the web app: `buildUnifiedRows` (one column) and `buildSplitRows` (side by side). Both contain hunk header rows, line rows and gap rows for lines that aren't in the patch (before the first hunk and between hunks; none after the last, since the file length is unknown). Every row has a key that is stable and unique within the file.
+**Implemented.** Pure functions in `packages/shared/src/diff/view/` turn a file's hunks into rows for the web app: `buildUnifiedRows` (one column) and `buildSplitRows` (side by side). Both contain hunk header rows, line rows and gap rows for lines that aren't in the patch (before the first hunk and between hunks; none after the last, since the file length is unknown). Every row has a key that is stable and unique within the file.
 
 **Pairing:** within a hunk, a run of deleted lines directly followed by a run of added lines is a change block; the i-th deletion is paired with the i-th addition, and leftovers stay unpaired. Context lines end a block. In the split view a pair shares one row, and a leftover has an empty cell on the other side.
 
@@ -280,13 +280,21 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 
 ### Syntax highlighting
 
-**Implemented** (not rendered yet). Diffs are highlighted on the server with [Shiki](https://shiki.style) in `apps/web/src/lib/highlight.server.ts`, so the browser downloads no grammars. It uses Shiki's JavaScript regex engine (no WASM), so it runs the same locally and on Vercel. One highlighter is created per server process, and grammars load on first use, only from an allow-list of common languages picked by file extension.
+**Implemented.** Diffs are highlighted on the server with [Shiki](https://shiki.style) in `apps/web/src/lib/highlight.server.ts`, so the browser downloads no grammars. It uses Shiki's JavaScript regex engine (no WASM), so it runs the same locally and on Vercel. One highlighter is created per server process, and grammars load on first use, only from an allow-list of common languages picked by file extension.
 
 **Per side, per hunk:** each hunk's old text (context and deleted lines) and new text (context and added lines) are highlighted as two separate code blocks, so a multi-line comment or string is read the way it is on that side. Tokens are then mapped back to old and new line numbers; context lines take theirs from the new side. `mergePieces` (shared) overlays the tokens on the word-diff segments, so each piece has both a color and a changed flag.
 
 **Limits:** files in unknown languages or with more than 5,000 diff lines aren't highlighted, and a line over 1,000 characters is shown plain. If Shiki throws, the error is logged and the diff is shown plain. Highlighting never blocks a diff from rendering.
 
 **No HTML strings:** only Shiki's token API is used (no `codeToHtml`), and the viewer renders pieces as React elements, so there is no `dangerouslySetInnerHTML`.
+
+### Diff viewer
+
+**Implemented.** The "Files changed" page (`/workspaces/[workspaceId]/reviews/[reviewNumber]/files`) shows every file of a review, with a file sidebar and a Unified / Split toggle kept in the URL (`?view=split`).
+
+- **Eager and lazy files:** the first 5 files with at most 400 changed lines are rendered on the server, each in its own `<Suspense>` boundary so they stream in. Larger files, and any after the first 5, show a "Load diff" button. It calls the `loadFileDiff` Server Action, which validates every argument (it is a public endpoint), fetches the diff from the API with the user's session cookie, and returns highlighted rows or a typed error. A failed diff shows an inline error with Retry; the rest of the page keeps working.
+- **One table component:** `DiffTable` has no hooks and no `'use client'`, so server components (eager files) and the client "Load diff" button render the same markup.
+- **Line links:** every line number links to its anchor (`#f-<fileId>-L12` / `-R12`), the row carries that id, and CSS `:target` highlights it. A small client component handles deep links into files that aren't loaded yet: it parses the hash, asks that file to expand and load, waits for the line to appear, then scrolls to it.
 
 ---
 

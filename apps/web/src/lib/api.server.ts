@@ -1,6 +1,7 @@
 import 'server-only';
 
 import {
+  ReviewFileDiffSchema,
   ReviewFileSchema,
   ReviewListResponseSchema,
   ReviewSchema,
@@ -8,6 +9,7 @@ import {
   WorkspaceSchema,
   type Review,
   type ReviewFile,
+  type ReviewFileDiff,
   type ReviewListResponse,
   type Workspace,
   type WorkspaceMember,
@@ -16,7 +18,7 @@ import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { SESSION_COOKIE_NAME } from './auth.server';
 import { env } from './env.server';
-import { isReviewNumber, reviewListQuery, type ReviewFilters } from './review-params';
+import { isReviewNumber, isUuid, reviewListQuery, type ReviewFilters } from './review-params';
 
 /** `status` is the HTTP status, or 0 when there was no usable response (network, timeout, bad body). */
 export type ServerApiResult<T> = { ok: true; data: T } | { ok: false; status: number };
@@ -57,9 +59,6 @@ export async function fetchApi<T>(
   }
 }
 
-// The id comes from the URL. Only a UUID is put in the path: encodeURIComponent leaves "." and
-// "..", which new URL() would resolve into a different API path. The API 404s the rest anyway.
-const isUuid = (id: string) => z.uuid().safeParse(id).success;
 const NOT_FOUND = { ok: false, status: 404 } as const;
 
 export function getWorkspaces(): Promise<ServerApiResult<Workspace[]>> {
@@ -101,5 +100,17 @@ export async function getReviewFiles(
   return apiGet(
     `/api/v1/workspaces/${workspaceId}/reviews/${reviewNumber}/files`,
     ReviewFileSchema.array(),
+  );
+}
+
+export async function getReviewFileDiff(
+  workspaceId: string,
+  reviewNumber: string,
+  fileId: string,
+): Promise<ServerApiResult<ReviewFileDiff>> {
+  if (!isUuid(workspaceId) || !isReviewNumber(reviewNumber) || !isUuid(fileId)) return NOT_FOUND;
+  return apiGet(
+    `/api/v1/workspaces/${workspaceId}/reviews/${reviewNumber}/files/${fileId}/diff`,
+    ReviewFileDiffSchema,
   );
 }

@@ -75,3 +75,18 @@ export async function highlightedSplitRows(
     };
   });
 }
+
+/** A file's rendered rows in one view. */
+export type DiffRows =
+  | { view: 'unified'; rows: HighlightedUnifiedRow[] }
+  | { view: 'split'; rows: HighlightedSplitRow[] };
+
+export async function highlightedRows(
+  path: string,
+  hunks: DiffHunk[],
+  view: 'unified' | 'split',
+): Promise<DiffRows> {
+  return view === 'split'
+    ? { view, rows: await highlightedSplitRows(path, hunks) }
+    : { view, rows: await highlightedUnifiedRows(path, hunks) };
+}

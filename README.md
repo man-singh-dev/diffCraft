@@ -30,7 +30,7 @@ More in [docs/architecture.md](docs/architecture.md).
 ## Screenshots
 
 > [!NOTE]
-> So far the UI has the home, sign-up, login, profile, workspace and review pages (review list, new review, review details with its file list). The diff viewer, comment and AI screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
+> So far the UI has the home, sign-up, login, profile, workspace and review pages (review list, new review, review details with its file list, and the "Files changed" diff viewer). The comment and AI screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
 
 | Screen                                                             | Status                         |
 | ------------------------------------------------------------------ | ------------------------------ |
@@ -52,6 +52,7 @@ More in [docs/architecture.md](docs/architecture.md).
 - Email/password sign-up, login, logout and a profile page.
 - Workspaces with owner, admin, member and viewer roles: create, rename and delete them, and add, re-role and remove members, in the API and the web app. A workspace always keeps at least one owner ([security](docs/security.md#member-management-implemented)).
 - Reviews from a pasted or uploaded unified diff (UTF-8 or UTF-16, up to 1 MiB) with a live parse preview; a review list with status and "only mine" filters; review pages with the changed files; edit, close, reopen and delete for the author or an admin ([API](docs/api.md#reviews)).
+- A "Files changed" diff viewer: unified and side-by-side views, server-side syntax highlighting, word-level changes, linkable line numbers, and large files loaded on demand ([architecture](docs/architecture.md#diff-viewer)).
 - Server-side sessions in HttpOnly cookies, with Argon2id password hashing and a CSRF Origin check ([security](docs/security.md)).
 - PostgreSQL schema and migrations for users, sessions, workspaces, memberships, reviews and review files ([database](docs/database.md)).
 - `GET /health` and `GET /ready` probes, and a home page showing API health.
@@ -143,7 +144,7 @@ pnpm dev                             # web http://localhost:3000, API http://loc
 | 1. Database and auth             | **Implemented** |
 | 2. Workspaces and roles          | **In progress** |
 | 3. Reviews and diff ingestion    | **Implemented** |
-| 4. Diff viewer                   | Planned         |
+| 4. Diff viewer                   | **Implemented** |
 | 5. Comments and threads          | Planned         |
 | 6. Approvals and lifecycle       | Planned         |
 | 7. Real-time                     | Planned         |

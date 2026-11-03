@@ -14,6 +14,7 @@ import {
 } from '@/components/review-ui';
 import { textLink } from '@/components/styles';
 import { getReview, getReviewFiles, getWorkspace } from '@/lib/api.server';
+import { fileSectionId } from '@/lib/diff-params';
 import { getCurrentUser } from '@/lib/auth.server';
 import { ReviewControls } from './review-controls';
 
@@ -46,6 +47,7 @@ export default async function ReviewPage(
   const r = review.data;
   // The API enforces this; the UI only hides what would be refused.
   const editable = canEditReview(workspace.data.role, user.id, r);
+  const filesHref = `/workspaces/${workspaceId}/reviews/${r.number}/files`;
 
   return (
     <PageCard wide title={`#${r.number} ${r.title}`} description={`In ${workspace.data.name}.`}>
@@ -101,32 +103,41 @@ export default async function ReviewPage(
       )}
 
       <section aria-labelledby="files" className="space-y-3">
-        <h2 id="files" className={sectionHeading}>
-          Files ({files.data.length})
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="files" className={sectionHeading}>
+            Files ({files.data.length})
+          </h2>
+          {files.data.length > 0 && (
+            <Link href={filesHref} className={`${textLink} text-sm`}>
+              Files changed ({files.data.length}) →
+            </Link>
+          )}
+        </div>
         {files.data.length === 0 ? (
           <p className="text-sm text-slate-500">This patch changes no files.</p>
         ) : (
           <ul className="divide-y divide-slate-800 rounded-xl border border-slate-800">
             {files.data.map((file) => (
-              <li key={file.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-                <ChangeTypeBadge changeType={file.changeType} />
-                {file.isBinary && (
-                  <span className="rounded-full border border-amber-800 px-2 py-0.5 text-xs text-amber-300">
-                    binary
+              <li key={file.id}>
+                <Link
+                  href={`${filesHref}#${fileSectionId(file.id)}`}
+                  className="flex flex-wrap items-center gap-2 px-4 py-2.5 hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400"
+                >
+                  <ChangeTypeBadge changeType={file.changeType} />
+                  {file.isBinary && (
+                    <span className="rounded-full border border-amber-800 px-2 py-0.5 text-xs text-amber-300">
+                      binary
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 break-all font-mono text-xs text-slate-200">
+                    {filePath(file)}
                   </span>
-                )}
-                <span className="min-w-0 flex-1 break-all font-mono text-xs text-slate-200">
-                  {filePath(file)}
-                </span>
-                <LineCounts additions={file.additions} deletions={file.deletions} />
+                  <LineCounts additions={file.additions} deletions={file.deletions} />
+                </Link>
               </li>
             ))}
           </ul>
         )}
-        <p className="text-xs text-slate-500">
-          The diff viewer for each file comes in a later version.
-        </p>
       </section>
     </PageCard>
   );

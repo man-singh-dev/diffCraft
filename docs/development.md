@@ -204,15 +204,23 @@ diffCraft/
 │   │   │   │               └── reviews/  # page.tsx (list, filters), load-more-reviews.tsx
 │   │   │   │                   ├── new/  # page.tsx, new-review-form.tsx, patch-preview.tsx
 │   │   │   │                   └── [reviewNumber]/ # page.tsx, not-found.tsx, review-controls.tsx
+│   │   │   │                       └── files/ # "Files changed": page.tsx, file-section.tsx, eager-file-diff.tsx,
+│   │   │   │                                  # lazy-file-diff.tsx, hash-target.tsx
 │   │   │   ├── components/           # form-field.tsx, page-card.tsx, styles.ts, nav.tsx, logout-button.tsx,
-│   │   │   │                         # role-badge.tsx, review-ui.tsx (status/change badges, review row)
+│   │   │   │                         # role-badge.tsx, review-ui.tsx (status/change badges, review row),
+│   │   │   │                         # diff-table.tsx (unified / split diff table)
 │   │   │   └── lib/
 │   │   │       ├── api-client.ts     # Browser calls to the API via relative /api URLs
 │   │   │       ├── api-errors.ts     # API error codes → friendly messages
 │   │   │       ├── review-errors.ts  # Review and patch-parse errors → friendly messages
-│   │   │       ├── review-params.ts  # Review number guard, list filters from the URL
+│   │   │       ├── review-params.ts  # UUID and review number guards, list filters from the URL
+│   │   │       ├── diff-params.ts    # Diff view param, eager files, hash → target file
+│   │   │       ├── diff-actions.ts   # loadFileDiff Server Action ("Load diff")
+│   │   │       ├── diff-view.server.ts # Highlighted unified / split rows
+│   │   │       ├── highlight.server.ts # Shiki highlighter (JS regex engine, language allow-list)
+│   │   │       ├── reveal-file.ts    # Window event that expands and loads a file (deep links)
 │   │   │       ├── decode-patch-file.ts # Patch file bytes → text (UTF-8 / UTF-16 by BOM, 1 MiB limit)
-│   │   │       ├── api.server.ts     # Server-side GETs with the session cookie (workspaces, members, reviews)
+│   │   │       ├── api.server.ts     # Server-side GETs with the session cookie (workspaces, members, reviews, file diffs)
 │   │   │       ├── api-health.ts     # Fetches and validates GET /health
 │   │   │       ├── auth.server.ts    # Server-side current-user lookup
 │   │   │       ├── form-errors.ts    # Client-side form validation; API errors → field messages
@@ -229,7 +237,8 @@ diffCraft/
 │       ├── src/
 │       │   ├── index.ts
 │       │   ├── auth.ts               # Register/login requests, public user, error response
-│       │   ├── diff/                 # parsePatch (unified diff → files/hunks/lines), schemas, fixtures/
+│       │   ├── diff/                 # parsePatch (unified diff → files/hunks/lines), schemas, fixtures/,
+│       │   │                         # view/ (unified/split rows, word diff, line anchors, mergePieces)
 │       │   ├── health.ts             # HealthResponseSchema
 │       │   ├── ready.ts              # Readiness response
 │       │   ├── reviews.ts            # Review schemas (create, update, list query/response), canEditReview
@@ -289,7 +298,7 @@ All tests use Vitest, sit next to the file they test (`*.test.ts`), and run with
 | Unit              | API config validation, logger, password hashing, error handler, CSRF Origin check.                                                                                                                                                                                                                           |
 | API integration   | Auth routes, sessions and the auth service, `/health`, `/ready`, the unique email index, and the workspaces service and its constraints (slug retry, transaction atomicity, composite key, role `CHECK`, `CASCADE` / `SET NULL`), exercised with Fastify's `inject` against a real PostgreSQL test database. |
 | Schema / contract | Shared Zod schemas in `packages/shared` (health, readiness, auth requests and responses, the Zod error formatter).                                                                                                                                                                                           |
-| Web helpers       | `apps/web/src/lib`: the API client, API health fetch, server-side current-user lookup and form error mapping.                                                                                                                                                                                                |
+| Web helpers       | `apps/web/src/lib`: the API client, API health fetch, server-side current-user lookup, form error mapping, syntax highlighting, diff view params and the `loadFileDiff` Server Action's validation; `DiffTable` rendered to static markup.                                                                   |
 | CI                | GitHub Actions runs typecheck, lint, format check, the full test suite against a PostgreSQL 18 service container, and the API and web builds on every PR and push to `main`.                                                                                                                                 |
 
 ### Planned

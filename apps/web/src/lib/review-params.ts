@@ -1,8 +1,14 @@
 import type { ReviewStatus } from '@diffcraft/shared';
+import { z } from 'zod';
 
 // Same rule as the API: a positive int4, written without leading zeros.
 const REVIEW_NUMBER_PATTERN = /^[1-9]\d{0,9}$/;
 const MAX_REVIEW_NUMBER = 2_147_483_647;
+
+// Only a UUID is ever put in an API path: encodeURIComponent leaves "." and "..", which new URL()
+// would resolve into a different API path. The API 404s the rest anyway.
+/** Whether a URL segment (or Server Action argument) is a UUID. */
+export const isUuid = (id: string): boolean => z.uuid().safeParse(id).success;
 
 /** Whether a URL segment can be a review number; anything else is a 404 without an API call. */
 export function isReviewNumber(value: string): boolean {
