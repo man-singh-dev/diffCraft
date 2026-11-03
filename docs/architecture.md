@@ -278,6 +278,16 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 
 **Line anchors:** `lineAnchor(fileId, side, number)` gives `f-<fileId>-L12` (old side) or `f-<fileId>-R12` (new side); deleted lines use the old side and context and added lines the new side. `parseLineAnchor` accepts only a UUID, `L`/`R` and a positive int4, and returns `null` for anything else.
 
+### Syntax highlighting
+
+**Implemented** (not rendered yet). Diffs are highlighted on the server with [Shiki](https://shiki.style) in `apps/web/src/lib/highlight.server.ts`, so the browser downloads no grammars. It uses Shiki's JavaScript regex engine (no WASM), so it runs the same locally and on Vercel. One highlighter is created per server process, and grammars load on first use, only from an allow-list of common languages picked by file extension.
+
+**Per side, per hunk:** each hunk's old text (context and deleted lines) and new text (context and added lines) are highlighted as two separate code blocks, so a multi-line comment or string is read the way it is on that side. Tokens are then mapped back to old and new line numbers; context lines take theirs from the new side. `mergePieces` (shared) overlays the tokens on the word-diff segments, so each piece has both a color and a changed flag.
+
+**Limits:** files in unknown languages or with more than 5,000 diff lines aren't highlighted, and a line over 1,000 characters is shown plain. If Shiki throws, the error is logged and the diff is shown plain. Highlighting never blocks a diff from rendering.
+
+**No HTML strings:** only Shiki's token API is used (no `codeToHtml`), and the viewer renders pieces as React elements, so there is no `dangerouslySetInnerHTML`.
+
 ---
 
 ## Reviews
