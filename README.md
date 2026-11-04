@@ -145,7 +145,7 @@ pnpm dev                             # web http://localhost:3000, API http://loc
 | 2. Workspaces and roles          | **In progress** |
 | 3. Reviews and diff ingestion    | **Implemented** |
 | 4. Diff viewer                   | **Implemented** |
-| 5. Comments and threads          | Planned         |
+| 5. Comments and threads          | **In progress** |
 | 6. Approvals and lifecycle       | Planned         |
 | 7. Real-time                     | Planned         |
 | 8. AI analysis                   | Planned         |

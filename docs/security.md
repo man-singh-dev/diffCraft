@@ -45,7 +45,7 @@ Roles are ranked **viewer < member < admin < owner**. `hasAtLeastRole(role, mini
 - Editing, closing, reopening or deleting a review is allowed for its **author** (if they are still a member or above) and for any **admin or owner**. A viewer, or a member acting on someone else's review, gets `403`. The rule is one pure function, `canEditReview` in `packages/shared`, used by the API and (for hiding buttons) the web UI.
 - Only **assigned reviewers** can submit approval decisions; an **author** cannot approve their own review.
 - Only the **author** can submit new revisions.
-- Comment edits are limited to the comment's author.
+- Comment rules are **Implemented**; see [Comments](#comments-implemented).
 
 ### Enforcement
 
@@ -84,8 +84,25 @@ Code: `apps/api/src/modules/workspaces/member-service.ts`. The rules live in the
 
 **Planned:**
 
-- Every future protected route (comments, findings) resolves the target resource **with its workspace** and checks membership before any other logic, never trusting a `workspaceId` supplied by the client alone.
+- Every future protected route (findings) resolves the target resource **with its workspace** and checks membership before any other logic, never trusting a `workspaceId` supplied by the client alone.
 - Socket.IO connections authenticate at handshake using the same session; joining a review room re-checks membership. Membership changes cause the server to remove sockets from rooms.
+
+### Comments (Implemented)
+
+Code: `apps/api/src/modules/comments/routes.ts`. The rules are pure functions in `packages/shared/src/comments.ts`, so the web UI can offer only what the API allows.
+
+| Action                     | Rule                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Read threads               | Any member (viewer and up).                                                                                                                                               |
+| Start a thread, reply      | `canComment`: member and up.                                                                                                                                              |
+| Edit a comment             | `canEditComment`: only its author, and not once deleted. Admins and owners **can't** edit other people's comments, so nobody can put words in someone else's name.        |
+| Delete a comment           | `canDeleteComment`: its author (if still a member or above) or any admin or owner, unless already deleted. Deleting is a soft delete: the row stays, the body is emptied. |
+| Resolve or reopen a thread | `canResolveThread`: a member or above who started the thread or wrote the review, or any admin or owner.                                                                  |
+
+- **Nesting is checked, not assumed:** a thread must belong to the review in the URL, and a comment to the thread in the URL (not just the same review), else `404`. Every query matches through the review _and_ its workspace, so ids from another review or workspace find nothing, even for a user who belongs to both (tested).
+- **Order of checks:** review → thread → comment → permission → body. A caller learns nothing about threads or comments they can't reach, and a forbidden request is `403` whatever its body.
+- **A demoted author** (now a viewer) can still edit their own comment, but can no longer delete it or comment again.
+- **Closed reviews** still accept comments: closing a review ends the review, not the discussion.
 
 ---
 

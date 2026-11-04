@@ -9,7 +9,7 @@ The database design: implemented and proposed tables, constraints, indexes, tran
 ## Database Design
 
 > [!NOTE]
-> **Implemented:** the `users`, `sessions`, `workspaces`, `workspace_members`, `reviews`, `review_files`, `comment_threads` and `comments` tables (Drizzle schema in `apps/api/src/db/schema`, migrations in `apps/api/drizzle`). The workspace tables are served by `/api/v1/workspaces` (see [api.md](api.md#workspaces-and-membership)). The review tables are served by the review routes (see [api.md](api.md#reviews)). The comment tables have a service but no routes yet (see [architecture.md](architecture.md#comments-and-threads)). Every other table below is a **proposal**. It will change during implementation and will not be considered final until it exists as Drizzle schema and migrations.
+> **Implemented:** the `users`, `sessions`, `workspaces`, `workspace_members`, `reviews`, `review_files`, `comment_threads` and `comments` tables (Drizzle schema in `apps/api/src/db/schema`, migrations in `apps/api/drizzle`). The workspace tables are served by `/api/v1/workspaces` (see [api.md](api.md#workspaces-and-membership)). The review tables are served by the review routes (see [api.md](api.md#reviews)). The comment tables are served by the thread routes (see [api.md](api.md#comment-threads)). Every other table below is a **proposal**. It will change during implementation and will not be considered final until it exists as Drizzle schema and migrations.
 
 ### Entity-relationship diagram (`users`, `sessions`, `workspaces`, `workspace_members`, `reviews`, `review_files`, `comment_threads` and `comments` implemented; the rest proposed)
 

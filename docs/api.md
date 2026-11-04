@@ -117,22 +117,50 @@ Errors on the review routes (in addition to the workspace errors above):
 
 `invalid_patch` reasons: `empty_patch`, `too_large`, `too_many_files`, `too_many_lines`, `line_too_long`, `not_a_patch`, `malformed_header`, `malformed_hunk`, `count_mismatch`, and `unsupported_encoding` (the text contains NUL characters, usually a UTF-16 or binary file: save it as UTF-8. Postgres `text` can't store NUL, so such input never reaches the database).
 
-### Comments and replies
+### Comment threads
 
-| Method   | Path                                  | Purpose                                                     | Auth                    |
-| -------- | ------------------------------------- | ----------------------------------------------------------- | ----------------------- |
-| `GET`    | `/api/v1/reviews/:reviewId/comments`  | List threads (filters: `fileId`, `unresolved`, `revision`). | Member                  |
-| `POST`   | `/api/v1/reviews/:reviewId/comments`  | Start a thread on a file/line range or the review.          | Member (not viewer)     |
-| `POST`   | `/api/v1/comments/:commentId/replies` | Reply to a thread.                                          | Member (not viewer)     |
-| `PATCH`  | `/api/v1/comments/:commentId`         | Edit own comment.                                           | Comment author          |
-| `DELETE` | `/api/v1/comments/:commentId`         | Soft-delete a comment.                                      | Comment author or Admin |
+A thread is about the review as a whole, or anchored to one line on one side of one file. It holds comments, oldest first, and is `open` or `resolved`. The routes are nested under the review, so the auth, workspace and review checks run first. Comments are allowed on closed reviews. `T` below stands for `/api/v1/workspaces/:workspaceId/reviews/:reviewNumber/threads`.
 
-### Comment resolution
+| Method   | Path                              | Purpose                                                                                                | Auth                                                      | Status          |
+| -------- | --------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | --------------- |
+| `GET`    | `T`                               | All threads of the review with their comments. `200 Thread[]`.                                         | Member (viewer and up)                                    | **Implemented** |
+| `POST`   | `T`                               | Start a thread with its first comment. Body `{ body, anchor?: { fileId, side, line } }`. `201 Thread`. | Member (not viewer)                                       | **Implemented** |
+| `PATCH`  | `T/:threadId`                     | Resolve or reopen. Body `{ status: "open" \| "resolved" }`. Idempotent. `200 Thread`.                  | Thread creator or review author (member and up), or Admin | **Implemented** |
+| `POST`   | `T/:threadId/comments`            | Reply. Body `{ body }`. `201 Comment`.                                                                 | Member (not viewer)                                       | **Implemented** |
+| `PATCH`  | `T/:threadId/comments/:commentId` | Edit a comment. Body `{ body }`. `200 Comment` with `edited: true`.                                    | Comment author only (admins can't edit others' comments)  | **Implemented** |
+| `DELETE` | `T/:threadId/comments/:commentId` | Soft-delete a comment: it stays in the thread with an empty body. `200 Comment` with `deleted: true`.  | Comment author (member and up) or Admin                   | **Implemented** |
 
-| Method | Path                                    | Purpose                                           | Auth                         |
-| ------ | --------------------------------------- | ------------------------------------------------- | ---------------------------- |
-| `POST` | `/api/v1/comments/:commentId/resolve`   | Resolve a thread (root comment only; idempotent). | Participant or thread author |
-| `POST` | `/api/v1/comments/:commentId/unresolve` | Reopen a resolved thread.                         | Participant or thread author |
+`Thread` is `{ id, reviewId, anchor, status, resolvedBy, resolvedAt, createdBy, createdAt, comments }`; `anchor` is `{ fileId, side, line, lineContent }` or `null` for a review-level thread, and `lineContent` is the line's text when the thread was started. `Comment` is `{ id, threadId, author, body, createdAt, edited, deleted }`. Users are `{ id, displayName }`, or `null` once the account is deleted (`ThreadSchema` and `CommentSchema` in `packages/shared`).
+
+**Anchors:** `side` is `old` (deleted and context lines, by their old line number) or `new` (added and context lines, by their new line number); `line` is a positive integer. The file must be in this review and not binary, and the line must exist on that side of its hunks.
+
+**Bodies:** trimmed, 1–10,000 characters, no NUL.
+
+**Order of checks** (each stops at the first failure):
+
+1. The workspace guard: `401` without a session, `404 workspace_not_found` for a non-member, `403 forbidden` below the route's minimum role (member for `POST` and for `PATCH T/:threadId`).
+2. The review: `404 review_not_found`.
+3. The thread: `:threadId` is a UUID and the thread is in _this_ review, else `404 thread_not_found`.
+4. The comment: `:commentId` is a UUID, the comment is in _that_ thread (not just the same review) and not deleted, else `404 comment_not_found`.
+5. The permission rule (`canEditComment`, `canDeleteComment`, `canResolveThread`): `403 forbidden`.
+6. The body: `422 validation_error` (or `422 invalid_anchor` / `404 review_file_not_found` for an anchor).
+
+So a request for a thread or comment the caller can't reach fails the same way whatever its body, and a forbidden request is `403` even with an invalid body.
+
+**Deleted comments:** editing or deleting a deleted comment is `404 comment_not_found`, for everyone including its author: once deleted, a comment can't be changed. It still appears in `GET T`, with `deleted: true` and an empty body.
+
+**Resolving is idempotent:** setting the status a thread already has returns `200` and changes nothing, so resolving twice keeps the first `resolvedBy` and `resolvedAt`. Reopening clears both.
+
+Errors on the thread routes (in addition to the workspace and review errors above):
+
+| Status | Code                    | When                                                                                                                  |
+| ------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `404`  | `thread_not_found`      | `:threadId` is not a UUID, or not a thread of this review.                                                            |
+| `404`  | `comment_not_found`     | `:commentId` is not a UUID, not a comment of this thread, or already deleted.                                         |
+| `404`  | `review_file_not_found` | The anchor's `fileId` is not a file of this review.                                                                   |
+| `403`  | `forbidden`             | Below the route's minimum role, or the permission rule refuses (see [security.md](security.md#comments-implemented)). |
+| `422`  | `invalid_anchor`        | The anchor's file is binary, or the line isn't on that side of its diff.                                              |
+| `422`  | `validation_error`      | Invalid body: empty, too long or NUL in `body`; malformed anchor; unknown `status`.                                   |
 
 ### Review approvals
 

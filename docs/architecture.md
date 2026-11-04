@@ -319,7 +319,7 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 
 ## Comments and threads
 
-**Implemented as a data layer** (`apps/api/src/modules/comments/service.ts`); the HTTP routes and the UI come next. A thread is about the review as a whole, or anchored to one line on one side (`old` or `new`) of one file. It holds comments, oldest first, and is `open` or `resolved`. Tables: [database.md](database.md#table-responsibilities).
+**Implemented in the API** (`apps/api/src/modules/comments/`: service and routes, see [api.md](api.md#comment-threads)); the UI comes next. A thread is about the review as a whole, or anchored to one line on one side (`old` or `new`) of one file. It holds comments, oldest first, and is `open` or `resolved`. Tables: [database.md](database.md#table-responsibilities).
 
 - **Anchors are checked against the diff:** the file must belong to the review and not be binary, and the line must exist on that side of its hunks (deleted and context lines are on the old side, added and context lines on the new). The line's text is stored with the thread, so it can still be shown if the line changes in a later revision.
 - **One transaction** inserts a thread and its first comment, so a thread never exists without one.

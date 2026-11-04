@@ -17,6 +17,7 @@ import {
   requireWorkspaceRole,
   UUID_PATTERN,
 } from '../workspaces/require-workspace-role.js';
+import { commentRoutes } from '../comments/routes.js';
 import { decodeCursor } from './cursor.js';
 import {
   InvalidCursorError,
@@ -24,10 +25,10 @@ import {
   ReviewFileNotFoundError,
   ReviewNotFoundError,
 } from './errors.js';
+import { loadReview, reviewNumberParam } from './load-review.js';
 import {
   createReview,
   deleteReview,
-  getReviewByNumber,
   getReviewFileDiff,
   listReviewFiles,
   listReviews,
@@ -42,32 +43,6 @@ import {
  * the global default.
  */
 export const CREATE_REVIEW_BODY_LIMIT = 3 * 1024 * 1024;
-
-const MAX_INT4 = 2_147_483_647;
-const REVIEW_NUMBER_PATTERN = /^[1-9]\d{0,9}$/;
-
-/**
- * :reviewNumber from the URL. Anything but a positive int4 is a 404 before any query: Postgres
- * would reject a larger number with an error instead of finding nothing.
- */
-function reviewNumberParam(request: FastifyRequest): number {
-  const { reviewNumber } = request.params as { reviewNumber?: string };
-  const number =
-    reviewNumber && REVIEW_NUMBER_PATTERN.test(reviewNumber) ? Number(reviewNumber) : 0;
-  if (number < 1 || number > MAX_INT4) throw new ReviewNotFoundError();
-  return number;
-}
-
-/** The review named in the URL, looked up in the URL's workspace (already checked by the guard). */
-async function loadReview(app: FastifyInstance, request: FastifyRequest): Promise<Review> {
-  const review = await getReviewByNumber(
-    app.db,
-    requestWorkspace(request).id,
-    reviewNumberParam(request),
-  );
-  if (!review) throw new ReviewNotFoundError();
-  return review;
-}
 
 /** For PATCH and DELETE: the author (member and up) or an admin. */
 async function loadEditableReview(app: FastifyInstance, request: FastifyRequest): Promise<Review> {
@@ -140,6 +115,9 @@ const singleReviewRoutes: FastifyPluginAsync = async (app) => {
       return diff;
     },
   );
+
+  // Threads and comments on this review; the hook above has already checked :reviewNumber.
+  await app.register(commentRoutes, { prefix: '/threads' });
 };
 
 /** Registered under /:workspaceId/reviews inside workspaceRoutes, so requireAuth runs first. */
