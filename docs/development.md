@@ -212,7 +212,10 @@ diffCraft/
 │   │   │   │                                  # lazy-file-diff.tsx, hash-target.tsx
 │   │   │   ├── components/           # form-field.tsx, page-card.tsx, styles.ts, nav.tsx, logout-button.tsx,
 │   │   │   │                         # role-badge.tsx, review-ui.tsx (status/change badges, review row),
-│   │   │   │                         # diff-table.tsx (unified / split diff table)
+│   │   │   │                         # diff-table.tsx (unified / split diff table), comments-provider.tsx
+│   │   │   │                         # (threads state + actions), comment-thread.tsx, comment-item.tsx,
+│   │   │   │                         # comment-composer.tsx, line-comments.tsx (islands in the diff),
+│   │   │   │                         # review-conversation.tsx (review page)
 │   │   │   └── lib/
 │   │   │       ├── api-client.ts     # Browser calls to the API via relative /api URLs
 │   │   │       ├── api-errors.ts     # API error codes → friendly messages
@@ -220,11 +223,15 @@ diffCraft/
 │   │   │       ├── review-params.ts  # UUID and review number guards, list filters from the URL
 │   │   │       ├── diff-params.ts    # Diff view param, eager files, hash → target file
 │   │   │       ├── diff-actions.ts   # loadFileDiff Server Action ("Load diff")
+│   │   │       ├── comment-actions.ts # Comment Server Actions (create, reply, edit, delete, resolve)
+│   │   │       ├── comment-errors.ts # API failures → typed comment errors with messages
+│   │   │       ├── thread-anchors.ts # Thread keys; which threads a unified row or split cell shows
 │   │   │       ├── diff-view.server.ts # Highlighted unified / split rows
 │   │   │       ├── highlight.server.ts # Shiki highlighter (JS regex engine, language allow-list)
 │   │   │       ├── reveal-file.ts    # Window event that expands and loads a file (deep links)
 │   │   │       ├── decode-patch-file.ts # Patch file bytes → text (UTF-8 / UTF-16 by BOM, 1 MiB limit)
-│   │   │       ├── api.server.ts     # Server-side GETs with the session cookie (workspaces, members, reviews, file diffs)
+│   │   │       ├── api.server.ts     # Server-side GETs with the session cookie (workspaces, members, reviews, file diffs, threads)
+│   │   │       │                     # and apiSend for the comment mutations
 │   │   │       ├── api-health.ts     # Fetches and validates GET /health
 │   │   │       ├── auth.server.ts    # Server-side current-user lookup
 │   │   │       ├── form-errors.ts    # Client-side form validation; API errors → field messages

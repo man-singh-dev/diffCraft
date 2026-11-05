@@ -43,23 +43,27 @@ describe('DiffTable (unified)', () => {
     const html = await render('unified');
     expect(ids(html)).toEqual([
       `f-${FILE}-R3`,
+      `f-${FILE}-L3`, // a context row's old number also has an id
       `f-${FILE}-L4`,
       `f-${FILE}-R4`,
       `f-${FILE}-R5`,
       `f-${FILE}-R6`,
+      `f-${FILE}-L5`,
       `f-${FILE}-L20`,
       `f-${FILE}-R21`,
     ]);
-    // A context line shows both numbers, both linking to its new-side anchor.
-    expect(hrefs(html).filter((h) => h === `#f-${FILE}-R3`)).toHaveLength(2);
+    // A context line shows both numbers: the row is its new-side anchor, the old number its old one.
+    expect(html).toMatch(new RegExp(`<tr id="f-${FILE}-R3"`));
+    expect(html).toMatch(new RegExp(`id="f-${FILE}-L3" href="#f-${FILE}-L3"[^>]*>3</a>`));
+    expect(html).toMatch(new RegExp(`href="#f-${FILE}-R3"[^>]*>3</a>`));
     expect(html).toMatch(new RegExp(`href="#f-${FILE}-L4"[^>]*>4</a>`));
     expect(html).toMatch(new RegExp(`href="#f-${FILE}-R21"[^>]*>21</a>`));
   });
 
   it('shows +/− markers with screen-reader labels', async () => {
     const html = await render('unified');
-    expect(html.match(/>\+<\/td>/g)).toHaveLength(3);
-    expect(html.match(/>−<\/td>/g)).toHaveLength(2);
+    expect(html.match(/<span aria-hidden="true">\+<\/span>/g)).toHaveLength(3);
+    expect(html.match(/<span aria-hidden="true">−<\/span>/g)).toHaveLength(2);
     expect(html.match(/added line: /g)).toHaveLength(3);
     expect(html.match(/removed line: /g)).toHaveLength(2);
   });
@@ -106,7 +110,7 @@ describe('DiffTable (split)', () => {
 
   it('a leftover added line has an empty left half', async () => {
     const html = await render('split');
-    const row = html.split('<tr>').find((tr) => tr.includes(`id="f-${FILE}-R5"`))!;
+    const row = html.split('<tr').find((tr) => tr.includes(`id="f-${FILE}-R5"`))!;
     // Three empty, darker cells before the right half.
     expect(row.match(/<td class="[^"]*bg-slate-950\/70[^"]*"><\/td>/g)).toHaveLength(3);
     expect(row).toContain('added line: ');

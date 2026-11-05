@@ -11,9 +11,13 @@ import type {
   HighlightedSplitLineRow,
   HighlightedUnifiedLineRow,
 } from '@/lib/diff-view.server';
+import { threadKey, unifiedRowKeys, unifiedRowTarget } from '@/lib/thread-anchors';
+import { AddCommentButton, SplitThreadsRow, UnifiedThreadsRow } from './line-comments';
 
 // Presentational only (no hooks, no 'use client'), so server pages and the client "Load diff"
-// button can both render it. Pieces are rendered as text, which React escapes.
+// button can both render it. Pieces are rendered as text, which React escapes. The comment
+// controls are small client islands (line-comments.tsx) that render nothing outside a
+// CommentsProvider.
 
 type LineType = HighlightedUnifiedLineRow['type'];
 
@@ -42,7 +46,8 @@ const SR_LABEL: Record<LineType, string | null> = {
 const numberCell =
   'w-[1%] min-w-12 select-none whitespace-nowrap px-2 text-right align-top font-mono text-xs leading-5 text-slate-500';
 const numberLink = 'hover:text-slate-200 focus-visible:outline-none focus-visible:underline';
-const markerCell = 'w-4 select-none px-1 text-center align-top font-mono text-xs leading-5';
+const markerCell =
+  'relative w-5 select-none px-1 text-center align-top font-mono text-xs leading-5';
 const codeCell = 'h-5 whitespace-pre pr-4 align-top font-mono text-xs leading-5 [tab-size:4]';
 const emptyCell = 'bg-slate-950/70';
 // :target highlight of a linked line. Written out in full so Tailwind sees each class.
@@ -95,12 +100,16 @@ function Code({
   );
 }
 
-function NumberLink({ anchor, number }: { anchor: string; number: number }) {
+function NumberLink({ anchor, number, id }: { anchor: string; number: number; id?: string }) {
   return (
-    <a href={`#${anchor}`} className={numberLink}>
+    <a id={id} href={`#${anchor}`} className={id ? `${numberLink} scroll-mt-14` : numberLink}>
       {number}
     </a>
   );
+}
+
+function Marker({ type }: { type: LineType }) {
+  return <span aria-hidden="true">{MARKER[type]}</span>;
 }
 
 function HunkHeader({ row, colSpan }: { row: HunkRow; colSpan: number }) {
@@ -131,22 +140,38 @@ function Gap({ row, colSpan }: { row: GapRow; colSpan: number }) {
 
 function UnifiedLine({ fileId, row }: { fileId: string; row: HighlightedUnifiedLineRow }) {
   const anchor = anchorForLine(fileId, row);
+  const target = unifiedRowTarget(fileId, row);
   const numberClass = `${numberCell} ${NUMBER_BG[row.type]} ${GROUP_TARGET}`;
+  // A context line's anchor is its new side; its old number also gets an id, so a link to the old
+  // side (e.g. a thread started there in the split view) finds the row. has-[:target] lights it up.
+  const oldId =
+    row.type === 'context' && row.oldNumber !== null
+      ? lineAnchor(fileId, 'old', row.oldNumber)
+      : undefined;
   return (
-    <tr id={anchor} className={`group scroll-mt-14 ${LINE_BG[row.type]}`}>
-      <td className={numberClass}>
-        {row.oldNumber !== null && <NumberLink anchor={anchor} number={row.oldNumber} />}
-      </td>
-      <td className={numberClass}>
-        {row.newNumber !== null && <NumberLink anchor={anchor} number={row.newNumber} />}
-      </td>
-      <td aria-hidden="true" className={`${markerCell} ${GROUP_TARGET}`}>
-        {MARKER[row.type]}
-      </td>
-      <td className={`${codeCell} ${GROUP_TARGET}`}>
-        <Code type={row.type} pieces={row.pieces} noNewlineAtEnd={row.noNewlineAtEnd} />
-      </td>
-    </tr>
+    <>
+      <tr
+        id={anchor}
+        className={`group scroll-mt-14 ${LINE_BG[row.type]} has-[:target]:bg-yellow-400/20`}
+      >
+        <td className={numberClass}>
+          {row.oldNumber !== null && (
+            <NumberLink anchor={oldId ?? anchor} number={row.oldNumber} id={oldId} />
+          )}
+        </td>
+        <td className={numberClass}>
+          {row.newNumber !== null && <NumberLink anchor={anchor} number={row.newNumber} />}
+        </td>
+        <td className={`${markerCell} ${GROUP_TARGET}`}>
+          <Marker type={row.type} />
+          {target && <AddCommentButton target={target} className="group-hover:opacity-100" />}
+        </td>
+        <td className={`${codeCell} ${GROUP_TARGET}`}>
+          <Code type={row.type} pieces={row.pieces} noNewlineAtEnd={row.noNewlineAtEnd} />
+        </td>
+      </tr>
+      <UnifiedThreadsRow keys={unifiedRowKeys(fileId, row)} target={target} colSpan={4} />
+    </>
   );
 }
 
@@ -186,8 +211,12 @@ function SplitHalf({
       >
         <NumberLink anchor={anchor} number={cell.number} />
       </td>
-      <td aria-hidden="true" className={`${markerCell} ${bg} ${half.follow}`}>
-        {MARKER[cell.type]}
+      <td className={`${markerCell} ${bg} ${half.follow}`}>
+        <Marker type={cell.type} />
+        <AddCommentButton
+          target={{ fileId, side, line: cell.number }}
+          className="group-hover:opacity-100"
+        />
       </td>
       <td className={`${codeCell} w-1/2 ${bg} ${half.follow}`}>
         <Code type={cell.type} pieces={cell.pieces} noNewlineAtEnd={cell.noNewlineAtEnd} />
@@ -196,12 +225,25 @@ function SplitHalf({
   );
 }
 
+const splitSide = (fileId: string, side: 'old' | 'new', cell: HighlightedSplitCell | null) =>
+  cell && {
+    keys: [threadKey(fileId, side, cell.number)],
+    target: { fileId, side, line: cell.number },
+  };
+
 function SplitLine({ fileId, row }: { fileId: string; row: HighlightedSplitLineRow }) {
   return (
-    <tr>
-      <SplitHalf fileId={fileId} cell={row.left} side="old" />
-      <SplitHalf fileId={fileId} cell={row.right} side="new" />
-    </tr>
+    <>
+      <tr className="group">
+        <SplitHalf fileId={fileId} cell={row.left} side="old" />
+        <SplitHalf fileId={fileId} cell={row.right} side="new" />
+      </tr>
+      <SplitThreadsRow
+        left={splitSide(fileId, 'old', row.left)}
+        right={splitSide(fileId, 'new', row.right)}
+        halfSpan={3}
+      />
+    </>
   );
 }
 

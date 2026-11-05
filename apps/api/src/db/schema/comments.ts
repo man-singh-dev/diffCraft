@@ -14,9 +14,7 @@ export const commentThreads = pgTable(
     reviewId: uuid('review_id')
       .notNull()
       .references(() => reviews.id, { onDelete: 'cascade' }),
-    // The anchor: a line on one side of one file. All four columns are NULL for a review-level
-    // thread, and all four are set for a line thread (comment_threads_anchor_check), so a
-    // half-written anchor can't exist.
+
     fileId: uuid('file_id').references(() => reviewFiles.id, { onDelete: 'cascade' }),
     side: text('side', { enum: LINE_SIDES }),
     line: integer('line'),
