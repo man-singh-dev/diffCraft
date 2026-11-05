@@ -1,7 +1,9 @@
 import {
+  buildSuggestionPatch,
   canDeleteComment,
   canEditComment,
   canResolveThread,
+  commentSuggestion,
   CreateThreadRequestSchema,
   EditCommentRequestSchema,
   ReplyRequestSchema,
@@ -15,12 +17,18 @@ import type { z } from 'zod';
 import { ForbiddenError, ValidationError } from '../../errors.js';
 import { authUser } from '../auth/require-auth.js';
 import { loadReview } from '../reviews/load-review.js';
+import { getReviewFileDiff } from '../reviews/service.js';
 import {
   requestWorkspace,
   requireWorkspaceRole,
   UUID_PATTERN,
 } from '../workspaces/require-workspace-role.js';
-import { CommentNotFoundError, ThreadNotFoundError } from './errors.js';
+import {
+  CommentNotFoundError,
+  SuggestionNotApplicableError,
+  SuggestionNotFoundError,
+  ThreadNotFoundError,
+} from './errors.js';
 import {
   addReply,
   createThread,
@@ -168,6 +176,42 @@ export const commentRoutes: FastifyPluginAsync = async (app) => {
       const deleted = await deleteComment(app.db, workspaceId, review.id, comment.id);
       if (!deleted) throw new CommentNotFoundError();
       return deleted;
+    },
+  );
+
+  app.get(
+    '/:threadId/comments/:commentId/suggestion.patch',
+    { preHandler: requireWorkspaceRole('viewer') },
+    async (request, reply) => {
+      const { review, thread, comment } = await loadComment(app, request);
+      const { anchor } = thread;
+      if (!anchor || anchor.side !== 'new') throw new SuggestionNotApplicableError();
+      const suggestedLines = commentSuggestion(comment.body);
+      if (!suggestedLines) throw new SuggestionNotFoundError();
+
+      const diff = await getReviewFileDiff(
+        app.db,
+        requestWorkspace(request).id,
+        review.id,
+        anchor.fileId,
+      );
+      const path = diff && (diff.file.newPath ?? diff.file.oldPath);
+      const patch =
+        diff && path
+          ? buildSuggestionPatch({ path, hunks: diff.hunks, line: anchor.line, suggestedLines })
+          : null;
+      if (patch === null) throw new SuggestionNotApplicableError();
+
+      const filename = `review-${review.number}-suggestion-${comment.id.slice(0, 8)}.patch`;
+      return (
+        reply
+          .header('content-type', 'text/x-diff; charset=utf-8')
+          .header('content-disposition', `attachment; filename="${filename}"`)
+          // Comment text comes back as a file: never let a browser sniff it into HTML.
+          .header('x-content-type-options', 'nosniff')
+          .header('cache-control', 'private, no-store')
+          .send(patch)
+      );
     },
   );
 };

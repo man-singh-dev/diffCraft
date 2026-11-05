@@ -79,7 +79,12 @@ export function CommentThread({ thread }: { thread: Thread }) {
 
       <ul className="divide-y divide-slate-800">
         {thread.comments.map((comment) => (
-          <CommentItem key={comment.id} threadId={thread.id} comment={comment} />
+          <CommentItem
+            key={comment.id}
+            threadId={thread.id}
+            anchor={thread.anchor}
+            comment={comment}
+          />
         ))}
       </ul>
 
@@ -89,6 +94,7 @@ export function CommentThread({ thread }: { thread: Thread }) {
           submitLabel="Reply"
           placeholder="Write a reply"
           autoFocus
+          suggestionLine={thread.anchor?.side === 'new' ? thread.anchor.lineContent : undefined}
           onSubmit={async (body) => {
             const failure = await reply(thread.id, body);
             if (!failure) setReplying(false);

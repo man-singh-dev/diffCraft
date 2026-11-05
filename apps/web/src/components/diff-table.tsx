@@ -163,7 +163,12 @@ function UnifiedLine({ fileId, row }: { fileId: string; row: HighlightedUnifiedL
           <Code type={row.type} pieces={row.pieces} noNewlineAtEnd={row.noNewlineAtEnd} />
         </td>
       </tr>
-      <UnifiedThreadsRow keys={unifiedRowKeys(fileId, row)} target={target} colSpan={4} />
+      <UnifiedThreadsRow
+        keys={unifiedRowKeys(fileId, row)}
+        target={target}
+        lineContent={row.content}
+        colSpan={4}
+      />
     </>
   );
 }
@@ -221,6 +226,7 @@ const splitSide = (fileId: string, side: 'old' | 'new', cell: HighlightedSplitCe
   cell && {
     keys: [threadKey(fileId, side, cell.number)],
     target: { fileId, side, line: cell.number },
+    lineContent: cell.content,
   };
 
 function SplitLine({ fileId, row }: { fileId: string; row: HighlightedSplitLineRow }) {

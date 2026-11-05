@@ -23,7 +23,15 @@ export function AddCommentButton({ target, className }: { target: LineTarget; cl
   );
 }
 
-function LineConversation({ keys, target }: { keys: string[]; target: LineTarget | null }) {
+function LineConversation({
+  keys,
+  target,
+  lineContent,
+}: {
+  keys: string[];
+  target: LineTarget | null;
+  lineContent: string;
+}) {
   const comments = useComments();
   if (!comments) return null;
   const threads = comments.threadsForKeys(keys);
@@ -44,6 +52,7 @@ function LineConversation({ keys, target }: { keys: string[]; target: LineTarget
             submitLabel="Comment"
             placeholder="Leave a comment"
             autoFocus
+            suggestionLine={target.side === 'new' ? lineContent : undefined}
             onSubmit={(body) => comments.startThread(target, body)}
             onCancel={() => comments.openComposer(null)}
           />
@@ -67,10 +76,12 @@ function hasConversation(
 export function UnifiedThreadsRow({
   keys,
   target,
+  lineContent,
   colSpan,
 }: {
   keys: string[];
   target: LineTarget | null;
+  lineContent: string;
   colSpan: number;
 }) {
   const comments = useComments();
@@ -78,7 +89,7 @@ export function UnifiedThreadsRow({
   return (
     <tr>
       <td colSpan={colSpan} className="border-y border-slate-800 bg-slate-950/60">
-        <LineConversation keys={keys} target={target} />
+        <LineConversation keys={keys} target={target} lineContent={lineContent} />
       </td>
     </tr>
   );
@@ -87,6 +98,7 @@ export function UnifiedThreadsRow({
 interface SplitSide {
   keys: string[];
   target: LineTarget;
+  lineContent: string;
 }
 
 export function SplitThreadsRow({
@@ -106,10 +118,10 @@ export function SplitThreadsRow({
   return (
     <tr>
       <td colSpan={halfSpan} className="border-y border-slate-800 bg-slate-950/60 align-top">
-        {leftShown && <LineConversation keys={left.keys} target={left.target} />}
+        {leftShown && <LineConversation {...left} />}
       </td>
       <td colSpan={halfSpan} className="border-y border-slate-800 bg-slate-950/60 align-top">
-        {rightShown && <LineConversation keys={right.keys} target={right.target} />}
+        {rightShown && <LineConversation {...right} />}
       </td>
     </tr>
   );

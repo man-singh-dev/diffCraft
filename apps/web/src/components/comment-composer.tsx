@@ -1,10 +1,23 @@
 'use client';
 
-import { useId, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { countSuggestions } from '@diffcraft/shared';
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { CommentActionError } from '@/lib/comment-errors';
 import { inputClass, smallSecondaryButton } from './styles';
 
 export const COMMENT_MAX_LENGTH = 10_000;
+
+export function insertSuggestion(value: string, start: number, end: number, line: string) {
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const lead = before === '' || before.endsWith('\n') ? '' : '\n';
+  const trail = after === '' || after.startsWith('\n') ? '' : '\n';
+  const opening = `${lead}\`\`\`suggestion\n${line}`;
+  return {
+    value: `${before}${opening}\n\`\`\`${trail}${after}`,
+    cursor: before.length + opening.length,
+  };
+}
 const COUNTER_FROM = 9_000;
 
 const submitButton =
@@ -16,6 +29,7 @@ export function CommentComposer({
   initialValue = '',
   placeholder,
   autoFocus = false,
+  suggestionLine,
   onSubmit,
   onCancel,
 }: {
@@ -24,6 +38,7 @@ export function CommentComposer({
   initialValue?: string;
   placeholder?: string;
   autoFocus?: boolean;
+  suggestionLine?: string;
   onSubmit: (body: string) => Promise<CommentActionError | null>;
   onCancel?: () => void;
 }) {
@@ -32,6 +47,27 @@ export function CommentComposer({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const empty = value.trim() === '';
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const hadCursor = useRef(false);
+  const pendingCursor = useRef<number | null>(null);
+
+  useEffect(() => {
+    const cursor = pendingCursor.current;
+    if (cursor === null || !textarea.current) return;
+    pendingCursor.current = null;
+    textarea.current.focus();
+    textarea.current.setSelectionRange(cursor, cursor);
+  }, [value]);
+
+  function suggestChange() {
+    if (suggestionLine === undefined) return;
+    const el = textarea.current;
+    const [start, end] =
+      el && hadCursor.current ? [el.selectionStart, el.selectionEnd] : [value.length, value.length];
+    const inserted = insertSuggestion(value, start, end, suggestionLine);
+    pendingCursor.current = inserted.cursor;
+    setValue(inserted.value);
+  }
 
   async function submit() {
     if (sending || empty) return;
@@ -65,10 +101,14 @@ export function CommentComposer({
         {label}
       </label>
       <textarea
+        ref={textarea}
         id={id}
         value={value}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={handleKeyDown}
+        onFocus={() => {
+          hadCursor.current = true;
+        }}
         // Only for composers the user just opened ("+", Reply, Edit), never on page load.
         autoFocus={autoFocus}
         maxLength={COMMENT_MAX_LENGTH}
@@ -83,6 +123,16 @@ export function CommentComposer({
         <button type="submit" disabled={sending || empty} className={submitButton}>
           {sending ? 'Sending…' : submitLabel}
         </button>
+        {suggestionLine !== undefined && (
+          <button
+            type="button"
+            onClick={suggestChange}
+            disabled={sending || countSuggestions(value) > 0}
+            className={smallSecondaryButton}
+          >
+            Suggest change
+          </button>
+        )}
         {onCancel && (
           <button
             type="button"

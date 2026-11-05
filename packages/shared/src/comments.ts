@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { countSuggestions } from './suggestions.ts';
 import { hasAtLeastRole, type WorkspaceRole } from './workspaces.ts';
 
 export const THREAD_STATUSES = ['open', 'resolved'] as const;
@@ -16,7 +17,8 @@ export const CommentBodySchema = z
   .min(1)
   .max(10_000)
   // Postgres text can't store U+0000.
-  .refine((value) => !value.includes('\0'), 'Must not contain NUL characters.');
+  .refine((value) => !value.includes('\0'), 'Must not contain NUL characters.')
+  .refine((value) => countSuggestions(value) <= 1, 'Only one suggestion per comment');
 
 export const CommentAnchorInputSchema = z.object({
   fileId: z.uuid(),

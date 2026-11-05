@@ -191,3 +191,56 @@ describe('line threads in DiffTable', () => {
     expect(html).not.toContain('Add a comment');
   });
 });
+
+describe('suggested changes', () => {
+  const anchorOn = (side: 'old' | 'new') => ({
+    fileId: FILE,
+    side,
+    line: 2,
+    lineContent: 'const b = <old>;',
+  });
+
+  it('renders a suggestion on a new-side line as an escaped diff box', () => {
+    const c = comment({ body: 'Try:\n```suggestion\nconst b = <b>4</b>;\n  return b;\n```' });
+    const thread = makeThread([c], { anchor: anchorOn('new') });
+    const html = renderThread(thread, OTHER, 'viewer');
+
+    expect(html).toContain('Suggested change');
+    expect(html).toContain('Try:');
+    expect(html).not.toContain('```suggestion');
+    expect(html).not.toMatch(/<b>/);
+    expect(html).toContain('aria-hidden="true">-</span><span>const b = &lt;old&gt;;</span>');
+    expect(html).toContain(
+      'aria-hidden="true">+</span><span>const b = &lt;b&gt;4&lt;/b&gt;;</span>',
+    );
+    expect(html).toContain('aria-hidden="true">+</span><span>  return b;</span>');
+    expect(html).toContain(
+      `href="/api/v1/workspaces/${WS}/reviews/1/threads/${thread.id}/comments/${c.id}/suggestion.patch" download=""`,
+    );
+    expect(buttons(html)).toEqual(['Copy']);
+  });
+
+  it.each([
+    ['an old-side line thread', anchorOn('old')],
+    ['a review-level thread', null],
+  ])('on %s, shows the block as text with a note', (_name, anchor) => {
+    const thread = makeThread([comment({ body: '```suggestion\nconst b = 4;\n```' })], {
+      anchor,
+    });
+    const html = renderThread(thread, OTHER, 'viewer');
+    expect(html).toContain('```suggestion\nconst b = 4;\n```');
+    expect(html).toContain('Suggestions only apply to lines on the new side');
+    expect(html).not.toContain('Download patch');
+  });
+
+  it('a <script> inside a suggestion stays text', () => {
+    const body = '```suggestion\n<script>alert(1)</script>\n```';
+    const html = renderThread(
+      makeThread([comment({ body })], { anchor: anchorOn('new') }),
+      OTHER,
+      'viewer',
+    );
+    expect(html).not.toMatch(/<script/i);
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+  });
+});

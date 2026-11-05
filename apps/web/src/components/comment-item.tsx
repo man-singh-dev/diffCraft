@@ -1,7 +1,14 @@
 'use client';
 
-import { canDeleteComment, canEditComment, type Comment } from '@diffcraft/shared';
+import {
+  canDeleteComment,
+  canEditComment,
+  type Comment,
+  type ThreadAnchor,
+} from '@diffcraft/shared';
 import { useState } from 'react';
+import { suggestionPatchUrl } from '@/lib/api-client';
+import { CommentBody } from './comment-body';
 import { CommentComposer } from './comment-composer';
 import { useComments } from './comments-provider';
 import { CreatedDate } from './review-ui';
@@ -10,7 +17,15 @@ import { smallDangerButton } from './styles';
 const linkButton =
   'text-xs font-medium text-slate-400 hover:text-slate-100 focus-visible:outline-none focus-visible:underline disabled:opacity-60';
 
-export function CommentItem({ threadId, comment }: { threadId: string; comment: Comment }) {
+export function CommentItem({
+  threadId,
+  anchor,
+  comment,
+}: {
+  threadId: string;
+  anchor: ThreadAnchor | null;
+  comment: Comment;
+}) {
   const comments = useComments();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -57,8 +72,16 @@ export function CommentItem({ threadId, comment }: { threadId: string; comment: 
           onCancel={() => setEditing(false)}
         />
       ) : (
-        // Plain text: React escapes it, and line breaks are kept by CSS, not by markup.
-        <p className="whitespace-pre-wrap break-words text-sm text-slate-200">{comment.body}</p>
+        <CommentBody
+          body={comment.body}
+          anchor={anchor}
+          downloadUrl={suggestionPatchUrl(
+            comments.workspaceId,
+            comments.reviewNumber,
+            threadId,
+            comment.id,
+          )}
+        />
       )}
 
       {!comment.deleted && !editing && (mayEdit || mayDelete) && (

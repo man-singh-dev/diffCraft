@@ -177,6 +177,14 @@ export function leaveWorkspace(
 }
 
 const reviewsPath = (workspaceId: string) => `${workspacePath(workspaceId)}/reviews`;
+
+export const suggestionPatchUrl = (
+  workspaceId: string,
+  reviewNumber: string,
+  threadId: string,
+  commentId: string,
+) =>
+  `${reviewsPath(workspaceId)}/${encodeURIComponent(reviewNumber)}/threads/${encodeURIComponent(threadId)}/comments/${encodeURIComponent(commentId)}/suggestion.patch`;
 const reviewPath = (workspaceId: string, reviewNumber: number) =>
   `${reviewsPath(workspaceId)}/${encodeURIComponent(reviewNumber)}`;
 

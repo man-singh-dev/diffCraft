@@ -17,3 +17,19 @@ export class CommentNotFoundError extends NotFoundError {
     super('comment_not_found', 'Comment not found in this thread.');
   }
 }
+
+export class SuggestionNotApplicableError extends AppError {
+  constructor() {
+    super(
+      422,
+      'suggestion_not_applicable',
+      'Suggestions only apply to lines on the new side of a file.',
+    );
+  }
+}
+
+export class SuggestionNotFoundError extends NotFoundError {
+  constructor() {
+    super('suggestion_not_found', 'This comment has no suggested change.');
+  }
+}

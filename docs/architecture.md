@@ -329,6 +329,16 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 - **Idempotent resolution:** setting a thread's status only changes it if it differs, so resolving twice keeps the first resolver and time; reopening clears both.
 - **Permissions** are shared pure functions (`canComment`, `canEditComment`, `canDeleteComment`, `canResolveThread`), so the UI will offer only what the API allows. Admins can delete anyone's comment but edit only their own.
 
+### Suggested changes
+
+**Implemented** (`packages/shared/src/suggestions.ts`, the `suggestion.patch` route in [api.md](api.md#suggested-changes), and the comment UI). A reviewer proposes replacement text for the line a thread is on; the review's author can copy it or download it as a patch.
+
+- **Format:** a line that is exactly ` ```suggestion `, the replacement lines, then a line that is exactly ` ``` ` (trailing spaces allowed on both fences, CRLF tolerated). An empty block means "delete this line". An unclosed fence is plain text. `parseCommentBody` splits a body into text and suggestion parts in linear time (no regular expressions, and the next closing fence is precomputed, so a body full of unclosed fences costs no rescans). The body schema allows at most one block per comment.
+- **New side only:** a suggestion replaces a line of the _new_ version of a file, which is what the author has on their branch. On old-side line threads and review-level threads the block is shown as text with a note, and the patch route answers `422 suggestion_not_applicable`.
+- **The patch** (`buildSuggestionPatch`) is built from the stored hunks, relative to the new version: `--- a/<path>` / `+++ b/<path>` (C-quoted when the path needs it), one hunk with up to 3 lines of context before and after, taken only from new-side lines (context and added) of the same hunk that are contiguous by line number, because nothing outside the hunks is known. A line at the end of a file without a final newline keeps its `\ No newline at end of file` marker, and so does its replacement. A count of 0 (deleting a file's only line) uses the line before as the start, as git does.
+- **Verified with git:** the tests parse every generated patch with `parsePatch` and apply it to the expected file, and an integration test writes real files in a temporary directory, takes the hunks from `git diff --no-index`, and runs `git apply --check` and `git apply` on the suggestion patch (skipped when git isn't installed).
+- **UI:** a suggestion renders as a small diff box (the thread's stored `lineContent` as the `-` line, each suggested line as a `+` line, all as escaped text), with Copy and Download patch. On new-side line threads, the composer for a new thread or a reply has a "Suggest change" button that inserts a block pre-filled with the line's current text.
+
 ---
 
 ## Review Lifecycle

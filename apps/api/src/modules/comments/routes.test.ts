@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   CommentSchema,
   ErrorResponseSchema,
+  parsePatch,
   ReviewFileSchema,
   ReviewSchema,
   ThreadSchema,
@@ -479,5 +480,99 @@ describeWithDb('comment routes', () => {
     expect(
       (await call('PATCH', url(`/${thread.id}`), author, { status: 'resolved' })).statusCode,
     ).toBe(200);
+  });
+
+  describe('suggestion.patch', () => {
+    const SUGGESTION = 'Use 4:\n```suggestion\nconst b = 4;\n```';
+
+    async function suggestionSetup(side: 'old' | 'new' = 'new', body = SUGGESTION) {
+      const base = await setup();
+      const lineThread = await startThread(base.workspace.id, base.review, base.author, {
+        body,
+        anchor: { fileId: base.code.id, side, line: 2 },
+      });
+      const patchUrl = (t: Thread = lineThread, commentId = t.comments[0]!.id) =>
+        `${base.commentUrl(t, commentId)}/suggestion.patch`;
+      return { ...base, lineThread, patchUrl };
+    }
+
+    it('returns the patch as a download', async () => {
+      const { owner, review, lineThread, patchUrl } = await suggestionSetup();
+      const res = await call('GET', patchUrl(), owner);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toBe(
+        '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,2 +1,2 @@\n const a = 1;\n-const b = 3;\n+const b = 4;\n',
+      );
+      expect(parsePatch(res.body).files[0]!.newPath).toBe('src/app.ts');
+      const id = lineThread.comments[0]!.id.slice(0, 8);
+      expect(res.headers).toMatchObject({
+        'content-type': 'text/x-diff; charset=utf-8',
+        'content-disposition': `attachment; filename="review-${review.number}-suggestion-${id}.patch"`,
+        'x-content-type-options': 'nosniff',
+        'cache-control': 'private, no-store',
+      });
+    });
+
+    it.each([
+      ['logged out', 401, 'unauthenticated'],
+      ['non-member', 404, 'workspace_not_found'],
+      ['viewer', 200, null],
+    ] as const)('as %s → %i', async (caller, expected, code) => {
+      const { workspace, patchUrl } = await suggestionSetup();
+      let user: TestUser | undefined;
+      if (caller === 'non-member') user = await createUserWithSession(app.db);
+      if (caller === 'viewer') user = await memberWithRole(workspace.id, 'viewer');
+
+      const res = await call('GET', patchUrl(), user);
+      expect(res.statusCode).toBe(expected);
+      if (code) expect(errorOf(res).code).toBe(code);
+    });
+
+    it('404 for a comment of another thread', async () => {
+      const { owner, thread, lineThread, patchUrl } = await suggestionSetup();
+      const res = await call('GET', patchUrl(thread, lineThread.comments[0]!.id), owner);
+      expect(res.statusCode).toBe(404);
+      expect(errorOf(res).code).toBe('comment_not_found');
+    });
+
+    it('422 on the old side and on a review-level thread', async () => {
+      const { owner, workspace, review, author, patchUrl } = await suggestionSetup('old');
+      const oldSide = await call('GET', patchUrl(), owner);
+      expect(oldSide.statusCode).toBe(422);
+      expect(errorOf(oldSide).code).toBe('suggestion_not_applicable');
+
+      const reviewLevel = await startThread(workspace.id, review, author, { body: SUGGESTION });
+      const res = await call('GET', patchUrl(reviewLevel), owner);
+      expect(res.statusCode).toBe(422);
+      expect(errorOf(res).code).toBe('suggestion_not_applicable');
+    });
+
+    it('404 when the comment has no suggestion block', async () => {
+      const { owner, patchUrl } = await suggestionSetup('new', 'Just a remark');
+      const res = await call('GET', patchUrl(), owner);
+      expect(res.statusCode).toBe(404);
+      expect(errorOf(res).code).toBe('suggestion_not_found');
+    });
+
+    it('404 for a deleted comment', async () => {
+      const { author, lineThread, commentUrl, patchUrl } = await suggestionSetup();
+      expect((await call('DELETE', commentUrl(lineThread), author)).statusCode).toBe(200);
+      const res = await call('GET', patchUrl(), author);
+      expect(res.statusCode).toBe(404);
+      expect(errorOf(res).code).toBe('comment_not_found');
+    });
+
+    it('422 for a body with two suggestions', async () => {
+      const { author, url } = await setup();
+      const res = await call('POST', url(), author, {
+        body: '```suggestion\na\n```\n```suggestion\nb\n```',
+      });
+      expect(res.statusCode).toBe(422);
+      expect(errorOf(res)).toMatchObject({
+        code: 'validation_error',
+        details: [{ field: 'body', message: 'Only one suggestion per comment' }],
+      });
+    });
   });
 });

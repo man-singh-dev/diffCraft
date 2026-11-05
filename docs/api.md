@@ -121,20 +121,21 @@ Errors on the review routes (in addition to the workspace errors above):
 
 A thread is about the review as a whole, or anchored to one line on one side of one file. It holds comments, oldest first, and is `open` or `resolved`. The routes are nested under the review, so the auth, workspace and review checks run first. Comments are allowed on closed reviews. `T` below stands for `/api/v1/workspaces/:workspaceId/reviews/:reviewNumber/threads`.
 
-| Method   | Path                              | Purpose                                                                                                | Auth                                                      | Status          |
-| -------- | --------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | --------------- |
-| `GET`    | `T`                               | All threads of the review with their comments. `200 Thread[]`.                                         | Member (viewer and up)                                    | **Implemented** |
-| `POST`   | `T`                               | Start a thread with its first comment. Body `{ body, anchor?: { fileId, side, line } }`. `201 Thread`. | Member (not viewer)                                       | **Implemented** |
-| `PATCH`  | `T/:threadId`                     | Resolve or reopen. Body `{ status: "open" \| "resolved" }`. Idempotent. `200 Thread`.                  | Thread creator or review author (member and up), or Admin | **Implemented** |
-| `POST`   | `T/:threadId/comments`            | Reply. Body `{ body }`. `201 Comment`.                                                                 | Member (not viewer)                                       | **Implemented** |
-| `PATCH`  | `T/:threadId/comments/:commentId` | Edit a comment. Body `{ body }`. `200 Comment` with `edited: true`.                                    | Comment author only (admins can't edit others' comments)  | **Implemented** |
-| `DELETE` | `T/:threadId/comments/:commentId` | Soft-delete a comment: it stays in the thread with an empty body. `200 Comment` with `deleted: true`.  | Comment author (member and up) or Admin                   | **Implemented** |
+| Method   | Path                                               | Purpose                                                                                                                 | Auth                                                      | Status          |
+| -------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | --------------- |
+| `GET`    | `T`                                                | All threads of the review with their comments. `200 Thread[]`.                                                          | Member (viewer and up)                                    | **Implemented** |
+| `POST`   | `T`                                                | Start a thread with its first comment. Body `{ body, anchor?: { fileId, side, line } }`. `201 Thread`.                  | Member (not viewer)                                       | **Implemented** |
+| `PATCH`  | `T/:threadId`                                      | Resolve or reopen. Body `{ status: "open" \| "resolved" }`. Idempotent. `200 Thread`.                                   | Thread creator or review author (member and up), or Admin | **Implemented** |
+| `POST`   | `T/:threadId/comments`                             | Reply. Body `{ body }`. `201 Comment`.                                                                                  | Member (not viewer)                                       | **Implemented** |
+| `PATCH`  | `T/:threadId/comments/:commentId`                  | Edit a comment. Body `{ body }`. `200 Comment` with `edited: true`.                                                     | Comment author only (admins can't edit others' comments)  | **Implemented** |
+| `DELETE` | `T/:threadId/comments/:commentId`                  | Soft-delete a comment: it stays in the thread with an empty body. `200 Comment` with `deleted: true`.                   | Comment author (member and up) or Admin                   | **Implemented** |
+| `GET`    | `T/:threadId/comments/:commentId/suggestion.patch` | The comment's suggested change as a patch to download (see [Suggested changes](#suggested-changes)). `200 text/x-diff`. | Member (viewer and up)                                    | **Implemented** |
 
 `Thread` is `{ id, reviewId, anchor, status, resolvedBy, resolvedAt, createdBy, createdAt, comments }`; `anchor` is `{ fileId, side, line, lineContent }` or `null` for a review-level thread, and `lineContent` is the line's text when the thread was started. `Comment` is `{ id, threadId, author, body, createdAt, edited, deleted }`. Users are `{ id, displayName }`, or `null` once the account is deleted (`ThreadSchema` and `CommentSchema` in `packages/shared`).
 
 **Anchors:** `side` is `old` (deleted and context lines, by their old line number) or `new` (added and context lines, by their new line number); `line` is a positive integer. The file must be in this review and not binary, and the line must exist on that side of its hunks.
 
-**Bodies:** trimmed, 1–10,000 characters, no NUL.
+**Bodies:** trimmed, 1–10,000 characters, no NUL, and at most one suggestion block (`422 validation_error`, "Only one suggestion per comment").
 
 **Order of checks** (each stops at the first failure):
 
@@ -160,7 +161,29 @@ Errors on the thread routes (in addition to the workspace and review errors abov
 | `404`  | `review_file_not_found` | The anchor's `fileId` is not a file of this review.                                                                   |
 | `403`  | `forbidden`             | Below the route's minimum role, or the permission rule refuses (see [security.md](security.md#comments-implemented)). |
 | `422`  | `invalid_anchor`        | The anchor's file is binary, or the line isn't on that side of its diff.                                              |
-| `422`  | `validation_error`      | Invalid body: empty, too long or NUL in `body`; malformed anchor; unknown `status`.                                   |
+| `422`  | `validation_error`      | Invalid body: empty, too long, NUL or more than one suggestion in `body`; malformed anchor; unknown `status`.         |
+
+#### Suggested changes
+
+A comment can hold one suggestion block (format in [architecture.md](architecture.md#suggested-changes)). `GET T/:threadId/comments/:commentId/suggestion.patch` returns it as a unified diff that replaces the thread's line with the suggested lines, relative to the **new** version of the file, so the review's author can run `git apply` on their branch. Any member, viewers included, may download it.
+
+The checks run in the same order as the other comment routes (workspace guard, review, thread in this review, comment in that thread and not deleted), then:
+
+| Status | Code                        | When                                                               |
+| ------ | --------------------------- | ------------------------------------------------------------------ |
+| `422`  | `suggestion_not_applicable` | The thread is review-level, or anchored on the old side of a file. |
+| `404`  | `suggestion_not_found`      | The comment has no (closed) suggestion block.                      |
+
+A successful response is the patch text with these headers:
+
+| Header                   | Value                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------ |
+| `Content-Type`           | `text/x-diff; charset=utf-8`                                                                     |
+| `Content-Disposition`    | `attachment; filename="review-<number>-suggestion-<first 8 characters of the comment id>.patch"` |
+| `X-Content-Type-Options` | `nosniff`, so a browser never renders the comment text as HTML                                   |
+| `Cache-Control`          | `private, no-store`                                                                              |
+
+The web app links to it through its `/api` rewrite, so the session cookie is sent with the download.
 
 ### Review approvals
 
