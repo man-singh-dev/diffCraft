@@ -1,8 +1,5 @@
 {
-  // Shared compiler options for every package in the monorepo.
-  // "module" and "moduleResolution" are intentionally NOT set here: each package
-  // picks its own (e.g. NodeNext for the API, Bundler for Next.js) because the
-  // correct values depend on the runtime/bundler that consumes the output.
+  // "module"/"moduleResolution" are deliberately not set: each package picks its own for its runtime/bundler.
   "compilerOptions": {
     "target": "ES2022",
     "strict": true,

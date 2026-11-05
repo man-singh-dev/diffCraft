@@ -3,9 +3,9 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 
-// No query is made, and the pool connects lazily, so no database is needed.
+// The pool connects lazily and no query is made, so no database is needed.
 const DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
-const PROXY = '10.0.0.1'; // a private address, like the host's proxy
+const PROXY = '10.0.0.1';
 const CLIENT = '203.0.113.7';
 
 describe('trustProxy', () => {
@@ -16,7 +16,6 @@ describe('trustProxy', () => {
     app = undefined;
   });
 
-  /** Builds the app with an extra route that echoes request.ip. */
   const appWith = async (env: Record<string, string>) => {
     app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL, ...env }));
     app.get('/test-ip', async (request) => ({ ip: request.ip }));

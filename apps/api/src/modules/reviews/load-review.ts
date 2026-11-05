@@ -7,10 +7,7 @@ import { getReviewByNumber } from './service.js';
 const MAX_INT4 = 2_147_483_647;
 const REVIEW_NUMBER_PATTERN = /^[1-9]\d{0,9}$/;
 
-/**
- * :reviewNumber from the URL. Anything but a positive int4 is a 404 before any query: Postgres
- * would reject a larger number with an error instead of finding nothing.
- */
+// Anything but a positive int4 is a 404 before any query: Postgres would error on a larger number instead of finding nothing.
 export function reviewNumberParam(request: FastifyRequest): number {
   const { reviewNumber } = request.params as { reviewNumber?: string };
   const number =
@@ -19,7 +16,6 @@ export function reviewNumberParam(request: FastifyRequest): number {
   return number;
 }
 
-/** The review named in the URL, looked up in the URL's workspace (already checked by the guard). */
 export async function loadReview(app: FastifyInstance, request: FastifyRequest): Promise<Review> {
   const review = await getReviewByNumber(
     app.db,

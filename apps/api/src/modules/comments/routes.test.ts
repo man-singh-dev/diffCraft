@@ -22,7 +22,6 @@ import { addMember, createUserWithSession, type TestUser } from '../../test/fixt
 
 const BASE = '/api/v1/workspaces';
 
-// Files in patch order: a modified file and a binary file.
 const PATCH = `diff --git a/src/app.ts b/src/app.ts
 --- a/src/app.ts
 +++ b/src/app.ts
@@ -39,10 +38,7 @@ type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type Endpoint = 'list' | 'create' | 'reply' | 'edit' | 'delete' | 'resolve';
 type Caller = 'logged out' | 'non-member' | WorkspaceRole;
 
-// Expected status per endpoint and caller. The review is the owner's; the thread and its comment
-// belong to another member. So `edit` is everyone editing someone else's words (only the author
-// may), `delete` needs an admin, and `resolve` needs the thread creator, the review author (the
-// owner here) or an admin.
+// Review by the owner, thread and comment by another member: edit is never the caller's own words, delete needs an admin, resolve needs the creator, review author or an admin.
 const MATRIX: Record<Endpoint, Record<Caller, number>> = {
   list: { 'logged out': 401, 'non-member': 404, viewer: 200, member: 200, admin: 200, owner: 200 },
   create: {
@@ -136,7 +132,6 @@ describeWithDb('comment routes', () => {
     return ReviewFileSchema.array().parse(res.json());
   }
 
-  /** A workspace and a review by its owner, with a thread started by another member. */
   async function setup() {
     const owner = await createUserWithSession(app.db);
     const workspace = await createWorkspace(owner);
@@ -211,7 +206,6 @@ describeWithDb('comment routes', () => {
       const { workspace, review, url } = await setup();
       const demoted = await memberWithRole(workspace.id, 'member');
       const thread = await startThread(workspace.id, review, demoted);
-      // Demote: viewers can't delete (canDeleteComment needs member+), but editing is author-only.
       await app.db
         .update(workspaceMembers)
         .set({ role: 'viewer' })
@@ -237,8 +231,8 @@ describeWithDb('comment routes', () => {
         call('PATCH', threadsUrl(workspace.id, memberReview, `/${thread.id}`), user, { status });
 
       expect((await resolve(other)).statusCode).toBe(403);
-      expect((await resolve(author)).statusCode).toBe(200); // thread creator
-      expect((await resolve(reviewAuthor, 'open')).statusCode).toBe(200); // review author
+      expect((await resolve(author)).statusCode).toBe(200);
+      expect((await resolve(reviewAuthor, 'open')).statusCode).toBe(200);
       expect((await resolve(admin)).statusCode).toBe(200);
       expect((await resolve(owner, 'open')).statusCode).toBe(200);
     });
@@ -285,7 +279,6 @@ describeWithDb('comment routes', () => {
 
     it('a review of another workspace is not found, even for a member of both', async () => {
       const { workspace, review, thread, owner } = await setup();
-      // The owner also owns a second workspace, with its own review #1.
       const second = await createWorkspace(owner);
       await createReview(second.id, owner);
 
@@ -296,7 +289,6 @@ describeWithDb('comment routes', () => {
       expect(res.statusCode).toBe(404);
       expect(errorOf(res).code).toBe('thread_not_found');
 
-      // A review number that exists only in the first workspace.
       const extra = await createReview(workspace.id, owner);
       const missing = await call('GET', threadsUrl(second.id, extra), owner);
       expect(missing.statusCode).toBe(404);
@@ -329,7 +321,6 @@ describeWithDb('comment routes', () => {
       );
       expect(errorOf(missingReview).code).toBe('review_not_found');
 
-      // Forbidden with an invalid body is still 403, not 422.
       const other = await memberWithRole(workspace.id, 'member');
       expect((await call('PATCH', commentUrl(), other, { body: '' })).statusCode).toBe(403);
       expect(
@@ -442,7 +433,6 @@ describeWithDb('comment routes', () => {
         expect.objectContaining({ body: '', deleted: true, edited: false }),
       ]);
 
-      // A deleted comment is gone for every change: 404 comment_not_found, even for its author.
       for (const res of [
         await call('DELETE', commentUrl(), author),
         await call('PATCH', commentUrl(), author, { body: 'back' }),

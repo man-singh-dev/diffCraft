@@ -25,7 +25,6 @@ export const reviews = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    // "#12" for people and URLs, from workspaces.last_review_number.
     number: integer('number').notNull(),
     // SET NULL: deleting an account must not delete reviews others have worked on.
     authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
@@ -45,9 +44,7 @@ export const reviews = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // Also serves as the index for the workspace_id foreign key.
     unique('reviews_workspace_id_number_unique').on(table.workspaceId, table.number),
-    // Newest first with a (created_at, id) cursor.
     index('reviews_workspace_id_created_at_id_idx').on(
       table.workspaceId,
       table.createdAt.desc(),
@@ -74,12 +71,10 @@ export const reviewFiles = pgTable(
     isBinary: boolean('is_binary').notNull(),
     additions: integer('additions').notNull(),
     deletions: integer('deletions').notNull(),
-    // jsonb rather than hunk and line tables: a file's hunks are always read whole and never
-    // queried into, and up to 20,000 line rows per review would buy nothing.
+    // jsonb, not hunk/line tables: a file's hunks are always read whole and never queried into.
     hunks: jsonb('hunks').$type<DiffHunk[]>().notNull(),
   },
   (table) => [
-    // Also serves as the index for the review_id foreign key.
     unique('review_files_review_id_position_unique').on(table.reviewId, table.position),
     check(
       'review_files_change_type_check',

@@ -4,7 +4,6 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   // tsconfig.json keeps JSX as is for Next.js ("preserve"); the tests compile it themselves.
   oxc: { jsx: { runtime: 'automatic' } },
-  // The same "@/..." alias as tsconfig.json's paths.
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   test: {
     name: 'web',

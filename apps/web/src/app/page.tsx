@@ -16,7 +16,6 @@ export default async function HomePage() {
       title="DiffCraft"
       description="Collaborative Code Review and AI-Assisted Debugging Platform"
     >
-      {/* API Status */}
       <div className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">API Status</p>
 
@@ -51,7 +50,6 @@ export default async function HomePage() {
         )}
       </div>
 
-      {/* Account */}
       {user ? (
         <Link href="/workspaces" className={primaryButton}>
           Go to your workspaces

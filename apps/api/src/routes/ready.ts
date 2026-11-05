@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 const READY_TIMEOUT_MS = 2_000;
 
-/** Readiness: can this instance serve traffic right now? Unlike /health, it checks the database. */
+// Unlike /health, readiness checks the database.
 export const readyRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Reply: ReadyResponse }>('/ready', async (request, reply) => {
     try {

@@ -17,14 +17,12 @@ const PATCH_REASONS: Record<DiffParseErrorCode, string> = {
     "The patch contains NUL characters, so it's probably UTF-16 or binary. Save the file as UTF-8.",
 };
 
-/** A message for a patch the parser rejects, from the preview or from the API. */
 export function describePatchError(reason: string, line: number | null): string {
   const message =
     (PATCH_REASONS as Partial<Record<string, string>>)[reason] ?? "The patch couldn't be read.";
   return line === null ? message : `Line ${line}: ${message}`;
 }
 
-// error.details of a 400 invalid_patch (see InvalidPatchError in the API).
 const InvalidPatchDetailsSchema = z.object({
   reason: z.string(),
   line: z.number().int().positive().nullable(),
@@ -37,7 +35,6 @@ const MESSAGES: Partial<Record<string, string>> = {
     "You don't have permission to do that. Only the author or an admin can change a review.",
 };
 
-/** A message for a failed review call. 422 field errors are shown by their fields instead. */
 export function describeReviewError(failure: ApiFailure): string {
   if (failure.code === 'invalid_patch') {
     const details = InvalidPatchDetailsSchema.safeParse(failure.details);

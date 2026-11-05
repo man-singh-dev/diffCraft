@@ -22,7 +22,6 @@ const WORKSPACE_NOT_FOUND = {
 type Method = 'GET' | 'PATCH' | 'DELETE';
 type Caller = 'logged out' | 'non-member' | WorkspaceRole;
 
-// Expected status per method and caller: the authorization matrix.
 const MATRIX: Record<Method, Record<Caller, number>> = {
   GET: { 'logged out': 401, 'non-member': 404, viewer: 200, member: 200, admin: 200, owner: 200 },
   PATCH: { 'logged out': 401, 'non-member': 404, viewer: 403, member: 403, admin: 200, owner: 200 },
@@ -59,7 +58,6 @@ describeWithDb('workspace routes', () => {
       ...(payload && { payload }),
     });
 
-  /** Creates a workspace through the API, owned by `owner`. */
   async function createWorkspace(owner: TestUser): Promise<Workspace> {
     const res = await call('POST', BASE, owner, { name: uniqueName() });
     expect(res.statusCode).toBe(201);
@@ -100,7 +98,6 @@ describeWithDb('workspace routes', () => {
         expect(WorkspaceSchema.parse(res.json())).toMatchObject({ id: workspace.id, role });
       }
 
-      // Denied requests must not change anything.
       const row = await storedWorkspace(workspace.id);
       if (expected === 204) expect(row).toBeUndefined();
       else if (expected === 200 && method === 'PATCH') expect(row?.name).toBe('Renamed');

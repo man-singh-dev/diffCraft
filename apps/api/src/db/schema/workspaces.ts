@@ -21,8 +21,7 @@ export const workspaces = pgTable('workspaces', {
   slug: text('slug').notNull().unique('workspaces_slug_unique'),
   // SET NULL, not CASCADE: deleting the creator's account must not delete a shared workspace.
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
-  // Hands out review numbers. Incremented with UPDATE … RETURNING, which locks the row, so
-  // concurrent creates get distinct numbers (SELECT max(number) + 1 would race).
+  // Incremented with UPDATE … RETURNING, whose row lock gives concurrent creates distinct numbers (max + 1 would race).
   lastReviewNumber: integer('last_review_number').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true })

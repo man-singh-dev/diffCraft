@@ -23,21 +23,19 @@ import { z } from 'zod';
 import { toFieldErrors, type FieldErrors } from './form-errors';
 import { reviewListQuery, type ReviewFilters } from './review-params';
 
-// Browser-side calls to the API. Only relative URLs: next.config.ts forwards /api/* to the API.
+// Only relative URLs: next.config.ts forwards /api/* to the API.
 
 export interface ApiFailure {
   ok: false;
-  /** HTTP status, or 0 if the request never got a response. */
+  /** 0 if the request never got a response. */
   status: number;
   code: string;
   message: string;
   fieldErrors: FieldErrors;
-  /** error.details, for codes that carry more than a message (e.g. invalid_patch). */
   details?: unknown;
 }
 export type ApiResult<T> = { ok: true; data: T } | ApiFailure;
 
-// error.details of a 422 (see ValidationError in apps/api/src/errors.ts).
 const FieldIssuesSchema = z.array(z.object({ field: z.string(), message: z.string() }));
 
 const failure = (status: number, code: string, message: string): ApiFailure => ({
@@ -53,7 +51,6 @@ const unexpected = (status: number) =>
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
-/** `schema` null means no response body is expected (e.g. 204). */
 async function request<T>(
   method: Method,
   path: string,
@@ -183,7 +180,6 @@ const reviewsPath = (workspaceId: string) => `${workspacePath(workspaceId)}/revi
 const reviewPath = (workspaceId: string, reviewNumber: number) =>
   `${reviewsPath(workspaceId)}/${encodeURIComponent(reviewNumber)}`;
 
-/** One page of reviews, for "Load more" (the first page is rendered on the server). */
 export function listReviews(
   workspaceId: string,
   filters: ReviewFilters,

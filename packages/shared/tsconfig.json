@@ -6,9 +6,7 @@
     "noEmit": true,
     // For the tests and scripts; src/ itself must stay free of Node APIs.
     "types": ["node"],
-    // Allows '.ts' extensions in relative imports, so Bundler-based consumers
-    // (Next.js) and NodeNext consumers (the API) can both resolve shared source.
-    // Only valid because noEmit is true.
+    // .ts import extensions let both Bundler (Next.js) and NodeNext (API) consumers resolve shared source; needs noEmit.
     "allowImportingTsExtensions": true
   },
   "include": ["src", "scripts"]

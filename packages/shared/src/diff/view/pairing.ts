@@ -6,18 +6,15 @@ export interface PairedLine {
   segments: Segment[];
 }
 
-/** A context line, or a run of deleted lines followed by a run of added lines. */
 export type HunkBlock =
   | { kind: 'context'; line: PairedLine }
   | {
       kind: 'change';
       dels: PairedLine[];
       adds: PairedLine[];
-      /** min(dels, adds): the i-th del is paired with the i-th add, for i < pairs. */
       pairs: number;
     };
 
-/** Splits a hunk into context lines and change blocks, with word-level segments for paired lines. */
 export function pairHunkLines(hunk: DiffHunk): HunkBlock[] {
   const blocks: HunkBlock[] = [];
   let dels: DiffLine[] = [];

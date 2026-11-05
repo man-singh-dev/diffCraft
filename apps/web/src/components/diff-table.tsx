@@ -14,10 +14,7 @@ import type {
 import { threadKey, unifiedRowKeys, unifiedRowTarget } from '@/lib/thread-anchors';
 import { AddCommentButton, SplitThreadsRow, UnifiedThreadsRow } from './line-comments';
 
-// Presentational only (no hooks, no 'use client'), so server pages and the client "Load diff"
-// button can both render it. Pieces are rendered as text, which React escapes. The comment
-// controls are small client islands (line-comments.tsx) that render nothing outside a
-// CommentsProvider.
+// No hooks or 'use client', so server pages and the client "Load diff" button can both render it. Pieces render as text, which React escapes.
 
 type LineType = HighlightedUnifiedLineRow['type'];
 
@@ -54,10 +51,7 @@ const emptyCell = 'bg-slate-950/70';
 const GROUP_TARGET = 'group-target:bg-yellow-400/20';
 const SELF_TARGET = 'target:bg-yellow-400/20';
 
-/**
- * Changed words are emphasised only on a real word-level diff (some pieces changed, some not).
- * A line changed as a whole already has its line background; emphasising every piece adds noise.
- */
+// Only on a real word-level diff: a line changed as a whole already has its line background.
 export function hasWordDiff(pieces: Piece[]): boolean {
   return pieces.some((p) => p.changed) && pieces.some((p) => !p.changed);
 }
@@ -142,8 +136,7 @@ function UnifiedLine({ fileId, row }: { fileId: string; row: HighlightedUnifiedL
   const anchor = anchorForLine(fileId, row);
   const target = unifiedRowTarget(fileId, row);
   const numberClass = `${numberCell} ${NUMBER_BG[row.type]} ${GROUP_TARGET}`;
-  // A context line's anchor is its new side; its old number also gets an id, so a link to the old
-  // side (e.g. a thread started there in the split view) finds the row. has-[:target] lights it up.
+  // The old number also gets an id, so a link to the old side (e.g. a split-view thread) finds the row.
   const oldId =
     row.type === 'context' && row.oldNumber !== null
       ? lineAnchor(fileId, 'old', row.oldNumber)
@@ -175,8 +168,7 @@ function UnifiedLine({ fileId, row }: { fileId: string; row: HighlightedUnifiedL
   );
 }
 
-// Each half of a split row has its own anchor, so the id goes on the half's number cell, and the
-// two cells after it follow its :target state through a named peer.
+// Each half has its own anchor, so the id goes on the half's number cell and the next two cells follow it via a named peer.
 const SPLIT_HALF = {
   old: { peer: 'peer/old', follow: 'peer-target/old:bg-yellow-400/20' },
   new: { peer: 'peer/new', follow: 'peer-target/new:bg-yellow-400/20' },
@@ -247,7 +239,6 @@ function SplitLine({ fileId, row }: { fileId: string; row: HighlightedSplitLineR
   );
 }
 
-/** A file's diff as a table, in the unified or split view. */
 export function DiffTable({ fileId, diff }: { fileId: string; diff: DiffRows }) {
   const colSpan = diff.view === 'split' ? 6 : 4;
   return (

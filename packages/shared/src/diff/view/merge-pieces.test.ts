@@ -10,7 +10,6 @@ const p = (text: string, color: string | null, changed = false): Piece => ({
   changed,
 });
 
-/** Runs mergePieces and checks that the pieces join back to the line. */
 function merge(tokens: ColorToken[], segments: Segment[]): Piece[] {
   const pieces = mergePieces(tokens, segments);
   expect(pieces.map((x) => x.text).join('')).toBe(segments.map((x) => x.text).join(''));
@@ -20,7 +19,6 @@ function merge(tokens: ColorToken[], segments: Segment[]): Piece[] {
 
 describe('mergePieces', () => {
   it('a segment boundary in the middle of a token splits the token', () => {
-    // "const total" with "tal" changed: the identifier token is cut in two.
     expect(
       merge([t('const', 'K'), t(' '), t('total', 'V')], [s('const to'), s('tal', true)]),
     ).toEqual([p('const', 'K'), p(' ', null), p('to', 'V'), p('tal', 'V', true)]);

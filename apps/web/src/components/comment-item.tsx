@@ -10,7 +10,6 @@ import { smallDangerButton } from './styles';
 const linkButton =
   'text-xs font-medium text-slate-400 hover:text-slate-100 focus-visible:outline-none focus-visible:underline disabled:opacity-60';
 
-/** One comment: author, date, body as plain text, and Edit / Delete when the shared rules allow. */
 export function CommentItem({ threadId, comment }: { threadId: string; comment: Comment }) {
   const comments = useComments();
   const [editing, setEditing] = useState(false);

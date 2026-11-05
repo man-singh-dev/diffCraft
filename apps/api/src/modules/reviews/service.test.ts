@@ -11,7 +11,6 @@ import { createUserWithSession, failInsertInTransaction } from '../../test/fixtu
 import { createWorkspace } from '../workspaces/service.js';
 import { createReview, getReview, getReviewFileDiff, listReviewFiles } from './service.js';
 
-// Three files in patch order: modified (two hunks), added, deleted.
 const PATCH = `diff --git a/src/app.ts b/src/app.ts
 index 1111111..2222222 100644
 --- a/src/app.ts
@@ -161,9 +160,7 @@ describeWithDb('reviews service and tables', () => {
     const ws = await setup();
     await createReview(app.db, { ...ws, input: input() });
 
-    // The proxy makes tx.insert(reviewFiles) throw. By then the counter UPDATE and the review
-    // INSERT have really run in the same transaction, so this proves they are rolled back. A
-    // patch can't trigger a real constraint error here: everything parsePatch returns is valid.
+    // The proxy throws on the review_files insert after the counter UPDATE and review INSERT really ran, so this proves they roll back.
     const failing = failInsertInTransaction(app.db, reviewFiles, 'forced review_files failure');
     await expect(createReview(failing, { ...ws, input: input() })).rejects.toThrow(
       'forced review_files failure',

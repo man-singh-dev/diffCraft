@@ -9,11 +9,10 @@ type Table = Parameters<Database['insert']>[0];
 export interface TestUser {
   id: string;
   email: string;
-  /** Pass as `cookies` to app.inject() to call the API as this user. */
   cookies: Record<string, string>;
 }
 
-// Inserted directly (no Argon2, no HTTP) and with a unique email: test files share one database.
+// Inserted directly with a unique email: test files share one database.
 export async function createUserWithSession(db: Database): Promise<TestUser> {
   const email = `user-${randomUUID()}@example.com`;
   const [user] = await db
@@ -34,10 +33,7 @@ export async function addMember(
   await db.insert(workspaceMembers).values({ workspaceId, userId, role });
 }
 
-/**
- * Wraps `db` so that, inside a transaction, inserting into `table` throws `message`. Earlier
- * statements in that transaction really run, so a test can check they were rolled back.
- */
+// Earlier statements in the transaction really run, so a test can check they were rolled back.
 export function failInsertInTransaction(db: Database, table: Table, message: string): Database {
   const passThrough = <T extends object>(target: T, prop: string | symbol): unknown => {
     const value: unknown = Reflect.get(target, prop);

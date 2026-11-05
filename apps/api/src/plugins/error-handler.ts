@@ -3,7 +3,6 @@ import type { FastifyError } from 'fastify';
 import fp from 'fastify-plugin';
 import { AppError } from '../errors.js';
 
-// Codes for client errors raised by Fastify itself (malformed JSON, wrong content type, ...).
 const CLIENT_ERROR_CODES: Record<number, string> = {
   400: 'bad_request',
   404: 'not_found',
@@ -13,11 +12,7 @@ const CLIENT_ERROR_CODES: Record<number, string> = {
   429: 'rate_limited',
 };
 
-/**
- * Makes every error response match ErrorResponseSchema. AppErrors are sent as they are;
- * Fastify's own 4xx errors get a stable code; anything else is logged and becomes a
- * generic 500, so internal details never reach the client.
- */
+// Anything but an AppError or a Fastify 4xx is logged and becomes a generic 500, so internals never reach the client.
 export const errorHandlerPlugin = fp(
   async (app) => {
     app.setErrorHandler<FastifyError>((error, request, reply) => {

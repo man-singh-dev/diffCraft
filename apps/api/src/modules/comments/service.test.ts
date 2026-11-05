@@ -22,7 +22,6 @@ import {
   setThreadStatus,
 } from './service.js';
 
-// Files in patch order: a modified file (two hunks), a binary file, a pure rename (no hunks).
 const PATCH = `diff --git a/src/app.ts b/src/app.ts
 --- a/src/app.ts
 +++ b/src/app.ts
@@ -59,7 +58,6 @@ describeWithDb('comments service and tables', () => {
     vi.restoreAllMocks();
   });
 
-  /** A workspace with one review of PATCH; `files` are in patch order. */
   async function setup() {
     const author = await createUserWithSession(app.db);
     const workspace = await createWorkspace(app.db, author.id, { name: `Team ${randomUUID()}` });
@@ -117,11 +115,11 @@ describeWithDb('comments service and tables', () => {
   });
 
   it.each([
-    ['old', 2, 'const port = 3000;'], // deleted line
-    ['new', 2, 'const port = 8080;'], // added line
-    ['old', 1, "import x from 'x';"], // context line, old side
-    ['new', 11, "log('listening');"], // added line in the second hunk
-    ['new', 12, 'return app;'], // context line whose numbers differ (old 11, new 12)
+    ['old', 2, 'const port = 3000;'],
+    ['new', 2, 'const port = 8080;'],
+    ['old', 1, "import x from 'x';"],
+    ['new', 11, "log('listening');"],
+    ['new', 12, 'return app;'],
     ['old', 11, 'return app;'],
   ] as const)(
     'anchors a thread on %s line %d and stores its content',
@@ -132,7 +130,6 @@ describeWithDb('comments service and tables', () => {
     },
   );
 
-  // Old side: lines 1–3 and 10–11. New side: lines 1–3 and 10–12.
   it.each([
     ['a line between the hunks', 'old', 7],
     ['a line outside the hunks', 'new', 5],
@@ -289,7 +286,6 @@ describeWithDb('comments service and tables', () => {
         }),
       ).toBeNull();
     }
-    // Nothing changed through the wrong scopes.
     expect(await getThread(app.db, s.workspaceId, s.reviewId, thread.id)).toEqual(thread);
   });
 
@@ -335,14 +331,12 @@ describeWithDb('comments service and tables', () => {
     const [row] = await app.db.select().from(comments).where(eq(comments.id, id));
     expect(row).toMatchObject({ body: '', deletedAt: expect.any(Date) });
 
-    // Still listed, in place, as deleted.
     const [listed] = await listThreads(app.db, s.workspaceId, s.reviewId);
     expect(listed!.comments.map((c) => [c.body, c.deleted])).toEqual([
       ['', true],
       ['second', false],
     ]);
 
-    // A deleted comment can't be edited or deleted again.
     expect(await editComment(app.db, s.workspaceId, s.reviewId, id, 'back')).toBeNull();
     expect(await deleteComment(app.db, s.workspaceId, s.reviewId, id)).toBeNull();
   });
@@ -361,7 +355,6 @@ describeWithDb('comments service and tables', () => {
       resolvedAt: expect.any(String),
     });
 
-    // Resolving again (even by someone else) keeps the first resolver and time.
     const again = await set(other.id, 'resolved');
     expect(again!.resolvedBy).toEqual(resolved!.resolvedBy);
     expect(again!.resolvedAt).toBe(resolved!.resolvedAt);
@@ -401,7 +394,6 @@ describeWithDb('comments service and tables', () => {
 
     const after = await getThread(app.db, s.workspaceId, s.reviewId, thread.id);
     expect(after!.comments.map((c) => c.author?.id ?? null)).toEqual([s.authorId, null]);
-    // Still resolved (resolved_at is kept); only the resolver is gone.
     expect(after).toMatchObject({
       status: 'resolved',
       resolvedBy: null,
@@ -424,7 +416,6 @@ describeWithDb('comments service and tables', () => {
     await rejects({ status: 'resolved' });
     await rejects({ status: 'open', resolvedAt: new Date() });
 
-    // And the valid shapes are accepted.
     const ok = await app.db
       .insert(commentThreads)
       .values([

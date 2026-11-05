@@ -11,7 +11,6 @@ import { describeApiError } from '@/lib/api-errors';
 const selectClass =
   'rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30 disabled:opacity-60';
 
-/** Role select and Remove button for one member the current user may manage. */
 export function MemberControls({
   workspaceId,
   member,
@@ -19,7 +18,6 @@ export function MemberControls({
 }: {
   workspaceId: string;
   member: WorkspaceMember;
-  /** The roles the current user may give this member (includes the current one). */
   roles: readonly WorkspaceRole[];
 }) {
   const router = useRouter();

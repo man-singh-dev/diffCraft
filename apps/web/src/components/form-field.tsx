@@ -1,6 +1,5 @@
 import { inputClass } from './styles';
 
-/** A labelled input with an optional hint and error, both linked to it with aria-describedby. */
 export function FormField({
   id,
   label,
@@ -39,7 +38,6 @@ export function FormField({
   );
 }
 
-/** A labelled textarea, with the same hint and error wiring as FormField. */
 export function TextAreaField({
   id,
   label,
@@ -84,7 +82,6 @@ export function TextAreaField({
   );
 }
 
-/** A labelled select, with the same error wiring as FormField. */
 export function SelectField({
   id,
   label,
@@ -127,7 +124,6 @@ export function SelectField({
   );
 }
 
-/** A form-level error (e.g. wrong password), announced to screen readers when it appears. */
 export function FormError({ children }: { children: React.ReactNode }) {
   return (
     <div

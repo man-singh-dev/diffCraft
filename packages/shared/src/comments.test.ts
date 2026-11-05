@@ -118,7 +118,6 @@ describe('canDeleteComment', () => {
     ['owner', true, true],
     ['admin', true, true],
     ['member', true, true],
-    // Demoted to viewer: no longer allowed to change anything, even their own words.
     ['viewer', true, false],
   ] as const)('%s, own comment: %s → %s', (role, own, allowed) => {
     const comment = { author: user(own ? ME : OTHER), deleted: false };

@@ -18,7 +18,6 @@ export const commentThreads = pgTable(
     fileId: uuid('file_id').references(() => reviewFiles.id, { onDelete: 'cascade' }),
     side: text('side', { enum: LINE_SIDES }),
     line: integer('line'),
-    // The line's text when the thread was started.
     lineContent: text('line_content'),
     status: text('status', { enum: THREAD_STATUSES }).notNull().default('open'),
     resolvedBy: uuid('resolved_by').references(() => users.id, { onDelete: 'set null' }),
@@ -32,10 +31,8 @@ export const commentThreads = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // Also serves as the index for the review_id foreign key.
     index('comment_threads_review_id_file_id_idx').on(table.reviewId, table.fileId),
-    // For the file_id foreign key: deleting a review deletes its files, and each file's cascade
-    // looks up threads by file_id alone, which the index above can't serve.
+    // For the file_id FK: a file's cascade looks up threads by file_id alone, which the index above can't serve.
     index('comment_threads_file_id_idx').on(table.fileId),
     // For SET NULL when a user is deleted.
     index('comment_threads_created_by_idx').on(table.createdBy),
@@ -75,7 +72,6 @@ export const comments = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    // Also serves as the index for the thread_id foreign key.
     index('comments_thread_id_created_at_idx').on(table.threadId, table.createdAt),
     index('comments_author_id_idx').on(table.authorId),
   ],

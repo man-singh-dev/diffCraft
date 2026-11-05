@@ -6,8 +6,7 @@ export const RegisterRequestSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
 });
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
-// No sign-up rules here (format, min 10): an account made under older rules must still
-// log in, and a wrong guess should get 401, not a 422 that hints at the rules.
+// No sign-up rules here: accounts made under older rules must still log in, and a wrong guess gets 401, not a hinting 422.
 export const LoginRequestSchema = z.object({
   email: z.string().trim().toLowerCase().min(1).max(254),
   password: z.string().min(1).max(128),

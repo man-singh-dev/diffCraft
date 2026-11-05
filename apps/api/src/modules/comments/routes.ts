@@ -38,11 +38,8 @@ function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
   return parsed.data;
 }
 
-// The checks run in a fixed order: review (404) → thread in this review (404) → comment in that
-// thread (404) → permission (403) → body (422). So a caller learns nothing about a thread or
-// comment they couldn't reach, and a forbidden request fails the same way whatever its body.
+// Checks run in a fixed order (review → thread → comment → permission → body), so callers learn nothing about what they can't reach.
 
-/** The review and the thread named in the URL; 404 unless the thread is in this review. */
 async function loadThread(
   app: FastifyInstance,
   request: FastifyRequest,
@@ -56,10 +53,6 @@ async function loadThread(
   return { review, thread };
 }
 
-/**
- * The comment named in the URL; 404 unless it is in *that* thread (not just the same review) and
- * not deleted. A deleted comment can't be edited or deleted again, so both get this 404.
- */
 async function loadComment(
   app: FastifyInstance,
   request: FastifyRequest,
@@ -75,12 +68,6 @@ async function loadComment(
   return { review, thread, comment };
 }
 
-/**
- * /:workspaceId/reviews/:reviewNumber/threads. Registered inside the review routes, so requireAuth
- * and the :reviewNumber check have run. Creating, replying and resolving need a member at least;
- * editing and deleting a comment are decided by canEditComment / canDeleteComment alone.
- * Comments are allowed on closed reviews.
- */
 export const commentRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Reply: Thread[] }>(
     '/',

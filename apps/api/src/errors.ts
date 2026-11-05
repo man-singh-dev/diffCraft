@@ -1,9 +1,5 @@
 import type { z } from 'zod';
 
-/**
- * An error that is safe to show to the client. The global error handler turns it into
- * `{ error: { code, message, details } }` with `statusCode`. Anything else becomes a 500.
- */
 export class AppError extends Error {
   constructor(
     readonly statusCode: number,
@@ -33,7 +29,6 @@ export class ForbiddenError extends AppError {
   }
 }
 
-/** 422 for a request body (or query string) that fails its Zod schema. */
 export class ValidationError extends AppError {
   constructor(issues: readonly z.core.$ZodIssue[], message = 'The request body is invalid.') {
     // Only path and message are copied: Zod issues can carry the input, which may be a password.

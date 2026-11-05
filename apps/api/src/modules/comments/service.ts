@@ -23,8 +23,7 @@ import { CommentAnchorInvalidError } from './errors.js';
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 type UserRef = Thread['createdBy'];
 
-// Every query is scoped to the review *and* its workspace: a thread or comment id from the URL
-// is never trusted on its own.
+// Every query is scoped to the review *and* its workspace: an id from the URL is never trusted on its own.
 const reviewInWorkspace = (workspaceId: string, reviewId: string) =>
   sql`exists (select 1 from ${reviews} where ${reviews.id} = ${reviewId} and ${reviews.workspaceId} = ${workspaceId})`;
 
@@ -33,8 +32,6 @@ const threadInReview = (workspaceId: string, reviewId: string) =>
 
 const userRef = (id: string | null, displayName: string | null): UserRef =>
   id !== null && displayName !== null ? { id, displayName } : null;
-
-// ---- Reading -------------------------------------------------------------------------------
 
 const commentColumns = {
   id: comments.id,
@@ -85,29 +82,26 @@ const creator = alias(users, 'creator');
 const resolver = alias(users, 'resolver');
 
 function selectThreads(db: Database | Tx, where: SQL | undefined) {
-  return (
-    db
-      .select({
-        thread: commentThreads,
-        creatorName: creator.displayName,
-        resolverName: resolver.displayName,
-        filePosition: reviewFiles.position,
-      })
-      .from(commentThreads)
-      .leftJoin(creator, eq(commentThreads.createdBy, creator.id))
-      .leftJoin(resolver, eq(commentThreads.resolvedBy, resolver.id))
-      .leftJoin(reviewFiles, eq(commentThreads.fileId, reviewFiles.id))
-      .where(where)
-      // Review-level threads first, then in diff order: file, side (old before new), line.
-      .orderBy(
-        sql`${commentThreads.fileId} is not null`,
-        asc(reviewFiles.position),
-        sql`case ${commentThreads.side} when 'old' then 0 else 1 end`,
-        asc(commentThreads.line),
-        asc(commentThreads.createdAt),
-        asc(commentThreads.id),
-      )
-  );
+  return db
+    .select({
+      thread: commentThreads,
+      creatorName: creator.displayName,
+      resolverName: resolver.displayName,
+      filePosition: reviewFiles.position,
+    })
+    .from(commentThreads)
+    .leftJoin(creator, eq(commentThreads.createdBy, creator.id))
+    .leftJoin(resolver, eq(commentThreads.resolvedBy, resolver.id))
+    .leftJoin(reviewFiles, eq(commentThreads.fileId, reviewFiles.id))
+    .where(where)
+    .orderBy(
+      sql`${commentThreads.fileId} is not null`,
+      asc(reviewFiles.position),
+      sql`case ${commentThreads.side} when 'old' then 0 else 1 end`,
+      asc(commentThreads.line),
+      asc(commentThreads.createdAt),
+      asc(commentThreads.id),
+    );
 }
 
 function toThread(
@@ -135,10 +129,7 @@ function toThread(
   };
 }
 
-/**
- * All threads of a review with their comments, in two queries whatever the number of threads:
- * the threads, then all their comments, grouped in memory.
- */
+// Two queries whatever the number of threads: the threads, then all their comments, grouped in memory.
 export async function listThreads(
   db: Database,
   workspaceId: string,
@@ -163,7 +154,6 @@ export async function listThreads(
   return threadRows.map((row) => toThread(row, byThread.get(row.thread.id) ?? []));
 }
 
-/** One thread with its comments; null unless it belongs to this review in this workspace. */
 export async function getThread(
   db: Database | Tx,
   workspaceId: string,
@@ -179,14 +169,12 @@ export async function getThread(
   return toThread(row, threadComments.map(toComment));
 }
 
-// Comments are scoped through their thread, which is scoped through the review.
 const commentInReview = (workspaceId: string, reviewId: string) =>
   inArray(
     comments.threadId,
     sql`(select ${commentThreads.id} from ${commentThreads} where ${threadInReview(workspaceId, reviewId)})`,
   );
 
-/** One comment; null unless it is in a thread of this review in this workspace. */
 export async function getComment(
   db: Database | Tx,
   workspaceId: string,
@@ -200,13 +188,9 @@ export async function getComment(
   return row ? toComment(row) : null;
 }
 
-// ---- Writing -------------------------------------------------------------------------------
-
-/** The text of the line an anchor points at, or null if that line isn't on that side of the hunks. */
 export function findAnchorLine(hunks: DiffHunk[], side: CommentAnchorInput['side'], line: number) {
   for (const hunk of hunks) {
     for (const diffLine of hunk.lines) {
-      // Deleted and context lines exist on the old side; added and context lines on the new.
       const number =
         side === 'old'
           ? diffLine.type !== 'add' && diffLine.oldNumber
@@ -243,11 +227,6 @@ async function resolveAnchor(
   return { ...anchor, lineContent };
 }
 
-/**
- * Starts a thread with its first comment, in one transaction. `input` must already be validated.
- * Throws ReviewNotFoundError, ReviewFileNotFoundError (the file isn't in this review) or
- * CommentAnchorInvalidError (binary file, or the line isn't on that side of the diff).
- */
 export async function createThread(
   db: Database,
   {
@@ -290,7 +269,6 @@ export async function createThread(
   });
 }
 
-/** Adds a comment to a thread; null if the thread isn't in this review. `body` must be validated. */
 export async function addReply(
   db: Database,
   {
@@ -314,7 +292,6 @@ export async function addReply(
   return row ? getComment(db, workspaceId, reviewId, row.id) : null;
 }
 
-/** Replaces a comment's body; null if it isn't in this review or is deleted. */
 export async function editComment(
   db: Database,
   workspaceId: string,
@@ -336,10 +313,7 @@ export async function editComment(
   return row ? getComment(db, workspaceId, reviewId, row.id) : null;
 }
 
-/**
- * Soft-deletes a comment: the row stays (so replies keep their place) with an empty body.
- * Null if it isn't in this review or is already deleted.
- */
+// Soft delete: the row stays, with an empty body, so replies keep their place.
 export async function deleteComment(
   db: Database,
   workspaceId: string,
@@ -360,10 +334,7 @@ export async function deleteComment(
   return row ? getComment(db, workspaceId, reviewId, row.id) : null;
 }
 
-/**
- * Sets a thread's status. Idempotent: setting the status it already has changes nothing, so
- * resolving twice keeps the first resolver and time. Null if the thread isn't in this review.
- */
+// Idempotent: setting the status it already has changes nothing, so resolving twice keeps the first resolver.
 export async function setThreadStatus(
   db: Database,
   {

@@ -5,7 +5,6 @@ import pg from 'pg';
 
 const migrationsFolder = fileURLToPath(new URL('../../drizzle', import.meta.url));
 
-/** Runs once before the api tests: applies all migrations to TEST_DATABASE_URL. */
 export default async function setup(): Promise<void> {
   const url = process.env.TEST_DATABASE_URL;
   if (!url) {
@@ -24,8 +23,7 @@ export default async function setup(): Promise<void> {
     await migrate(drizzle({ client: pool }), { migrationsFolder });
   } catch (error) {
     const message = 'Failed to run migrations against TEST_DATABASE_URL. Is Postgres running?';
-    // Printed as well as thrown: Vitest 5.0.5 can crash while printing global-setup
-    // errors ("code.charCodeAt is not a function"), which hides this message.
+    // Printed as well as thrown: Vitest 5.0.5 can crash printing global-setup errors ("code.charCodeAt is not a function").
     console.error(`\n[api] ${message}\n`);
     throw new Error(message, { cause: error });
   } finally {

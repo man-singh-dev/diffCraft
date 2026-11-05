@@ -4,8 +4,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { loadConfig } from './config.js';
 
-// Applies the pending drizzle/ migrations to DATABASE_URL, then exits. Run before the server
-// starts (`start:prod`). '../drizzle' resolves to apps/api/drizzle from both src/ and dist/.
+// '../drizzle' resolves to apps/api/drizzle from both src/ and dist/.
 const migrationsFolder = fileURLToPath(new URL('../drizzle', import.meta.url));
 
 let databaseUrl: string;

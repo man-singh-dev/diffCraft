@@ -34,7 +34,6 @@ async function render(view: 'unified' | 'split') {
 }
 
 const ids = (html: string) => [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
-/** The rendered text, still HTML-escaped: the markup between the tags. */
 const text = (html: string) => html.replace(/<[^>]+>/g, '');
 const hrefs = (html: string) => [...html.matchAll(/ href="([^"]+)"/g)].map((m) => m[1]);
 
@@ -43,7 +42,7 @@ describe('DiffTable (unified)', () => {
     const html = await render('unified');
     expect(ids(html)).toEqual([
       `f-${FILE}-R3`,
-      `f-${FILE}-L3`, // a context row's old number also has an id
+      `f-${FILE}-L3`,
       `f-${FILE}-L4`,
       `f-${FILE}-R4`,
       `f-${FILE}-R5`,
@@ -52,7 +51,6 @@ describe('DiffTable (unified)', () => {
       `f-${FILE}-L20`,
       `f-${FILE}-R21`,
     ]);
-    // A context line shows both numbers: the row is its new-side anchor, the old number its old one.
     expect(html).toMatch(new RegExp(`<tr id="f-${FILE}-R3"`));
     expect(html).toMatch(new RegExp(`id="f-${FILE}-L3" href="#f-${FILE}-L3"[^>]*>3</a>`));
     expect(html).toMatch(new RegExp(`href="#f-${FILE}-R3"[^>]*>3</a>`));
@@ -72,8 +70,8 @@ describe('DiffTable (unified)', () => {
     const html = await render('unified');
     expect(html).toContain('@@ -3,3 +3,4 @@ function render()');
     expect(html).toContain('@@ -20 +21 @@');
-    expect(html).toContain('⋯ 2 lines hidden'); // old lines 1–2 before the first hunk
-    expect(html).toContain('⋯ 14 lines hidden'); // old lines 6–19 between the hunks
+    expect(html).toContain('⋯ 2 lines hidden');
+    expect(html).toContain('⋯ 14 lines hidden');
     expect(html.match(/No newline at end of file/g)).toHaveLength(2);
   });
 
@@ -111,7 +109,6 @@ describe('DiffTable (split)', () => {
   it('a leftover added line has an empty left half', async () => {
     const html = await render('split');
     const row = html.split('<tr').find((tr) => tr.includes(`id="f-${FILE}-R5"`))!;
-    // Three empty, darker cells before the right half.
     expect(row.match(/<td class="[^"]*bg-slate-950\/70[^"]*"><\/td>/g)).toHaveLength(3);
     expect(row).toContain('added line: ');
     expect(row).not.toContain('removed line: ');
@@ -138,13 +135,11 @@ describe('DiffTable: changed-word emphasis', () => {
   const emphasisHunks = parsePatch(emphasisPatch).files[0]!.hunks;
   const EMPHASIS = /bg-(red|emerald)-400\/3\d/;
 
-  /** The emphasised text of each line, keyed by its line anchor's suffix ("L1", "R2", …). */
   async function emphasised(view: 'unified' | 'split') {
     const diff = await highlightedRows('config.ts', emphasisHunks, view);
     const html = renderToStaticMarkup(<DiffTable fileId={FILE} diff={diff} />);
     const byLine: Record<string, string[]> = {};
     for (const tr of html.split('<tr').slice(1)) {
-      // Unified rows have one anchor; split rows have one per half, each followed by its cells.
       const halves = tr.split(/(?= id="f-)/).filter((part) => part.startsWith(' id="f-'));
       for (const half of halves) {
         const line = /-(L|R)\d+(?=")/.exec(half)![0].slice(1);
@@ -162,8 +157,8 @@ describe('DiffTable: changed-word emphasis', () => {
       const lines = await emphasised(view);
       expect(lines.L1).toEqual(['3000']);
       expect(lines.R1).toEqual(['4000']);
-      expect(lines.R2).toEqual([]); // unpaired added line: line background only
-      expect(lines.R3).toEqual([]); // context
+      expect(lines.R2).toEqual([]);
+      expect(lines.R3).toEqual([]);
     },
   );
 

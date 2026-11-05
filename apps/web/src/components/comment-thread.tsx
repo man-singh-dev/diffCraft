@@ -12,10 +12,6 @@ const linkButton =
 
 export const threadElementId = (threadId: string) => `thread-${threadId}`;
 
-/**
- * A thread: its comments oldest first, a reply box, and Resolve / Reopen. A resolved thread is
- * collapsed to one line until expanded.
- */
 export function CommentThread({ thread }: { thread: Thread }) {
   const comments = useComments();
   const [expanded, setExpanded] = useState(false);
@@ -36,7 +32,6 @@ export function CommentThread({ thread }: { thread: Thread }) {
     const failure = await setStatus(thread.id, resolved ? 'open' : 'resolved');
     setStatusPending(false);
     if (failure) setError(failure.message);
-    // Resolving collapses the thread; reopening shows it.
     setExpanded(false);
   }
 

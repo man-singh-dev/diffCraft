@@ -34,13 +34,12 @@ function cellPieces(
   return { ...cell, pieces: mergePieces(tokens, cell.segments) };
 }
 
-/** Unified rows with syntax-highlighted, word-diffed pieces on every line. */
 export async function highlightedUnifiedRows(
   path: string,
   hunks: DiffHunk[],
 ): Promise<HighlightedUnifiedRow[]> {
   const tokens = await highlightHunks(path, hunks);
-  let hunkIndex = -1; // hunk rows come in hunk order
+  let hunkIndex = -1;
   return buildUnifiedRows(hunks).map((row) => {
     if (row.kind === 'hunk') hunkIndex++;
     if (row.kind !== 'line') return row;
@@ -51,7 +50,6 @@ export async function highlightedUnifiedRows(
   });
 }
 
-/** Split rows with syntax-highlighted, word-diffed pieces in every cell. */
 export async function highlightedSplitRows(
   path: string,
   hunks: DiffHunk[],
@@ -76,7 +74,6 @@ export async function highlightedSplitRows(
   });
 }
 
-/** A file's rendered rows in one view. */
 export type DiffRows =
   | { view: 'unified'; rows: HighlightedUnifiedRow[] }
   | { view: 'split'; rows: HighlightedSplitRow[] };

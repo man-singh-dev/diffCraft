@@ -7,19 +7,13 @@ import { env } from './env.server';
 // Must match SESSION_COOKIE_NAME in apps/api/src/modules/auth/session.ts.
 export const SESSION_COOKIE_NAME = 'diffcraft_session';
 
-/**
- * The logged-in user for the current request, or null. A missing cookie, a 401, an
- * unreachable API and an unexpected body all mean "not logged in".
- */
 export async function getCurrentUser(): Promise<PublicUser | null> {
-  // Outside the try in fetchCurrentUser on purpose: during prerendering cookies() throws to
-  // tell Next.js the page is dynamic, and that signal must not be swallowed.
+  // Outside the try on purpose: during prerendering cookies() throws to mark the page dynamic, which must not be swallowed.
   const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
   return fetchCurrentUser(env.API_URL, token);
 }
 
-/** The GET /me call behind getCurrentUser. Never throws. */
 export async function fetchCurrentUser(
   apiUrl: string,
   token: string,

@@ -2,11 +2,9 @@ import type { FieldErrors } from './form-errors';
 
 export type CommentErrorCode = 'unauthorized' | 'forbidden' | 'not_found' | 'invalid' | 'failed';
 
-/** What a comment action returns on failure: a message to show, and the body's field error. */
 export interface CommentActionError {
   code: CommentErrorCode;
   message: string;
-  /** The body's validation message (from the shared schema or the API's 422), if any. */
   bodyError?: string;
 }
 
@@ -27,7 +25,6 @@ export const NOT_FOUND_ERROR: CommentActionError = {
   message: "This review doesn't exist any more.",
 };
 
-/** Maps a failed API call (status, error code, 422 field errors) to a comment action error. */
 export function toCommentError(failure: {
   status: number;
   code: string | null;

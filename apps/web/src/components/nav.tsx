@@ -12,7 +12,6 @@ const LINKS = [
 const linkClass =
   'rounded-md px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 aria-[current=page]:bg-slate-800 aria-[current=page]:text-white disabled:opacity-60';
 
-/** Top bar for logged-in pages. */
 export function Nav() {
   const pathname = usePathname();
 

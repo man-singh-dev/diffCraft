@@ -26,7 +26,6 @@ export const requestWorkspacePlugin = fp(
   { name: 'request-workspace' },
 );
 
-/** preHandler for /:workspaceId routes; must run after requireAuth. */
 export function requireWorkspaceRole(minimum: WorkspaceRole): preHandlerAsyncHookHandler {
   return async (request) => {
     const { workspaceId } = request.params as { workspaceId?: string };

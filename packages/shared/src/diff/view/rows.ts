@@ -9,7 +9,6 @@ export interface HunkRow {
   section: string | null;
 }
 
-/** Lines of the file that are not in the patch. */
 export interface GapRow {
   kind: 'gap';
   key: string;
@@ -46,7 +45,6 @@ export interface SplitLineRow {
 
 export type SplitRow = HunkRow | GapRow | SplitLineRow;
 
-/** First line and end (exclusive) of the range a hunk covers on one side. */
 function hunkRange(hunk: DiffHunk): { first: number; end: number } {
   // An added file has an empty old side (-0,0), so measure on the new side.
   const useNew = hunk.oldStart === 0 && hunk.oldLines === 0;
@@ -68,7 +66,6 @@ function hunkRow(hunk: DiffHunk, index: number): HunkRow {
   return { kind: 'hunk', key: `h${index}`, header: hunk.header, section: hunk.section };
 }
 
-/** Gap and hunk header rows, then the hunk's own rows. */
 function buildRows<T>(
   hunks: DiffHunk[],
   hunkRows: (hunk: DiffHunk, index: number) => T[],
@@ -95,7 +92,6 @@ function unifiedLine({ line, segments }: PairedLine, hunkIndex: number): Unified
   };
 }
 
-/** Rows for a unified (one column) diff view. */
 export function buildUnifiedRows(hunks: DiffHunk[]): UnifiedRow[] {
   return buildRows(hunks, (hunk, index) =>
     pairHunkLines(hunk).flatMap((block) =>
@@ -133,7 +129,6 @@ function splitLine(
   };
 }
 
-/** Rows for a side-by-side diff view: old on the left, new on the right. */
 export function buildSplitRows(hunks: DiffHunk[]): SplitRow[] {
   return buildRows(hunks, (hunk, index) =>
     pairHunkLines(hunk).flatMap((block) => {

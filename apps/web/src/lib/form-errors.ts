@@ -1,17 +1,14 @@
 import type { z } from 'zod';
 
-/** One error message per form field, keyed by field name. */
 export type FieldErrors = Partial<Record<string, string>>;
 
-/** Keeps the first message for each field. */
 export function toFieldErrors(issues: readonly { field: string; message: string }[]): FieldErrors {
   const errors: FieldErrors = {};
   for (const { field, message } of issues) errors[field] ??= message;
   return errors;
 }
 
-// Friendlier wording than Zod's defaults, without changing the shared schemas (and so the
-// API's 422 messages). Undefined falls back to Zod's own message.
+// Friendlier wording than Zod's defaults without changing the shared schemas (and so the API's 422s). Undefined keeps Zod's.
 function friendlyMessage(issue: z.core.$ZodRawIssue): string | undefined {
   switch (issue.code) {
     case 'too_small':
@@ -27,7 +24,6 @@ function friendlyMessage(issue: z.core.$ZodRawIssue): string | undefined {
   }
 }
 
-/** Validates form input against a shared request schema, before it is sent. */
 export function validateForm<T extends z.ZodType>(
   schema: T,
   input: unknown,

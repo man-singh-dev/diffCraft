@@ -7,7 +7,6 @@ import { dangerButton } from '@/components/styles';
 import { deleteWorkspace } from '@/lib/api-client';
 import { describeApiError } from '@/lib/api-errors';
 
-/** Deletion can't be undone, so the owner has to type the name to enable the button. */
 export function DeleteWorkspace({ workspaceId, name }: { workspaceId: string; name: string }) {
   const router = useRouter();
   const [typed, setTyped] = useState('');

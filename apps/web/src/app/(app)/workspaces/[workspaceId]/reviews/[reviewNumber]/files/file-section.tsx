@@ -8,7 +8,6 @@ import { smallSecondaryButton } from '@/components/styles';
 import { fileSectionId } from '@/lib/diff-params';
 import { onRevealFile } from '@/lib/reveal-file';
 
-/** One file on the files page: a sticky header with a collapse button, and its diff. */
 export function FileSection({ file, children }: { file: ReviewFile; children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const comments = useComments();

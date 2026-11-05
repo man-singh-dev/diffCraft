@@ -1,4 +1,3 @@
-/** The centred card every page sits in, with a gradient title and a short description. */
 export function PageCard({
   title,
   description,
@@ -7,7 +6,6 @@ export function PageCard({
 }: {
   title: string;
   description: string;
-  /** For pages with lists or tables, like a workspace's members. */
   wide?: boolean;
   children: React.ReactNode;
 }) {

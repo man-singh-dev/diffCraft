@@ -20,9 +20,7 @@ import { NOT_FOUND_ERROR, toCommentError, type CommentActionResult } from './com
 import { validateForm } from './form-errors';
 import { isReviewNumber, isUuid } from './review-params';
 
-// Public endpoints: anyone who can POST to the page can call these with any arguments. So every
-// argument is checked here before the API is called (which checks access with the user's
-// cookie), and only the API's response shape is returned.
+// Public endpoints callable with any arguments: every argument is checked here; the API checks access with the user's cookie.
 
 const isId = (value: unknown): value is string => typeof value === 'string' && isUuid(value);
 const isNumber = (value: unknown): value is string =>

@@ -19,7 +19,7 @@ const { highlightedRows } = await import('../lib/diff-view.server.js');
 
 const WS = '3f2b8c1e-5d4a-4e6b-9c7d-1a2b3c4d5e6f';
 const FILE = '01a17e5e-aa56-7985-be46-bf5f1c7e7fd2';
-const AUTHOR = '01a17e5e-aa56-7985-be46-bf5f1c7e7f01'; // wrote the comments and the thread
+const AUTHOR = '01a17e5e-aa56-7985-be46-bf5f1c7e7f01';
 const OTHER = '01a17e5e-aa56-7985-be46-bf5f1c7e7f02';
 const REVIEW_AUTHOR = '01a17e5e-aa56-7985-be46-bf5f1c7e7f03';
 
@@ -72,7 +72,6 @@ function render(node: React.ReactNode, threads: Thread[], userId: string, role: 
 const renderThread = (thread: Thread, userId: string, role: WorkspaceRole) =>
   render(<CommentThread thread={thread} />, [thread], userId, role);
 
-/** The labels of the buttons in the markup. */
 const buttons = (html: string) =>
   [...html.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((m) => m[1]);
 
@@ -100,7 +99,6 @@ describe('CommentThread', () => {
     expect(html).toContain(`id="thread-${thread.id}"`);
   });
 
-  // Buttons for a thread started by AUTHOR with one comment by AUTHOR, on REVIEW_AUTHOR's review.
   it.each([
     ['the author (member)', AUTHOR, 'member', ['Edit', 'Delete', 'Reply', 'Resolve']],
     ['another member', OTHER, 'member', ['Reply']],
@@ -173,7 +171,6 @@ describe('line threads in DiffTable', () => {
 
     expect(under(`f-${FILE}-L2`)).toContain('on the removed line');
     expect(under(`f-${FILE}-R2`)).toContain('on the added line');
-    // The context row "const c = 4;" (old 3, new 3) is the new-side anchor R3.
     expect(under(`f-${FILE}-R3`)).toContain('old side of a context line');
   });
 

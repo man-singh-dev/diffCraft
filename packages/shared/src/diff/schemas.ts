@@ -11,13 +11,11 @@ export const DiffLineSchema = z.object({
 export type DiffLine = z.infer<typeof DiffLineSchema>;
 
 export const DiffHunkSchema = z.object({
-  /** The full "@@ … @@" line. */
   header: z.string(),
   oldStart: z.number().int().nonnegative(),
   oldLines: z.number().int().nonnegative(),
   newStart: z.number().int().nonnegative(),
   newLines: z.number().int().nonnegative(),
-  /** Text after the second "@@" (usually the enclosing function), or null. */
   section: z.string().nullable(),
   lines: z.array(DiffLineSchema),
 });
@@ -26,9 +24,7 @@ export type DiffHunk = z.infer<typeof DiffHunkSchema>;
 export const DIFF_CHANGE_TYPES = ['added', 'deleted', 'modified', 'renamed'] as const;
 
 export const DiffFileSchema = z.object({
-  /** Null for an added file; the source for a copy. */
   oldPath: z.string().nullable(),
-  /** Null for a deleted file. */
   newPath: z.string().nullable(),
   changeType: z.enum(DIFF_CHANGE_TYPES),
   isBinary: z.boolean(),

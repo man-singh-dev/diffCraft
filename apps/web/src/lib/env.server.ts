@@ -1,7 +1,3 @@
-// This module must only ever be imported on the server.
-// The `server-only` package enforces that: if this file is accidentally
-// imported in a Client Component or an API route edge runtime, Next.js
-// will throw a build-time error.
 import 'server-only';
 
 import { formatZodIssues } from '@diffcraft/shared';

@@ -6,7 +6,6 @@ import { ParsedPatchSchema, type DiffLine } from './schemas.js';
 const fixture = (name: string) =>
   readFileSync(new URL(`./fixtures/${name}.patch`, import.meta.url), 'utf8');
 
-/** Parses a fixture and checks the result against the shared schema. */
 function parseFixture(name: string) {
   const parsed = parsePatch(fixture(name));
   expect(ParsedPatchSchema.parse(parsed)).toEqual(parsed);

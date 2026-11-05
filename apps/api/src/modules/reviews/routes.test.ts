@@ -24,7 +24,6 @@ const BASE = '/api/v1/workspaces';
 // U+FEFF, built from its code point so no invisible character sits in this file.
 const BOM = String.fromCharCode(0xfeff);
 
-// Two files in patch order: one modified, one added.
 const PATCH = `diff --git a/src/app.ts b/src/app.ts
 --- a/src/app.ts
 +++ b/src/app.ts
@@ -44,8 +43,7 @@ type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type Endpoint = 'create' | 'list' | 'get' | 'update' | 'delete' | 'files' | 'diff';
 type Caller = 'logged out' | 'non-member' | WorkspaceRole;
 
-// Expected status per endpoint and caller. The review is the owner's, so for update and delete a
-// member is editing someone else's review.
+// The review is the owner's, so for update and delete a member is editing someone else's review.
 const MATRIX: Record<Endpoint, Record<Caller, number>> = {
   create: {
     'logged out': 401,
@@ -131,7 +129,6 @@ describeWithDb('review routes', () => {
     return ReviewSchema.parse(res.json());
   }
 
-  /** A workspace with an owner and one review by the owner. */
   async function setup() {
     const owner = await createUserWithSession(app.db);
     const workspace = await createWorkspace(owner);
@@ -245,7 +242,6 @@ describeWithDb('review routes', () => {
 
     it("can't reach a review of workspace B through workspace A", async () => {
       const a = await setup();
-      // B's review is #2 there, so A (which only has #1) has no review with that number.
       const b = await setup();
       const bReview = await createReview(b.workspace.id, b.owner);
       // a.owner is also a member of B, so this only tests the URL's workspace scoping.
@@ -263,7 +259,6 @@ describeWithDb('review routes', () => {
         expect(errorOf(res).code).toBe('review_not_found');
       }
 
-      // A's #1 exists, but B's file is not one of its files.
       const diff = await call(
         'GET',
         reviewsUrl(a.workspace.id, `/${a.review.number}/files/${fileId}/diff`),
@@ -271,7 +266,6 @@ describeWithDb('review routes', () => {
       );
       expect(diff.statusCode).toBe(404);
       expect(errorOf(diff).code).toBe('review_file_not_found');
-      // And nothing in B changed.
       const after = await call('GET', reviewsUrl(b.workspace.id, `/${bReview.number}`), b.owner);
       expect(ReviewSchema.parse(after.json())).toEqual(bReview);
     });
@@ -322,7 +316,6 @@ describeWithDb('review routes', () => {
         additions: 2,
         deletions: 1,
       });
-      // Exactly the schema's keys: no patch or other internal columns.
       expect(Object.keys(res.json() as object).sort()).toEqual(
         Object.keys(ReviewSchema.shape).sort(),
       );
@@ -406,8 +399,8 @@ describeWithDb('review routes', () => {
 
     it('accepts a ~1 MB patch whose JSON is larger than the global 1 MiB body limit', async () => {
       const { owner, workspace } = await setup();
-      // Quotes are escaped in JSON (one character becomes two), so the body grows by half.
-      const line = `+${'"'.repeat(30)}${'x'.repeat(28)}`; // 60 bytes with its newline
+      // 60 bytes per line with its newline; each quote doubles in JSON, so the body grows by half.
+      const line = `+${'"'.repeat(30)}${'x'.repeat(28)}`;
       const count = 17_400;
       const patch = `--- /dev/null\n+++ b/big.txt\n@@ -0,0 +1,${count} @@\n${`${line}\n`.repeat(count)}`;
       const body = JSON.stringify({ title: 'Big', patch });
@@ -518,13 +511,11 @@ describeWithDb('review routes', () => {
       expect(pages).toEqual([10, 10, 5]);
       expect(new Set(ids).size).toBe(25);
 
-      // The exact database order, at full precision.
       const expected = await app.db.execute<{ id: string; created_at: string }>(
         sql`select id, created_at::text as created_at from reviews
             where workspace_id = ${workspace.id} order by created_at desc, id desc`,
       );
       expect(ids).toEqual(expected.rows.map((row) => row.id));
-      // Strictly newest first: (created_at, id) decreases from each row to the next.
       for (let k = 1; k < expected.rows.length; k++) {
         const [prev, cur] = [expected.rows[k - 1]!, expected.rows[k]!];
         expect(
@@ -635,7 +626,6 @@ describeWithDb('review routes', () => {
         .from(reviewFiles)
         .where(eq(reviewFiles.reviewId, review.id));
       expect(files).toEqual([]);
-      // The number is not reused.
       expect((await createReview(workspace.id, owner)).number).toBe(2);
     });
   });

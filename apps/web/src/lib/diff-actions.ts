@@ -9,10 +9,7 @@ export type LoadFileDiffError = 'unauthorized' | 'not_found' | 'failed';
 export type LoadFileDiffResult =
   { ok: true; diff: DiffRows } | { ok: false; error: LoadFileDiffError };
 
-/**
- * A file's highlighted diff rows, for the "Load diff" button. Reachable by anyone who can POST to
- * the page, so every argument is checked here, and the API checks access with the user's cookie.
- */
+// Reachable by anyone who can POST to the page: every argument is checked here; the API checks access with the user's cookie.
 export async function loadFileDiff(
   workspaceId: unknown,
   reviewNumber: unknown,

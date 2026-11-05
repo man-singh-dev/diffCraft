@@ -16,7 +16,6 @@ import { describeReviewError } from '@/lib/review-errors';
 
 type Pending = 'save' | 'status' | 'delete' | null;
 
-/** Edit, close/reopen and delete, for a user canEditReview allows. */
 export function ReviewControls({ workspaceId, review }: { workspaceId: string; review: Review }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);

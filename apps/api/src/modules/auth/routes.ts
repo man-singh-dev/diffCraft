@@ -30,8 +30,7 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (app, { s
 
     const user = await verifyCredentials(app.db, parsed.data, request.log);
 
-    // Session fixation defence: never reuse a session from before login. Always issue a
-    // new one, and drop the old one if the browser sent it.
+    // Session fixation defence: always issue a new session on login, and drop the old one if sent.
     const previousToken = request.cookies[SESSION_COOKIE_NAME];
     if (previousToken) await deleteSession(app.db, previousToken);
     const { token } = await createSession(app.db, user.id);

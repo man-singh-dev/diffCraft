@@ -137,7 +137,6 @@ describeWithDb('login, /me and logout', () => {
     await app.close();
   });
 
-  /** Registers a fresh user and returns its email and public data. */
   const createUser = async () => {
     const email = uniqueEmail();
     const res = await app.inject({
@@ -152,7 +151,6 @@ describeWithDb('login, /me and logout', () => {
   const login = (email: string, password = PASSWORD) =>
     app.inject({ method: 'POST', url: LOGIN_URL, payload: { email, password } });
 
-  /** Logs in and returns the raw session token from Set-Cookie. */
   const loginToken = async (email: string) => {
     const res = await login(email);
     expect(res.statusCode).toBe(200);

@@ -1,4 +1,3 @@
-// Production build: bundles the API entry points into dist/. Run with `pnpm build`.
 import { readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { build } from 'esbuild';
@@ -8,9 +7,7 @@ const pkg = JSON.parse(readFileSync(path.join(apiRoot, 'package.json'), 'utf8'))
   dependencies: Record<string, string>;
 };
 
-// npm dependencies stay external: they're installed on the server, and some can't be bundled
-// (@node-rs/argon2 loads a native binary). Workspace packages are raw TypeScript, so they're
-// bundled in.
+// npm deps stay external (@node-rs/argon2 loads a native binary); workspace packages are raw TS, so they're bundled.
 const external = Object.entries(pkg.dependencies)
   .filter(([, version]) => !version.startsWith('workspace:'))
   .map(([name]) => name);
@@ -31,8 +28,7 @@ const result = await build({
   logLevel: 'info',
 });
 
-// Guard: an npm package that isn't in "dependencies" (e.g. a devDependency) would otherwise
-// be bundled silently. Workspace packages resolve to packages/*, never to node_modules.
+// Guard: a package missing from "dependencies" (e.g. a devDependency) would otherwise be bundled silently.
 const bundledNpmFiles = Object.keys(result.metafile.inputs).filter((input) =>
   input.includes('node_modules'),
 );

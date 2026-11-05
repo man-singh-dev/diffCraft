@@ -1,11 +1,7 @@
 import { z } from 'zod';
 import { UUID_PATTERN } from '../workspaces/require-workspace-role.js';
 
-/**
- * Position after the last item of a page: its created_at and id. `createdAt` is the database
- * value with all six fractional digits, in UTC. It must never go through a JS Date, which keeps
- * only milliseconds: rows created in the same millisecond would then be skipped or repeated.
- */
+// createdAt keeps all six fractional digits (UTC). Never pass it through a JS Date (ms only): same-millisecond rows would be skipped or repeated.
 export interface ReviewCursor {
   createdAt: string;
   id: string;
@@ -35,7 +31,6 @@ export function encodeCursor(cursor: ReviewCursor): string {
   );
 }
 
-/** The cursor, or null if `value` is not one this API produced. */
 export function decodeCursor(value: string): ReviewCursor | null {
   // Buffer's decoder silently skips characters outside the alphabet, so check them first.
   if (!BASE64URL_PATTERN.test(value)) return null;

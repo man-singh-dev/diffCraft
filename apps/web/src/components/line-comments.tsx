@@ -6,10 +6,8 @@ import { CommentComposer } from './comment-composer';
 import { CommentThread } from './comment-thread';
 import { useComments } from './comments-provider';
 
-// Client islands inside the hook-free DiffTable. Outside a CommentsProvider they render nothing,
-// so a diff can still be rendered on its own.
+// Client islands inside the hook-free DiffTable. Outside a CommentsProvider they render nothing.
 
-/** The "+" that opens a composer under a line; shown on row hover and keyboard focus. */
 export function AddCommentButton({ target, className }: { target: LineTarget; className: string }) {
   const comments = useComments();
   if (!comments || comments.loadFailed || !canComment(comments.viewer.role)) return null;
@@ -25,7 +23,6 @@ export function AddCommentButton({ target, className }: { target: LineTarget; cl
   );
 }
 
-/** The threads of one side of a line, and its composer when open. Null when there's neither. */
 function LineConversation({ keys, target }: { keys: string[]; target: LineTarget | null }) {
   const comments = useComments();
   if (!comments) return null;
@@ -67,7 +64,6 @@ function hasConversation(
   return composing || comments.threadsForKeys(keys).length > 0;
 }
 
-/** A full-width row under a unified line with its threads (and composer); nothing if there are none. */
 export function UnifiedThreadsRow({
   keys,
   target,
@@ -93,7 +89,6 @@ interface SplitSide {
   target: LineTarget;
 }
 
-/** A row under a split line: each side's threads under its own half; nothing if neither has any. */
 export function SplitThreadsRow({
   left,
   right,

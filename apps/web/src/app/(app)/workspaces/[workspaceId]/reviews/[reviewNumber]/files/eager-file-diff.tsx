@@ -5,7 +5,6 @@ import type { DiffView } from '@/lib/diff-params';
 import { highlightedRows } from '@/lib/diff-view.server';
 import { LazyFileDiff } from './lazy-file-diff';
 
-/** A diff rendered on the server, streamed in through its own Suspense boundary. */
 export async function EagerFileDiff({
   workspaceId,
   reviewNumber,

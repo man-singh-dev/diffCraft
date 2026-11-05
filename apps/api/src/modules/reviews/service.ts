@@ -31,10 +31,6 @@ export function toReview(row: ReviewRow, author: Review['author']): Review {
   };
 }
 
-/**
- * Parses the patch and stores the review with its files. `input` must already be validated.
- * Throws DiffParseError for a patch the parser rejects, before anything is written.
- */
 export async function createReview(
   db: Database,
   {
@@ -66,8 +62,7 @@ export async function createReview(
       .returning();
     if (!row) throw new Error('INSERT ... RETURNING returned no row');
 
-    // One statement for all files: 300 files (the parser's limit) × 9 values stays far below
-    // Postgres's 65,535 bind parameters.
+    // One statement for all files: 300 files × 9 values stays far below Postgres's 65,535 bind parameters.
     if (files.length > 0) {
       await tx.insert(reviewFiles).values(
         files.map((file, position) => ({
@@ -92,7 +87,6 @@ export async function createReview(
   });
 }
 
-/** Increments the workspace's counter; the UPDATE's row lock serialises concurrent creates. */
 async function nextReviewNumber(tx: Tx, workspaceId: string): Promise<number> {
   const [counter] = await tx
     .update(workspaces)
@@ -107,7 +101,6 @@ async function nextReviewNumber(tx: Tx, workspaceId: string): Promise<number> {
   return counter.number;
 }
 
-// A review with its author, for every read. Left join: the author may have been deleted.
 const reviewWithAuthor = {
   review: reviews,
   authorId: users.id,
@@ -138,7 +131,6 @@ async function findReview(db: Database, where: SQL | undefined): Promise<Review 
   return row ? fromJoinedRow(row) : null;
 }
 
-/** Matches both ids, so a review can't be read through a workspace it isn't in. */
 export async function getReview(
   db: Database,
   workspaceId: string,
@@ -147,7 +139,6 @@ export async function getReview(
   return findReview(db, and(eq(reviews.id, reviewId), eq(reviews.workspaceId, workspaceId)));
 }
 
-/** By the per-workspace number used in URLs ("#12"). */
 export async function getReviewByNumber(
   db: Database,
   workspaceId: string,
@@ -163,10 +154,6 @@ export interface ListReviewsOptions {
   cursor?: ReviewCursor;
 }
 
-/**
- * One page of the workspace's reviews, newest first, with keyset pagination on
- * (created_at, id), which the reviews_workspace_id_created_at_id_idx index serves.
- */
 export async function listReviews(
   db: Database,
   workspaceId: string,
@@ -191,7 +178,6 @@ export async function listReviews(
       ),
     )
     .orderBy(desc(reviews.createdAt), desc(reviews.id))
-    // One extra row says whether there is a next page.
     .limit(limit + 1);
 
   const page = rows.slice(0, limit);
@@ -205,7 +191,6 @@ export async function listReviews(
   };
 }
 
-/** Applies the fields that are set; null if the review is not in the workspace. */
 export async function updateReview(
   db: Database,
   workspaceId: string,
@@ -224,7 +209,6 @@ export async function updateReview(
   return row ? getReview(db, workspaceId, row.id) : null;
 }
 
-/** Deletes the review and (by cascade) its files; false if it is not in the workspace. */
 export async function deleteReview(
   db: Database,
   workspaceId: string,
@@ -252,7 +236,6 @@ const reviewFileColumns = {
 const fileInWorkspace = (workspaceId: string, reviewId: string) =>
   and(eq(reviewFiles.reviewId, reviewId), eq(reviews.workspaceId, workspaceId));
 
-/** The review's files in patch order, without their hunks. */
 export async function listReviewFiles(
   db: Database,
   workspaceId: string,
@@ -266,7 +249,6 @@ export async function listReviewFiles(
     .orderBy(asc(reviewFiles.position));
 }
 
-/** One file with its hunks; null unless it belongs to this review in this workspace. */
 export async function getReviewFileDiff(
   db: Database,
   workspaceId: string,

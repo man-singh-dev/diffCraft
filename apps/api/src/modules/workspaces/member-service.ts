@@ -57,7 +57,6 @@ function toMember(row: { joinedAt: Date } & Omit<WorkspaceMember, 'joinedAt'>): 
   return { ...row, joinedAt: row.joinedAt.toISOString() };
 }
 
-/** canManageMember as a 403; `nextRole` is undefined for a removal. */
 export function assertCanManage(
   actorRole: WorkspaceRole,
   targetRole: WorkspaceRole | null,
@@ -66,7 +65,6 @@ export function assertCanManage(
   if (!canManageMember(actorRole, targetRole, nextRole)) throw new ForbiddenError();
 }
 
-/** Members of the workspace: owners first, then by join date. */
 export async function listMembers(db: Database, workspaceId: string): Promise<WorkspaceMember[]> {
   const rows = await db
     .select(memberColumns)
@@ -102,16 +100,8 @@ async function countOwners(tx: Tx, workspaceId: string): Promise<number> {
   return row?.owners ?? 0;
 }
 
-/**
- * Runs `change` in a transaction that holds the workspace row lock, with the actor's role
- * re-read under that lock.
- *
- * Why the lock: "count owners, then demote/remove one" is check-then-act. Under READ COMMITTED,
- * two owners demoting each other at once would each see 2 owners, update different rows (so
- * no row conflict), and leave the workspace with none. Every membership change locks the same
- * workspace row first, so they run one at a time and each sees the previous one's result.
- * The role from requireWorkspaceRole is re-read for the same reason: it may have just changed.
- */
+// "Count owners, then demote/remove" is check-then-act: under READ COMMITTED two owners demoting each other
+// would leave none. Every change locks the workspace row first, and re-reads the actor's role under it.
 async function withWorkspaceLock<T>(
   db: Database,
   workspaceId: string,
@@ -132,7 +122,6 @@ async function withWorkspaceLock<T>(
   });
 }
 
-/** Adds an existing user by email. `input` must already be validated (email lowercased). */
 export async function addMember(
   db: Database,
   workspaceId: string,
@@ -186,7 +175,6 @@ export async function changeMemberRole(
   });
 }
 
-/** Removes another member; the caller leaves with leaveWorkspace instead. */
 export async function removeMember(
   db: Database,
   workspaceId: string,
@@ -202,7 +190,6 @@ export async function removeMember(
   });
 }
 
-/** Any member may leave, except the last owner. */
 export async function leaveWorkspace(
   db: Database,
   workspaceId: string,

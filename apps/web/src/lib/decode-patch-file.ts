@@ -6,10 +6,7 @@ export type DecodeResult = { ok: true; text: string } | { ok: false; message: st
 export const TOO_LARGE_MESSAGE = 'This file is larger than 1 MiB, the limit for a patch.';
 export const INVALID_TEXT_MESSAGE = "This file isn't valid UTF-8 or UTF-16.";
 
-/**
- * Decodes a patch file's bytes by its byte order mark: UTF-16 LE or BE, or UTF-8 (with or
- * without one). The BOM is removed. Invalid bytes are an error, not replacement characters.
- */
+/** Invalid bytes are an error, not replacement characters. */
 export function decodePatchBytes(bytes: Uint8Array): DecodeResult {
   let encoding = 'utf-8';
   let start = 0;
@@ -26,7 +23,6 @@ export function decodePatchBytes(bytes: Uint8Array): DecodeResult {
   }
 }
 
-/** Reads a chosen file as patch text. The size is checked before anything is read. */
 export async function readPatchFile(file: Blob): Promise<DecodeResult> {
   if (file.size > MAX_PATCH_FILE_BYTES) return { ok: false, message: TOO_LARGE_MESSAGE };
   try {

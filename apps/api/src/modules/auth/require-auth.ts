@@ -19,10 +19,6 @@ export const requestUserPlugin = fp(
   { name: 'request-user' },
 );
 
-/**
- * preHandler for routes that need a logged-in user: cookie → session → request.user.
- * A missing, unknown or expired session is a 401.
- */
 export const requireAuth: preHandlerAsyncHookHandler = async (request) => {
   const token = request.cookies[SESSION_COOKIE_NAME];
   if (!token) throw new UnauthenticatedError();
@@ -31,7 +27,6 @@ export const requireAuth: preHandlerAsyncHookHandler = async (request) => {
   request.user = user;
 };
 
-/** request.user in a route behind requireAuth. Throws (401) if requireAuth didn't run. */
 export function authUser(request: FastifyRequest): SessionUser {
   if (!request.user) throw new UnauthenticatedError();
   return request.user;

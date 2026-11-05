@@ -39,12 +39,10 @@ describe('highlightedUnifiedRows', () => {
       true,
     );
 
-    // Unpaired deleted line: the whole line is changed, but still colored.
     const unused = lines.find((l) => l.oldNumber === 3)!;
     expect(unused.pieces.every((p) => p.changed)).toBe(true);
     expect(unused.pieces.some((p) => p.color !== null)).toBe(true);
 
-    // The context line after the added "comment */" is code again on the new side.
     const exportLine = lines.at(-1)!;
     const commentColor = lines[0]!.pieces[0]!.color;
     expect(exportLine.pieces.find((p) => p.text.startsWith('export'))?.color).not.toBe(

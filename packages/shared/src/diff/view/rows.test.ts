@@ -15,7 +15,6 @@ const fixturesDir = new URL('../fixtures/', import.meta.url);
 const fixtureHunks = (name: string): DiffHunk[] =>
   parsePatch(readFileSync(new URL(`${name}.patch`, fixturesDir), 'utf8')).files[0]!.hunks;
 
-/** Hunks of a one-file patch with the given hunk bodies. */
 function hunksOf(...bodies: [header: string, lines: string[]][]): DiffHunk[] {
   const text = ['--- a/f', '+++ b/f', ...bodies.flatMap(([h, lines]) => [h, ...lines]), ''];
   return parsePatch(text.join('\n')).files[0]!.hunks;
@@ -23,7 +22,6 @@ function hunksOf(...bodies: [header: string, lines: string[]][]): DiffHunk[] {
 
 const nl = (noNewlineAtEnd: boolean) => (noNewlineAtEnd ? ' ⏎̸' : '');
 
-/** One short string per unified row: "gap 17", "@@ … @@", "-3 . del line 3". */
 const unified = (rows: UnifiedRow[]) =>
   rows.map((row) => {
     if (row.kind === 'gap') return `gap ${row.hiddenLines}`;
@@ -37,7 +35,6 @@ const cell = (c: SplitCell | null) =>
     ? `${{ context: ' ', add: '+', del: '-' }[c.type]}${c.number} ${c.content}${nl(c.noNewlineAtEnd)}`
     : '';
 
-/** One short string per split row: "-3 line 3 | +3 line three". */
 const split = (rows: SplitRow[]) =>
   rows.map((row) => {
     if (row.kind === 'gap') return `gap ${row.hiddenLines}`;
@@ -218,11 +215,9 @@ describe('row invariants over every fixture', () => {
   it.each(files)('%s', (_name, hunks) => {
     const expected = hunks.flatMap((h) => h.lines.map(lineKey));
 
-    // Unified: every hunk line exactly once, in patch order, with its own numbers.
     const unifiedRows = buildUnifiedRows(hunks);
     expect(unifiedRows.filter((r) => r.kind === 'line').map(lineKey)).toEqual(expected);
 
-    // Split: every hunk line in exactly one row (a context line fills both cells of its row).
     const splitRows = buildSplitRows(hunks);
     const fromSplit = splitRows.flatMap((row) => {
       if (row.kind !== 'line') return [];

@@ -12,13 +12,10 @@ import { errorHandlerPlugin } from './plugins/error-handler.js';
 import { healthRoutes } from './routes/health.js';
 import { readyRoutes } from './routes/ready.js';
 
-/** Builds the Fastify app without listening, so tests can use app.inject(). */
 export async function buildApp(config: Config): Promise<FastifyInstance> {
   const app = Fastify({
     logger: loggerOptions(config.LOG_LEVEL),
-    // In production the API sits behind the host's proxy, so the TCP peer is the proxy, not the
-    // client. Only trusted proxy addresses are skipped (not `true`, which would believe any
-    // X-Forwarded-For entry a client sends), so request.ip is the real client.
+    // Trust only known proxy addresses, not `true`, which would believe any X-Forwarded-For a client sends.
     trustProxy: config.NODE_ENV === 'production' ? config.TRUST_PROXY : false,
   });
 

@@ -15,7 +15,6 @@ export function AddMemberForm({
   roles,
 }: {
   workspaceId: string;
-  /** Only the roles the current user may grant. */
   roles: readonly WorkspaceRole[];
 }) {
   const router = useRouter();

@@ -3,8 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { defineConfig } from 'vitest/config';
 
-// Vitest doesn't read .env files. Pick up TEST_DATABASE_URL from the root .env so local
-// runs find the test database; a value already set in the shell (e.g. CI) wins.
+// Vitest doesn't read .env files: take TEST_DATABASE_URL from the root .env; a value already set (e.g. CI) wins.
 const rootEnv = fileURLToPath(new URL('../../.env', import.meta.url));
 if (!process.env.TEST_DATABASE_URL && existsSync(rootEnv)) {
   const { TEST_DATABASE_URL } = parseEnv(readFileSync(rootEnv, 'utf8'));

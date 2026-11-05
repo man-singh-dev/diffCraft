@@ -10,7 +10,6 @@ import {
 
 const join = (segments: Segment[]) => segments.map((s) => s.text).join('');
 
-/** Runs diffWords and checks that both sides join back to their input. */
 function diff(oldText: string, newText: string): WordDiff {
   const result = diffWords(oldText, newText);
   expect(join(result.old)).toBe(oldText);
@@ -98,7 +97,7 @@ describe('diffWords', () => {
   });
 
   it('over the token limit: whole line changed', () => {
-    const tokens = Math.ceil(WORD_DIFF_MAX_TOKENS / 2) + 1; // "x " is two tokens
+    const tokens = Math.ceil(WORD_DIFF_MAX_TOKENS / 2) + 1;
     const oldText = 'x '.repeat(tokens);
     const newText = `${'x '.repeat(tokens - 1)}y `;
     expect(tokenize(oldText).length).toBeGreaterThan(WORD_DIFF_MAX_TOKENS);

@@ -13,7 +13,6 @@ const {
   lineTokens,
 } = await import('./highlight.server.js');
 
-/** Hunks of a one-file patch; each body line starts with " ", "-" or "+". */
 function hunksOf(header: string, lines: string[]): DiffHunk[] {
   return parsePatch(['--- a/f', '+++ b/f', header, ...lines, ''].join('\n')).files[0]!.hunks;
 }
@@ -21,7 +20,6 @@ function hunksOf(header: string, lines: string[]): DiffHunk[] {
 const join = (tokens: ColorToken[]) => tokens.map((t) => t.text).join('');
 const colors = (tokens: ColorToken[]) => new Set(tokens.map((t) => t.color));
 
-/** Checks that every line of every hunk has tokens joining back to its content. */
 function expectAllLinesCovered(
   hunks: DiffHunk[],
   tokens: Awaited<ReturnType<typeof highlightHunks>>,
@@ -136,7 +134,6 @@ describe('highlightHunks', () => {
     const commentColor = tokens!.new.get(1)![0]!.color;
     expect(commentColor).not.toBeNull();
     for (const n of [1, 2, 3]) expect(colors(tokens!.new.get(n)!)).toEqual(new Set([commentColor]));
-    // After the comment closes, the code is colored as code again.
     expect(tokens!.new.get(4)!.find((t) => t.text === 'const')!.color).not.toBe(commentColor);
     // The old side never had the closing "*/", so it is highlighted as its own block.
     expect(colors(tokens!.old.get(2)!)).toEqual(new Set([commentColor]));

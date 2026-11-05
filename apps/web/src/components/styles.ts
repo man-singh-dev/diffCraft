@@ -1,5 +1,3 @@
-// Tailwind classes shared by buttons and button-like links.
-
 const buttonBase =
   'inline-flex w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -11,7 +9,6 @@ export const textLink = 'font-medium text-violet-400 underline-offset-4 hover:un
 
 export const dangerButton = `${buttonBase} border border-red-800 bg-red-950/40 text-red-200 hover:border-red-600 hover:bg-red-900/50`;
 
-// Compact buttons for controls inside a list row.
 const smallButtonBase =
   'inline-flex items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 disabled:cursor-not-allowed disabled:opacity-60';
 

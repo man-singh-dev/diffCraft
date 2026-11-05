@@ -15,10 +15,6 @@ const ERROR_TEXT: Record<LoadFileDiffError, string> = {
   failed: "Couldn't load this diff.",
 };
 
-/**
- * A diff loaded on demand with the loadFileDiff Server Action: a "Load diff" button, or (with
- * `initialError`) the error of a diff that failed on the server, with Retry.
- */
 export function LazyFileDiff({
   workspaceId,
   reviewNumber,
@@ -55,7 +51,6 @@ export function LazyFileDiff({
     });
   }, [workspaceId, reviewNumber, fileId, view]);
 
-  // A deep link to this file (or one of its lines) loads it.
   const loaded = diff !== null;
   useEffect(
     () => onRevealFile(fileId, () => !loaded && !pending && load()),

@@ -1,4 +1,3 @@
-/** A piece of a line, marked if it differs from the other side. */
 export interface Segment {
   text: string;
   changed: boolean;
@@ -9,22 +8,17 @@ export interface WordDiff {
   new: Segment[];
 }
 
-/** Above this many tokens on either line, the line is highlighted whole. */
 export const WORD_DIFF_MAX_TOKENS = 200;
-/** Above this many characters on either line, the line is highlighted whole. */
 export const WORD_DIFF_MAX_CHARS = 1_000;
-/** Below this share of characters (old + new) in common tokens, the line is highlighted whole. */
 export const WORD_DIFF_MIN_COMMON_RATIO = 0.4;
 
-// Words, whitespace runs, or one other code point. \p{M} keeps combining accents
-// (a decomposed "é") inside their word. No nested quantifiers, so matching is linear.
+// \p{M} keeps combining accents (a decomposed "é") inside their word. No nested quantifiers, so matching is linear.
 const TOKEN_RE = /[\p{L}\p{M}\p{N}_]+|\s+|[^]/gu;
 
 export function tokenize(text: string): string[] {
   return text.match(TOKEN_RE) ?? [];
 }
 
-/** One segment per non-empty line (an empty line has no segments). */
 export function wholeLine(text: string, changed: boolean): Segment[] {
   return text === '' ? [] : [{ text, changed }];
 }
@@ -35,10 +29,6 @@ function pushMerged(segments: Segment[], text: string, changed: boolean): void {
   else segments.push({ text, changed });
 }
 
-/**
- * Word-level diff of two versions of a line: tokens outside the longest common
- * subsequence are marked changed. Joining each side's segments gives back its text.
- */
 export function diffWords(oldText: string, newText: string): WordDiff {
   const whole = { old: wholeLine(oldText, true), new: wholeLine(newText, true) };
   if (oldText.length > WORD_DIFF_MAX_CHARS || newText.length > WORD_DIFF_MAX_CHARS) return whole;

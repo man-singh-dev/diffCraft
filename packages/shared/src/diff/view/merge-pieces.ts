@@ -1,12 +1,11 @@
 import type { Segment } from './diff-words.ts';
 
-/** A syntax token: a piece of a line and its color (null = default text color). */
+/** color null = default text color. */
 export interface ColorToken {
   text: string;
   color: string | null;
 }
 
-/** A piece of a line with both its syntax color and its word-diff flag. */
 export interface Piece {
   text: string;
   color: string | null;
@@ -22,10 +21,7 @@ function push(pieces: Piece[], text: string, color: string | null, changed: bool
   else pieces.push({ text, color, changed });
 }
 
-/**
- * Overlays syntax tokens and word-diff segments of the same line, cutting at every boundary of
- * either. If they don't cover the same text (an upstream bug), returns the segments uncolored.
- */
+// If they don't cover the same text (an upstream bug), returns the segments uncolored.
 export function mergePieces(tokens: ColorToken[], segments: Segment[]): Piece[] {
   const pieces: Piece[] = [];
   if (joined(tokens) !== joined(segments)) {
@@ -35,7 +31,6 @@ export function mergePieces(tokens: ColorToken[], segments: Segment[]): Piece[] 
 
   let ti = 0;
   let si = 0;
-  // How far into the current token / segment we already are.
   let tOffset = 0;
   let sOffset = 0;
   while (ti < tokens.length && si < segments.length) {

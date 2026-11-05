@@ -5,16 +5,11 @@ import type { CommentActionError } from '@/lib/comment-errors';
 import { inputClass, smallSecondaryButton } from './styles';
 
 export const COMMENT_MAX_LENGTH = 10_000;
-/** The character counter appears from here on. */
 const COUNTER_FROM = 9_000;
 
 const submitButton =
   'inline-flex items-center justify-center rounded-md bg-violet-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-violet-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 disabled:cursor-not-allowed disabled:opacity-60';
 
-/**
- * A comment textarea with submit and (optionally) cancel. Ctrl/Cmd+Enter submits and Esc cancels.
- * `onSubmit` resolves to the error to show, or null on success (the composer then clears itself).
- */
 export function CommentComposer({
   label,
   submitLabel,

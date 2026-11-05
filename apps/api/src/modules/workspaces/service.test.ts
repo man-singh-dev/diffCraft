@@ -65,7 +65,6 @@ describeWithDb('workspaces service and tables', () => {
     return user.id;
   }
 
-  /** A workspace name no other test (or earlier run) has used. */
   const uniqueName = () => `Team ${randomUUID()}`;
 
   it('creates the workspace and the creator as its owner', async () => {

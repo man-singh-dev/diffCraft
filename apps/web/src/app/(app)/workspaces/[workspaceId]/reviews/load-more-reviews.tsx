@@ -8,7 +8,6 @@ import { listReviews } from '@/lib/api-client';
 import { describeReviewError } from '@/lib/review-errors';
 import type { ReviewFilters } from '@/lib/review-params';
 
-/** The server-rendered first page (`children`), followed by any pages loaded here. */
 export function LoadMoreReviews({
   workspaceId,
   filters,

@@ -8,7 +8,6 @@ import { CommentThread } from './comment-thread';
 import { useComments } from './comments-provider';
 import { textLink } from './styles';
 
-/** Review-level threads and a "Leave a comment" composer. */
 export function ReviewConversation() {
   const comments = useComments();
   if (!comments) return null;
@@ -39,13 +38,11 @@ export function ReviewConversation() {
   );
 }
 
-/** "N open threads" with a link to each open line thread on the files page. */
 export function OpenThreadsSummary({
   filesHref,
   filePaths,
 }: {
   filesHref: string;
-  /** File id → path shown in the list. */
   filePaths: Record<string, string>;
 }) {
   const comments = useComments();
@@ -84,7 +81,6 @@ export function OpenThreadsSummary({
   );
 }
 
-/** The number of open line threads, for the "Files changed" link. */
 export function OpenThreadCount() {
   const comments = useComments();
   if (!comments || comments.loadFailed) return null;

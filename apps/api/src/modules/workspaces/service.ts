@@ -9,11 +9,9 @@ export const SLUG_MAX_LENGTH = 40;
 const SLUG_UNIQUE_CONSTRAINT = 'workspaces_slug_unique';
 const SLUG_SUFFIX_LENGTH = 4;
 const SLUG_SUFFIX_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
-// One try with the plain slug, then a few with a random suffix: 36^4 suffixes make repeated
-// collisions practically impossible, so running out means something else is wrong.
+// 36^4 suffixes make repeated collisions practically impossible, so running out means something else is wrong.
 const MAX_SLUG_ATTEMPTS = 5;
 
-/** URL-safe slug: lowercase ASCII letters, digits and single hyphens, at most 40 characters. */
 export function slugify(name: string): string {
   const slug = name
     .normalize('NFKD')
@@ -45,7 +43,6 @@ export function toWorkspace(row: WorkspaceRow, role: WorkspaceRole): Workspace {
   };
 }
 
-/** Creates a workspace with `userId` as its owner. `input` must already be validated. */
 export async function createWorkspace(
   db: Database,
   userId: string,
@@ -56,8 +53,7 @@ export async function createWorkspace(
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
     const slug = attempt === 0 ? baseSlug : withRandomSuffix(baseSlug);
     try {
-      // A whole new transaction per attempt: after a failed statement Postgres aborts the
-      // transaction, so it can't be retried inside the same one.
+      // A new transaction per attempt: after a failed statement Postgres aborts the transaction, so it can't be retried in it.
       return await db.transaction(async (tx) => {
         const [row] = await tx
           .insert(workspaces)
@@ -74,7 +70,6 @@ export async function createWorkspace(
   throw new Error(`no free slug for "${baseSlug}" after ${MAX_SLUG_ATTEMPTS} attempts`);
 }
 
-/** The user's workspaces with their role in each, newest first. */
 export async function listWorkspacesForUser(db: Database, userId: string): Promise<Workspace[]> {
   const rows = await db
     .select({ workspace: workspaces, role: workspaceMembers.role })
@@ -110,7 +105,6 @@ export async function deleteWorkspace(db: Database, id: string): Promise<void> {
   await db.delete(workspaces).where(eq(workspaces.id, id));
 }
 
-/** The user's role in the workspace, or null if they are not a member. */
 export async function getMembership(
   db: Database,
   workspaceId: string,

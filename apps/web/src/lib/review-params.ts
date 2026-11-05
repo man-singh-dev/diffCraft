@@ -5,12 +5,9 @@ import { z } from 'zod';
 const REVIEW_NUMBER_PATTERN = /^[1-9]\d{0,9}$/;
 const MAX_REVIEW_NUMBER = 2_147_483_647;
 
-// Only a UUID is ever put in an API path: encodeURIComponent leaves "." and "..", which new URL()
-// would resolve into a different API path. The API 404s the rest anyway.
-/** Whether a URL segment (or Server Action argument) is a UUID. */
+// Only UUIDs go in API paths: encodeURIComponent leaves "." and "..", which new URL() would resolve elsewhere.
 export const isUuid = (id: string): boolean => z.uuid().safeParse(id).success;
 
-/** Whether a URL segment can be a review number; anything else is a 404 without an API call. */
 export function isReviewNumber(value: string): boolean {
   return REVIEW_NUMBER_PATTERN.test(value) && Number(value) <= MAX_REVIEW_NUMBER;
 }
@@ -22,7 +19,6 @@ export interface ReviewFilters {
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-/** The list filters from the page URL. Unknown or repeated values are ignored. */
 export function parseReviewFilters(searchParams: SearchParams): ReviewFilters {
   const { status, mine } = searchParams;
   return {
@@ -31,7 +27,6 @@ export function parseReviewFilters(searchParams: SearchParams): ReviewFilters {
   };
 }
 
-/** Query string for GET /reviews, with a leading "?" or empty. */
 export function reviewListQuery(filters: ReviewFilters, cursor?: string | null): string {
   const query = new URLSearchParams();
   if (filters.status) query.set('status', filters.status);
@@ -41,7 +36,6 @@ export function reviewListQuery(filters: ReviewFilters, cursor?: string | null):
   return text ? `?${text}` : '';
 }
 
-/** Link to the reviews page with these filters. */
 export function reviewsPageHref(workspaceId: string, filters: ReviewFilters): string {
   const query = new URLSearchParams();
   if (filters.status) query.set('status', filters.status);

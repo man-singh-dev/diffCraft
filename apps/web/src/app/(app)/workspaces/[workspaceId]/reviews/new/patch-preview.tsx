@@ -31,7 +31,7 @@ function preview(patch: string): Preview {
   }
 }
 
-/** What the server will make of the patch. Only a hint: the server parses it again. */
+/** Only a hint: the server parses the patch again. */
 export function PatchPreview({ patch }: { patch: string }) {
   const [result, setResult] = useState<Preview>({ kind: 'empty' });
 

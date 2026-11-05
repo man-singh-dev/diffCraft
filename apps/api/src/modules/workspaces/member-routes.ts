@@ -16,14 +16,13 @@ import {
 } from './member-service.js';
 import { requestWorkspace, requireWorkspaceRole, UUID_PATTERN } from './require-workspace-role.js';
 
-/** :userId from the URL; a malformed id is a 404 before it reaches the database. */
+// A malformed id is a 404 before it reaches the database.
 function targetUserId(request: FastifyRequest): string {
   const { userId } = request.params as { userId?: string };
   if (!userId || !UUID_PATTERN.test(userId)) throw new MemberNotFoundError();
   return userId;
 }
 
-/** Registered under /:workspaceId/members inside workspaceRoutes, so requireAuth runs first. */
 export const memberRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Reply: WorkspaceMember[] }>(
     '/',

@@ -21,16 +21,12 @@ interface CommentsContextValue {
   workspaceId: string;
   reviewNumber: string;
   viewer: CommentsViewer;
-  /** Null once the review author's account is deleted. */
   reviewAuthorId: string | null;
   threads: Thread[];
-  /** True when the threads couldn't be loaded: commenting is off. */
   loadFailed: boolean;
   threadsForKeys: (keys: string[]) => Thread[];
-  /** The line whose composer is open (one at a time), or null. */
   composer: LineTarget | null;
   openComposer: (target: LineTarget | null) => void;
-  // Each returns the error to show, or null on success; state is updated from the API's response.
   startThread: (target: LineTarget | null, body: string) => Promise<CommentActionError | null>;
   reply: (threadId: string, body: string) => Promise<CommentActionError | null>;
   edit: (threadId: string, commentId: string, body: string) => Promise<CommentActionError | null>;
@@ -40,7 +36,7 @@ interface CommentsContextValue {
 
 const CommentsContext = createContext<CommentsContextValue | null>(null);
 
-/** The comments state, or null outside a CommentsProvider (e.g. a diff rendered on its own). */
+/** Null outside a CommentsProvider (e.g. a diff rendered on its own). */
 export function useComments(): CommentsContextValue | null {
   return useContext(CommentsContext);
 }
@@ -50,7 +46,7 @@ const NETWORK_ERROR: CommentActionError = {
   message: "Couldn't reach the server. Check your connection and try again.",
 };
 
-/** Runs a Server Action; a thrown error (network, or an action id from an older deploy) is a failure. */
+/** A thrown error (network, or an action id from an older deploy) is a failure. */
 async function run<T>(
   action: () => Promise<CommentActionResult<T>>,
 ): Promise<CommentActionResult<T>> {
@@ -61,11 +57,7 @@ async function run<T>(
   }
 }
 
-/**
- * Holds a review's threads on the files page and the review page. Changes go through the comment
- * Server Actions and update this state from the API's response, without router.refresh(), so the
- * page's diffs aren't fetched and highlighted again.
- */
+// State is updated from the API's response, not router.refresh(), so the page's diffs aren't fetched and highlighted again.
 export function CommentsProvider({
   workspaceId,
   reviewNumber,
@@ -78,7 +70,6 @@ export function CommentsProvider({
   reviewNumber: string;
   viewer: CommentsViewer;
   reviewAuthorId: string | null;
-  /** Null when they couldn't be loaded. */
   initialThreads: Thread[] | null;
   children: React.ReactNode;
 }) {

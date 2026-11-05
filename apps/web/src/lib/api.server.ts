@@ -28,22 +28,17 @@ import { env } from './env.server';
 import { toFieldErrors, type FieldErrors } from './form-errors';
 import { isReviewNumber, isUuid, reviewListQuery, type ReviewFilters } from './review-params';
 
-/** `status` is the HTTP status, or 0 when there was no usable response (network, timeout, bad body). */
+/** 0 when there was no usable response (network, timeout, bad body). */
 export type ServerApiResult<T> = { ok: true; data: T } | { ok: false; status: number };
 
-/**
- * GET `path` on the API as the current user. No session cookie is a 401 without calling the API.
- * Never throws, so redirect() and notFound() stay in the page.
- */
+/** Never throws, so redirect() and notFound() stay in the page. */
 export async function apiGet<T>(path: string, schema: z.ZodType<T>): Promise<ServerApiResult<T>> {
-  // Outside fetchApi's try on purpose: during prerendering cookies() throws to tell Next.js the
-  // page is dynamic, and that signal must not be swallowed.
+  // Outside fetchApi's try on purpose: during prerendering cookies() throws to mark the page dynamic, which must not be swallowed.
   const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!token) return { ok: false, status: 401 };
   return fetchApi(env.API_URL, path, token, schema);
 }
 
-/** The request behind apiGet. Never throws. */
 export async function fetchApi<T>(
   apiUrl: string,
   path: string,
@@ -134,7 +129,6 @@ export async function getThreads(
   );
 }
 
-/** A failed POST/PATCH/DELETE: the HTTP status (0 if none), the API's error code and 422 field errors. */
 export interface ServerSendFailure {
   ok: false;
   status: number;
@@ -150,10 +144,8 @@ const sendFailure = (status: number, code: string | null = null): ServerSendFail
   fieldErrors: {},
 });
 
-// error.details of a 422 (see ValidationError in apps/api/src/errors.ts).
 const FieldIssuesSchema = z.array(z.object({ field: z.string(), message: z.string() }));
 
-/** POST, PATCH or DELETE on the API as the current user, with a JSON body. Never throws. */
 export async function apiSend<T>(
   method: 'POST' | 'PATCH' | 'DELETE',
   path: string,
@@ -165,7 +157,6 @@ export async function apiSend<T>(
   return sendApi(env.API_URL, method, path, token, body, schema);
 }
 
-/** The request behind apiSend. Never throws. */
 export async function sendApi<T>(
   apiUrl: string,
   method: 'POST' | 'PATCH' | 'DELETE',

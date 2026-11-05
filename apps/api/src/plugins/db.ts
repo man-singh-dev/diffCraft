@@ -14,17 +14,10 @@ declare module 'fastify' {
 
 export interface DbPluginOptions {
   databaseUrl: string;
-  /** Maximum open connections (DB_POOL_MAX). */
   poolMax: number;
 }
 
-/**
- * Creates a pg Pool and exposes a typed Drizzle instance as `app.db`.
- * The pool connects lazily (on the first query) and is closed when the app closes.
- * Wrapped in fastify-plugin so `app.db` is visible outside this plugin's scope.
- *
- * TLS comes from the URL: Neon's `sslmode=require` turns it on, with the certificate verified.
- */
+// fastify-plugin so `app.db` is visible outside this plugin's scope. TLS comes from the URL (sslmode=require).
 export const dbPlugin = fp<DbPluginOptions>(
   async (app, { databaseUrl, poolMax }) => {
     const pool = new pg.Pool({

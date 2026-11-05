@@ -19,7 +19,6 @@ export class InvalidCursorError extends AppError {
   }
 }
 
-/** 400 for a patch the parser rejects; `reason` is the DiffParseError code. */
 export class InvalidPatchError extends AppError {
   constructor(error: DiffParseError) {
     super(400, 'invalid_patch', error.message, { reason: error.code, line: error.line });

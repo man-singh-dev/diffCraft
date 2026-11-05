@@ -1,12 +1,9 @@
 import type { DiffFile, DiffHunk, DiffLine, ParsedPatch } from './schemas.ts';
 
 export interface DiffLimits {
-  /** UTF-8 bytes in the whole patch. */
   maxBytes: number;
   maxFiles: number;
-  /** Context, added and removed lines across all hunks. */
   maxLines: number;
-  /** Characters in any one line of the patch. */
   maxLineLength: number;
 }
 
@@ -45,7 +42,6 @@ const MESSAGES: Record<DiffParseErrorCode, string> = {
 
 export class DiffParseError extends Error {
   readonly code: DiffParseErrorCode;
-  /** 1-based line in the patch, or null when the input as a whole is rejected. */
   readonly line: number | null;
 
   constructor(code: DiffParseErrorCode, line: number | null) {
@@ -56,20 +52,13 @@ export class DiffParseError extends Error {
   }
 }
 
-/**
- * Parses a unified diff: git output (`git diff`, `git format-patch`) or plain `diff -u`.
- * Throws a DiffParseError for input it can't trust. Content is only ever treated as text.
- */
 export function parsePatch(input: string, limits: Partial<DiffLimits> = {}): ParsedPatch {
   const max: DiffLimits = { ...DEFAULT_DIFF_LIMITS, ...limits };
-  // Editors on Windows often save UTF-8 with a byte order mark; it is not part of the diff.
   const text = input.startsWith('\uFEFF') ? input.slice(1) : input;
-  // The cheap length check first: UTF-8 is never shorter than UTF-16.
   if (text.length > max.maxBytes || utf8Length(text) > max.maxBytes) {
     throw new DiffParseError('too_large', null);
   }
-  // A UTF-16 file read as UTF-8 has a NUL in almost every other byte, and binary data has them
-  // too. Text with NULs is never a usable diff, and Postgres text columns can't store them.
+  // UTF-16 read as UTF-8 and binary data are full of NULs; such text is never a usable diff, and Postgres text can't store NUL.
   const nul = text.indexOf('\0');
   if (nul !== -1) throw new DiffParseError('unsupported_encoding', lineNumberAt(text, nul));
   if (text.trim() === '') throw new DiffParseError('empty_patch', null);
@@ -109,7 +98,6 @@ class PatchParser {
         const isGit = this.lines[this.i]!.startsWith('diff --git ');
         this.files.push(isGit ? this.parseGitFile() : this.parsePlainFile());
       } else {
-        // Commit messages, diffstats, "Index:" lines and other text between files.
         this.i++;
       }
     }
@@ -170,8 +158,7 @@ class PatchParser {
       this.i++;
     }
 
-    // rename/copy lines and ---/+++ are unambiguous; the diff --git line is a fallback for
-    // files with no hunks (mode changes, binaries, empty files).
+    // rename/copy and ---/+++ lines are unambiguous; diff --git is a fallback for files with no hunks.
     let oldPath = renameFrom ?? (pair ? pair.old : fromHeader?.old);
     let newPath = renameTo ?? (pair ? pair.new : fromHeader?.new);
     if (oldPath === undefined || newPath === undefined) {
@@ -197,8 +184,7 @@ class PatchParser {
     const newPath = prefixed ? stripPrefix(raw.new, 'b/') : raw.new;
     const hunks = this.parseHunks();
 
-    // Plain diffs often compare differently named copies (x.orig, old/x), so a name
-    // difference is not a rename.
+    // Plain diffs often compare differently named copies (x.orig, old/x), so a name difference is not a rename.
     const changeType = oldPath === null ? 'added' : newPath === null ? 'deleted' : 'modified';
     return buildFile(oldPath, newPath, changeType, false, hunks);
   }
@@ -220,8 +206,7 @@ class PatchParser {
     const hunks: DiffHunk[] = [];
     while (this.lines[this.i]?.startsWith('@@')) hunks.push(this.parseHunk());
 
-    // More diff lines straight after a hunk mean its header's counts were too small.
-    // "-- " is the signature separator git format-patch writes after the last file.
+    // Diff lines right after a hunk mean its counts were too small; "-- " is git format-patch's signature separator.
     const next = this.lines[this.i];
     if (next !== undefined && /^[ +-]/.test(next) && next !== '-- ' && !this.isFileStart(this.i)) {
       throw new DiffParseError('count_mismatch', this.i + 1);
@@ -252,8 +237,7 @@ class PatchParser {
     let newLeft = newLines;
     this.i++;
 
-    // Driven by the header's counts, not by prefixes, so a removed "-- x" or an added
-    // "++ y" is content, never mistaken for a file header.
+    // Driven by the header's counts, not prefixes, so a removed "-- x" or added "++ y" is never taken for a file header.
     while (oldLeft > 0 || newLeft > 0) {
       const raw = this.lines[this.i];
       const lineNumber = this.i + 1;
@@ -314,7 +298,7 @@ function buildFile(
   return { oldPath, newPath, changeType, isBinary, additions, deletions, hunks };
 }
 
-/** "\ No newline at end of file" (the text is translated in some locales). */
+/** The text is translated in some locales. */
 function markNoNewline(lines: DiffLine[], lineNumber: number): void {
   const previous = lines.at(-1);
   if (!previous) throw new DiffParseError('malformed_hunk', lineNumber);
@@ -327,7 +311,6 @@ function splitLines(text: string): string[] {
   return lines.map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
 }
 
-/** 1-based line of the character at `index`. */
 function lineNumberAt(text: string, index: number): number {
   let line = 1;
   for (let k = text.indexOf('\n'); k !== -1 && k < index; k = text.indexOf('\n', k + 1)) line++;
@@ -340,14 +323,12 @@ function utf8Length(text: string): number {
     const code = text.charCodeAt(k);
     if (code < 0x80) bytes += 1;
     else if (code < 0x800) bytes += 2;
-    // A surrogate pair is 4 bytes in all, so 2 for each half.
     else if (code >= 0xd800 && code <= 0xdfff) bytes += 2;
     else bytes += 3;
   }
   return bytes;
 }
 
-/** The name from a "--- " or "+++ " line; null for /dev/null. */
 function parseFilePath(raw: string): string | null {
   // A tab ends the name: GNU diff puts a timestamp after it, git does so for names with spaces.
   const tab = raw.indexOf('\t');
@@ -359,7 +340,6 @@ function stripPrefix(path: string | null, prefix: string): string | null {
   return path !== null && path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
-/** Both names from `diff --git a/x b/y`, which is ambiguous when names contain spaces. */
 function parseGitHeaderPaths(rest: string): { old: string; new: string } | null {
   let oldName: string;
   let newName: string;
@@ -374,7 +354,6 @@ function parseGitHeaderPaths(rest: string): { old: string; new: string } | null 
     oldName = rest.slice(0, start);
     newName = unquote(rest.slice(start + 1));
   } else {
-    // Without a rename both halves name the same file, so try splitting in the middle.
     const half = (rest.length - 1) / 2;
     const left = rest.slice(0, half);
     const right = rest.slice(half + 1);
@@ -411,7 +390,6 @@ const ESCAPES: Record<string, number> = {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-/** Undoes git's C-style quoting; octal escapes are UTF-8 bytes ("caf\303\251"). */
 function unquote(name: string): string {
   if (name.length < 2 || !name.startsWith('"') || !name.endsWith('"')) return name;
   const chars = Array.from(name.slice(1, -1));

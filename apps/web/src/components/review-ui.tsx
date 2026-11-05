@@ -48,7 +48,6 @@ export function LineCounts({ additions, deletions }: { additions: number; deleti
 export const authorName = (review: Pick<Review, 'author'>) =>
   review.author?.displayName ?? 'Deleted user';
 
-/** A file's path: "old → new" for a rename, otherwise whichever path exists. */
 export function filePath(file: Pick<ReviewFile, 'oldPath' | 'newPath' | 'changeType'>): string {
   if (file.changeType === 'renamed' && file.oldPath && file.newPath) {
     return `${file.oldPath} → ${file.newPath}`;
@@ -56,7 +55,6 @@ export function filePath(file: Pick<ReviewFile, 'oldPath' | 'newPath' | 'changeT
   return file.newPath ?? file.oldPath ?? '(unknown path)';
 }
 
-/** One row of the reviews list. */
 export function ReviewRow({ review }: { review: Review }) {
   return (
     <li className="space-y-1 px-4 py-3">

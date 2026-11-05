@@ -4,15 +4,12 @@ import type { ColorToken, DiffHunk, DiffLine } from '@diffcraft/shared';
 import { createHighlighterCore, type HighlighterCore, type LanguageInput } from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 
-/** Above this many diff lines in a file, the file is not highlighted. */
 export const HIGHLIGHT_MAX_FILE_LINES = 5_000;
-/** Lines longer than this are shown plain (the rest of the file is still highlighted). */
 export const HIGHLIGHT_MAX_LINE_CHARS = 1_000;
 
 export const HIGHLIGHT_THEME = 'github-dark';
 
-// The allow-list: only these grammars can ever be loaded. Static import() paths let the
-// bundler and file tracing see every file that may be needed.
+// The allow-list. Static import() paths let the bundler and file tracing see every grammar that may be needed.
 const LANGUAGE_LOADERS = {
   c: () => import('shiki/langs/c.mjs'),
   cpp: () => import('shiki/langs/cpp.mjs'),
@@ -97,12 +94,11 @@ const LANGUAGE_BY_EXTENSION: Record<string, HighlightLanguage> = {
   gql: 'graphql',
 };
 
-/** The Shiki language for a file path, or null if it isn't on the allow-list. */
 export function languageForPath(path: string): HighlightLanguage | null {
   const name = (path.split('/').at(-1) ?? '').toLowerCase();
   if (name === 'dockerfile' || name.startsWith('dockerfile.')) return 'docker';
   const dot = name.lastIndexOf('.');
-  if (dot <= 0) return null; // no extension, or a dotfile such as ".env"
+  if (dot <= 0) return null;
   return LANGUAGE_BY_EXTENSION[name.slice(dot + 1)] ?? null;
 }
 
@@ -134,7 +130,6 @@ async function loadLanguage(highlighter: HighlighterCore, language: HighlightLan
   await promise;
 }
 
-/** Syntax tokens of a hunk's lines, by line number on each side. */
 export interface HunkTokens {
   old: Map<number, ColorToken[]>;
   new: Map<number, ColorToken[]>;
@@ -186,12 +181,7 @@ function highlightSide(
   return map;
 }
 
-/**
- * Syntax tokens for every line of a file's hunks. Each hunk's old text (context + deleted lines)
- * and new text (context + added lines) are highlighted as two separate code blocks, so multi-line
- * constructs are read as they are on that side. Context lines are looked up on the new side.
- * Falls back to plain tokens (color null) when highlighting is off or fails.
- */
+// Old and new text are highlighted as separate blocks, so multi-line constructs read as they do on that side.
 export async function highlightHunks(path: string, hunks: DiffHunk[]): Promise<HunkTokens[]> {
   const language = languageForPath(path);
   const totalLines = hunks.reduce((sum, h) => sum + h.lines.length, 0);
@@ -212,7 +202,6 @@ export async function highlightHunks(path: string, hunks: DiffHunk[]): Promise<H
   }
 }
 
-/** The tokens of the line with this number on one side, or plain tokens if there are none. */
 export function lineTokens(
   tokens: HunkTokens | undefined,
   side: 'old' | 'new',

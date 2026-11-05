@@ -9,9 +9,7 @@ const apiUrl = (process.env.API_URL ?? 'http://localhost:4000').replace(/\/+$/, 
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@diffcraft/shared'],
-  // The browser only ever calls relative /api/... URLs; the Next server forwards them to the
-  // API. To the browser it is all one origin, so there is no CORS and the session cookie is
-  // stored for (and sent back to) the web app's own origin.
+  // The browser only calls relative /api/...; one origin means no CORS and the session cookie belongs to the web app.
   rewrites() {
     return [{ source: '/api/:path*', destination: `${apiUrl}/api/:path*` }];
   },

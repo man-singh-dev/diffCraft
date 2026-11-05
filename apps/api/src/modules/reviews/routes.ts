@@ -35,16 +35,9 @@ import {
   updateReview,
 } from './service.js';
 
-/**
- * POST /reviews only. Fastify's default (1 MiB) is measured on the JSON body, and JSON escaping
- * makes a patch longer: every `"`, `\` and tab becomes two characters. A patch at the parser's
- * 1 MiB limit can therefore need up to about 2 MiB of JSON, plus the title and description.
- * parsePatch still enforces the real 1 MiB limit on the decoded text; every other route keeps
- * the global default.
- */
+// JSON escaping can double a patch's size, so a 1 MiB patch needs ~2 MiB of JSON; parsePatch still enforces the real 1 MiB limit.
 export const CREATE_REVIEW_BODY_LIMIT = 3 * 1024 * 1024;
 
-/** For PATCH and DELETE: the author (member and up) or an admin. */
 async function loadEditableReview(app: FastifyInstance, request: FastifyRequest): Promise<Review> {
   const review = await loadReview(app, request);
   const { role } = requestWorkspace(request);
@@ -52,11 +45,8 @@ async function loadEditableReview(app: FastifyInstance, request: FastifyRequest)
   return review;
 }
 
-/** Routes on one review (/:reviewNumber/...). */
 const singleReviewRoutes: FastifyPluginAsync = async (app) => {
-  // Runs after requireAuth (a parent hook) and before the route's requireWorkspaceRole, so a
-  // malformed number never reaches the database. It is the same 404 for every workspace id,
-  // so it reveals nothing about which workspaces exist.
+  // Before requireWorkspaceRole, so a malformed number never reaches the database; the same 404 for every workspace id reveals nothing.
   app.addHook('preHandler', async (request) => {
     reviewNumberParam(request);
   });
@@ -65,7 +55,6 @@ const singleReviewRoutes: FastifyPluginAsync = async (app) => {
     loadReview(app, request),
   );
 
-  // The member minimum turns viewers away before the lookup; canEditReview decides the rest.
   app.patch<{ Reply: Review }>(
     '/',
     { preHandler: requireWorkspaceRole('member') },
@@ -116,11 +105,9 @@ const singleReviewRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  // Threads and comments on this review; the hook above has already checked :reviewNumber.
   await app.register(commentRoutes, { prefix: '/threads' });
 };
 
-/** Registered under /:workspaceId/reviews inside workspaceRoutes, so requireAuth runs first. */
 export const reviewRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Reply: Review }>(
     '/',

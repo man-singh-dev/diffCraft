@@ -22,8 +22,7 @@ type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type Endpoint = 'list' | 'add' | 'change role' | 'remove' | 'leave';
 type Caller = 'logged out' | 'non-member' | WorkspaceRole;
 
-// Expected status per endpoint and caller: the authorization matrix. The owner is the only
-// owner, so leaving is the last-owner case.
+// The owner is the only owner, so leaving is the last-owner case.
 const MATRIX: Record<Endpoint, Record<Caller, number>> = {
   list: { 'logged out': 401, 'non-member': 404, viewer: 200, member: 200, admin: 200, owner: 200 },
   add: { 'logged out': 401, 'non-member': 404, viewer: 403, member: 403, admin: 201, owner: 201 },
@@ -76,7 +75,6 @@ describeWithDb('workspace member routes', () => {
     return WorkspaceSchema.parse(res.json());
   }
 
-  /** A new user who is a member of `workspaceId` with `role`. */
   async function memberWithRole(workspaceId: string, role: WorkspaceRole): Promise<TestUser> {
     const user = await createUserWithSession(app.db);
     await addMember(app.db, workspaceId, user.id, role);
@@ -116,7 +114,6 @@ describeWithDb('workspace member routes', () => {
     it.each(cases)('$endpoint as $caller → $expected', async ({ endpoint, caller, expected }) => {
       const owner = await createUserWithSession(app.db);
       const workspace = await createWorkspace(owner);
-      // The member that change role and remove act on, and the user that add adds.
       const target = await memberWithRole(workspace.id, 'viewer');
       const newcomer = await createUserWithSession(app.db);
 
@@ -141,7 +138,6 @@ describeWithDb('workspace member routes', () => {
       if (expected === 403) expect(errorCode(res)).toBe('forbidden');
       if (expected === 409) expect(errorCode(res)).toBe('last_owner');
 
-      // Only a successful call changes anything.
       const ok = expected < 300;
       expect(await storedRole(workspace.id, newcomer.id)).toBe(
         endpoint === 'add' && ok ? 'member' : null,
@@ -380,8 +376,7 @@ describeWithDb('workspace member routes', () => {
   });
 
   describe('concurrency', () => {
-    // Without the workspace row lock both transactions would count 2 owners, demote each
-    // other, and leave none. With it the second waits, re-reads, and is refused.
+    // Without the workspace row lock both would count 2 owners, demote each other, and leave none.
     it(`two owners demoting each other at once leaves exactly one owner (${CONCURRENCY_RUNS} runs)`, async () => {
       for (let run = 0; run < CONCURRENCY_RUNS; run++) {
         const ownerA = await createUserWithSession(app.db);
@@ -398,8 +393,7 @@ describeWithDb('workspace member routes', () => {
           statuses.filter((s) => s === 200),
           `run ${run}: ${statuses}`,
         ).toHaveLength(1);
-        // The loser is an admin by the time its transaction gets the lock, and admins can't
-        // touch owners: 403, not 409.
+        // The loser is an admin by the time it gets the lock, and admins can't touch owners: 403, not 409.
         const loser = aDemotesB.statusCode === 200 ? bDemotesA : aDemotesB;
         expect(loser.statusCode).toBe(403);
         const winner = aDemotesB.statusCode === 200 ? ownerA : ownerB;
