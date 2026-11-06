@@ -1,3 +1,4 @@
+export * from './approvals.js';
 export * from './comments.js';
 export * from './reviews.js';
 export * from './sessions.js';

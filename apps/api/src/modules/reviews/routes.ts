@@ -63,12 +63,12 @@ const singleReviewRoutes: FastifyPluginAsync = async (app) => {
       const parsed = UpdateReviewRequestSchema.safeParse(request.body);
       if (!parsed.success) throw new ValidationError(parsed.error.issues);
 
-      const updated = await updateReview(
-        app.db,
-        requestWorkspace(request).id,
-        review.id,
-        parsed.data,
-      );
+      const updated = await updateReview(app.db, {
+        workspaceId: requestWorkspace(request).id,
+        reviewId: review.id,
+        actorId: authUser(request).id,
+        changes: parsed.data,
+      });
       if (!updated) throw new ReviewNotFoundError();
       return updated;
     },

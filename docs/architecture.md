@@ -302,10 +302,10 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 
 **Implemented as a data layer** (`apps/api/src/modules/reviews/service.ts`); the HTTP routes and pages come in the next steps. A review is a patch uploaded to a workspace, stored with its parsed files.
 
-| Table          | Holds                                                                                                                                                                                                    |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reviews`      | One row per review: workspace, per-workspace `number`, author (`NULL` once the account is deleted), title, description, status (`open` or `closed`), the raw `patch`, and file/addition/deletion totals. |
-| `review_files` | One row per file in the patch, in patch order (`position`, 0-based): paths, change type, binary flag, counts, and the parsed hunks as `jsonb`.                                                           |
+| Table          | Holds                                                                                                                                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `reviews`      | One row per review: workspace, per-workspace `number`, author (`NULL` once the account is deleted), title, description, status (`open`, `closed` or `merged`), the raw `patch`, and file/addition/deletion totals. |
+| `review_files` | One row per file in the patch, in patch order (`position`, 0-based): paths, change type, binary flag, counts, and the parsed hunks as `jsonb`.                                                                     |
 
 **Creating a review:** the patch is parsed with `parsePatch` _before_ a transaction is opened, so a bad patch (a `DiffParseError`) costs no database work and writes nothing. Then one transaction takes the next number, inserts the review and inserts all its files in a single multi-row `INSERT`. If any step fails, nothing is kept and the number is not used up.
 
@@ -341,33 +341,36 @@ The size limit is checked before any parsing, so an oversized upload costs almos
 
 ---
 
+## Approvals
+
+**Implemented as a data layer** (`packages/shared/src/approvals.ts` for the rules, `apps/api/src/modules/approvals/service.ts` for the database); routes and UI come next. Tables: [database.md](database.md#table-responsibilities).
+
+- **Reviewers** are assigned per review (`review_reviewers`). They must be workspace members with role `member` or higher and not the review's author; otherwise the whole request fails with `422 invalid_reviewers`, listing each refused user and why. Assigning someone twice is a no-op (`ON CONFLICT DO NOTHING`) and writes no second event.
+- **Decisions are append-only** (`review_decisions`): approving after requesting changes adds a row rather than updating one, so the full history stays. Only each _current_ reviewer's latest decision counts, read in one query with `DISTINCT ON (reviewer)` starting from `review_reviewers`; a removed reviewer's decisions stay in history but stop counting.
+- **The approval state is derived, never stored.** `evaluateReview` (pure, shared with the web) takes the review status, the latest decision per reviewer, the open-thread count and the workspace's rules (`required_approvals` 0–10, `require_resolved_threads`) and returns `pending` / `approved` / `changes_requested`, the counts, `canMerge` and plain-language `reasons` for every failing rule ("1 of 2 required approvals", "Ravi requested changes", "2 unresolved threads", "The review is closed"). Any latest `request_changes` blocks. With 0 required approvals a review can merge without approvals, but it shows as `approved` only once someone approves. Storing the state would mean keeping it in step with every decision, removal, thread change and rule change.
+- **Event log** (`review_events`): reviewer assigned/removed, decision, closed, reopened and merged, each with its actor, written in the _same_ transaction as the change, so the history can't miss or invent one.
+- **Status transitions** live in one place, `canTransition`: `open → closed`, `closed → open`, `open → merged`. `merged` is final: a merged review can't be edited, closed, reopened or deleted, and its reviewers can't change (`409 review_merged`). `merged` can't be set through the update request; only the merge does it.
+- **Merge under a row lock:** `mergeReview` locks the review row with `SELECT … FOR UPDATE`, _then_ re-reads the rules, decisions and threads inside the transaction, evaluates them, and only then sets `merged`, `merged_by`, `merged_at` and writes the event, or refuses with `409 merge_blocked` and the reasons. A state computed before the transaction is never trusted. Decisions take the same lock, so a request for changes racing with a merge either lands first (and blocks the merge) or finds the review merged (`409 review_not_open`); a test runs that race repeatedly.
+- **Permissions** are shared pure functions: `canAssignReviewers` and `canMerge` (the author with `member`+, or an admin/owner; `canMerge` doesn't check the rules), and `canDecide` (`member`+, assigned, not the author, review open).
+
+---
+
 ## Review Lifecycle
 
-Review status and comment resolution are **independent**. Resolving every thread does not approve a review, and approving a review does not resolve threads (although a workspace setting could later require all threads to be resolved before approval).
+Review status and comment resolution are **independent**. Resolving every thread does not approve a review, and approving a review does not resolve threads; the workspace's `require_resolved_threads` rule can make open threads block the _merge_.
 
-### Review status (proposed)
+### Review status (implemented)
 
 ```mermaid
 stateDiagram-v2
     [*] --> open: Review created
-    open --> in_review: Reviewers assigned / first review activity
-    in_review --> changes_requested: A reviewer requests changes
-    in_review --> approved: Required approvals received
-    changes_requested --> in_review: Author submits new revision
-    approved --> in_review: New revision submitted (approvals reset)
     open --> closed: Author or admin closes
-    in_review --> closed: Author or admin closes
-    changes_requested --> closed: Author or admin closes
-    approved --> closed: Completed / archived
     closed --> open: Reopened
-    closed --> [*]
-
-    state "open" as open
-    state "in review" as in_review
-    state "changes requested" as changes_requested
-    state "approved" as approved
-    state "closed" as closed
+    open --> merged: Merged when the rules pass
+    merged --> [*]
 ```
+
+The approval state (`pending`, `approved`, `changes_requested`) is not a status: it is derived from the decisions each time (see [Approvals](#approvals)).
 
 ### Comment thread state (separate lifecycle)
 
@@ -381,11 +384,7 @@ stateDiagram-v2
     resolved --> [*]
 ```
 
-Status recomputation rules (proposed):
-
-- Any `changes_requested` decision on the current revision → `changes_requested`.
-- Otherwise, the required number of `approved` decisions on the current revision → `approved`.
-- A new revision resets decisions (they remain in history) and moves the review to `in_review`.
+Planned with revisions: a new revision will reset decisions (they remain in history).
 
 ---
 

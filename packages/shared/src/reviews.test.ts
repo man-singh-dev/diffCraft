@@ -78,8 +78,8 @@ describe('review response schemas', () => {
   });
 
   it('allows only the review statuses', () => {
-    expect(REVIEW_STATUSES).toEqual(['open', 'closed']);
-    expect(ReviewStatusSchema.safeParse('merged').success).toBe(false);
+    expect(REVIEW_STATUSES).toEqual(['open', 'closed', 'merged']);
+    expect(ReviewStatusSchema.safeParse('approved').success).toBe(false);
   });
 
   it('describes a file without hunks', () => {
@@ -115,7 +115,8 @@ describe('UpdateReviewRequestSchema', () => {
     ['only undefined fields', { title: undefined }],
     ['a blank title', { title: '  ' }],
     ['a null title', { title: null }],
-    ['an unknown status', { status: 'merged' }],
+    ['an unknown status', { status: 'approved' }],
+    ['merged, which only the merge action sets', { status: 'merged' }],
     ['a NUL in the title', { title: 'a\0' }],
   ])('rejects %s', (_, body) => {
     expect(UpdateReviewRequestSchema.safeParse(body).success).toBe(false);
@@ -143,7 +144,7 @@ describe('ListReviewsQuerySchema', () => {
     { limit: '1.5' },
     { limit: 'ten' },
     { limit: '' },
-    { status: 'merged' },
+    { status: 'approved' },
     { status: ['open', 'closed'] },
     { author: 'someone' },
   ])('rejects %j', (query) => {

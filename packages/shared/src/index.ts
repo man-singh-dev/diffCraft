@@ -1,3 +1,4 @@
+export * from './approvals.ts';
 export * from './auth.ts';
 export * from './comments.ts';
 export * from './diff/index.ts';

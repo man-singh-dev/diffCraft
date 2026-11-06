@@ -24,3 +24,15 @@ export class InvalidPatchError extends AppError {
     super(400, 'invalid_patch', error.message, { reason: error.code, line: error.line });
   }
 }
+
+export class ReviewMergedError extends AppError {
+  constructor() {
+    super(409, 'review_merged', 'This review is merged and can no longer be changed.');
+  }
+}
+
+export class InvalidStatusTransitionError extends AppError {
+  constructor(from: string, to: string) {
+    super(409, 'invalid_status_transition', `A ${from} review can't be ${to}.`, { from, to });
+  }
+}

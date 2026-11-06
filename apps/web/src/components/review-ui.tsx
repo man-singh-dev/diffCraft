@@ -15,14 +15,17 @@ const badge = 'inline-flex items-center rounded-full border px-2 py-0.5 text-xs 
 const STATUS_COLORS: Record<ReviewStatus, string> = {
   open: 'border-emerald-700 bg-emerald-950/60 text-emerald-200',
   closed: 'border-slate-600 bg-slate-800/60 text-slate-300',
+  merged: 'border-violet-700 bg-violet-950/60 text-violet-200',
+};
+
+const STATUS_LABELS: Record<ReviewStatus, string> = {
+  open: 'Open',
+  closed: 'Closed',
+  merged: 'Merged',
 };
 
 export function StatusBadge({ status }: { status: ReviewStatus }) {
-  return (
-    <span className={`${badge} ${STATUS_COLORS[status]}`}>
-      {status === 'open' ? 'Open' : 'Closed'}
-    </span>
-  );
+  return <span className={`${badge} ${STATUS_COLORS[status]}`}>{STATUS_LABELS[status]}</span>;
 }
 
 const CHANGE_COLORS: Record<ReviewFile['changeType'], string> = {

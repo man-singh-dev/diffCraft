@@ -3,7 +3,7 @@ import { PublicUserSchema } from './auth.ts';
 import { DiffFileSchema, DiffHunkSchema } from './diff/schemas.ts';
 import { hasAtLeastRole, type WorkspaceRole } from './workspaces.ts';
 
-export const REVIEW_STATUSES = ['open', 'closed'] as const;
+export const REVIEW_STATUSES = ['open', 'closed', 'merged'] as const;
 export const ReviewStatusSchema = z.enum(REVIEW_STATUSES);
 export type ReviewStatus = z.infer<typeof ReviewStatusSchema>;
 
@@ -57,7 +57,8 @@ export const UpdateReviewRequestSchema = z
     description: DescriptionSchema.nullable()
       .transform((value) => value || null)
       .optional(),
-    status: ReviewStatusSchema.optional(),
+    // Merging has its own checks, so it can't be done by setting the status.
+    status: z.enum(['open', 'closed']).optional(),
   })
   .refine((body) => Object.values(body).some((value) => value !== undefined), {
     message: 'Provide at least one of title, description and status.',

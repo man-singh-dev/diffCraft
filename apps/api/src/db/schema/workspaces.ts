@@ -1,6 +1,7 @@
-import { WORKSPACE_ROLES } from '@diffcraft/shared';
+import { MAX_REQUIRED_APPROVALS, WORKSPACE_ROLES } from '@diffcraft/shared';
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   index,
   integer,
@@ -13,22 +14,33 @@ import {
 import { sqlList } from './sql-list.js';
 import { users } from './users.js';
 
-export const workspaces = pgTable('workspaces', {
-  id: uuid('id')
-    .primaryKey()
-    .default(sql`uuidv7()`),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique('workspaces_slug_unique'),
-  // SET NULL, not CASCADE: deleting the creator's account must not delete a shared workspace.
-  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
-  // Incremented with UPDATE … RETURNING, whose row lock gives concurrent creates distinct numbers (max + 1 would race).
-  lastReviewNumber: integer('last_review_number').notNull().default(0),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
+export const workspaces = pgTable(
+  'workspaces',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
+    name: text('name').notNull(),
+    slug: text('slug').notNull().unique('workspaces_slug_unique'),
+    // SET NULL, not CASCADE: deleting the creator's account must not delete a shared workspace.
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    // Incremented with UPDATE … RETURNING, whose row lock gives concurrent creates distinct numbers (max + 1 would race).
+    lastReviewNumber: integer('last_review_number').notNull().default(0),
+    requiredApprovals: integer('required_approvals').notNull().default(1),
+    requireResolvedThreads: boolean('require_resolved_threads').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    check(
+      'workspaces_required_approvals_check',
+      sql`${table.requiredApprovals} between 0 and ${sql.raw(String(MAX_REQUIRED_APPROVALS))}`,
+    ),
+  ],
+);
 
 export const workspaceMembers = pgTable(
   'workspace_members',

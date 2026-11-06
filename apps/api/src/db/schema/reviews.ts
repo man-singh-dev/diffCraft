@@ -31,6 +31,8 @@ export const reviews = pgTable(
     title: text('title').notNull(),
     description: text('description'),
     status: text('status', { enum: REVIEW_STATUSES }).notNull().default('open'),
+    mergedBy: uuid('merged_by').references(() => users.id, { onDelete: 'set null' }),
+    mergedAt: timestamp('merged_at', { withTimezone: true }),
     // The raw upload, so it can be re-parsed if the parser or the stored shape changes.
     patch: text('patch').notNull(),
     // Stored so lists don't need to read review_files.
@@ -51,7 +53,13 @@ export const reviews = pgTable(
       table.id.desc(),
     ),
     index('reviews_author_id_idx').on(table.authorId),
+    index('reviews_merged_by_idx').on(table.mergedBy),
     check('reviews_status_check', sql`${table.status} in (${sqlList(REVIEW_STATUSES)})`),
+    // merged_by is not part of this: it becomes NULL if the merger's account is deleted.
+    check(
+      'reviews_merged_check',
+      sql`(${table.status} = 'merged') = (${table.mergedAt} is not null)`,
+    ),
   ],
 );
 

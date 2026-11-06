@@ -1,4 +1,5 @@
 import {
+  canTransition,
   parsePatch,
   type CreateReviewRequest,
   type Review,
@@ -8,12 +9,20 @@ import {
   type UpdateReviewRequest,
 } from '@diffcraft/shared';
 import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
-import { reviewFiles, reviews, users, workspaces, type ReviewRow } from '../../db/schema/index.js';
+import {
+  reviewEvents,
+  reviewFiles,
+  reviews,
+  users,
+  workspaces,
+  type ReviewRow,
+} from '../../db/schema/index.js';
 import type { Database } from '../../plugins/db.js';
 import { WorkspaceNotFoundError } from '../workspaces/require-workspace-role.js';
 import { encodeCursor, type ReviewCursor } from './cursor.js';
+import { InvalidStatusTransitionError, ReviewMergedError } from './errors.js';
 
-type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 export function toReview(row: ReviewRow, author: Review['author']): Review {
   return {
@@ -122,7 +131,7 @@ function fromJoinedRow({
   );
 }
 
-async function findReview(db: Database, where: SQL | undefined): Promise<Review | null> {
+async function findReview(db: Database | Tx, where: SQL | undefined): Promise<Review | null> {
   const [row] = await db
     .select(reviewWithAuthor)
     .from(reviews)
@@ -132,7 +141,7 @@ async function findReview(db: Database, where: SQL | undefined): Promise<Review 
 }
 
 export async function getReview(
-  db: Database,
+  db: Database | Tx,
   workspaceId: string,
   reviewId: string,
 ): Promise<Review | null> {
@@ -191,22 +200,56 @@ export async function listReviews(
   };
 }
 
+// FOR UPDATE: the status read here must still hold when the transaction writes (a merge could be racing).
+export async function lockReview(tx: Tx, workspaceId: string, reviewId: string) {
+  const [row] = await tx
+    .select({ id: reviews.id, status: reviews.status, authorId: reviews.authorId })
+    .from(reviews)
+    .where(and(eq(reviews.id, reviewId), eq(reviews.workspaceId, workspaceId)))
+    .for('update');
+  return row ?? null;
+}
+
 export async function updateReview(
   db: Database,
-  workspaceId: string,
-  reviewId: string,
-  changes: UpdateReviewRequest,
+  {
+    workspaceId,
+    reviewId,
+    actorId,
+    changes,
+  }: { workspaceId: string; reviewId: string; actorId: string; changes: UpdateReviewRequest },
 ): Promise<Review | null> {
-  const [row] = await db
-    .update(reviews)
-    .set({
+  return db.transaction(async (tx) => {
+    const current = await lockReview(tx, workspaceId, reviewId);
+    if (!current) return null;
+    if (current.status === 'merged') throw new ReviewMergedError();
+
+    const nextStatus =
+      changes.status !== undefined && changes.status !== current.status
+        ? changes.status
+        : undefined;
+    if (nextStatus !== undefined && !canTransition(current.status, nextStatus)) {
+      throw new InvalidStatusTransitionError(current.status, nextStatus);
+    }
+
+    const set = {
       ...(changes.title !== undefined && { title: changes.title }),
       ...(changes.description !== undefined && { description: changes.description }),
-      ...(changes.status !== undefined && { status: changes.status }),
-    })
-    .where(and(eq(reviews.id, reviewId), eq(reviews.workspaceId, workspaceId)))
-    .returning({ id: reviews.id });
-  return row ? getReview(db, workspaceId, row.id) : null;
+      ...(nextStatus !== undefined && { status: nextStatus }),
+    };
+    if (Object.keys(set).length > 0) {
+      await tx.update(reviews).set(set).where(eq(reviews.id, current.id));
+    }
+
+    if (nextStatus !== undefined) {
+      await tx.insert(reviewEvents).values({
+        reviewId: current.id,
+        actorId,
+        type: nextStatus === 'closed' ? 'closed' : 'reopened',
+      });
+    }
+    return getReview(tx, workspaceId, current.id);
+  });
 }
 
 export async function deleteReview(
@@ -214,11 +257,13 @@ export async function deleteReview(
   workspaceId: string,
   reviewId: string,
 ): Promise<boolean> {
-  const deleted = await db
-    .delete(reviews)
-    .where(and(eq(reviews.id, reviewId), eq(reviews.workspaceId, workspaceId)))
-    .returning({ id: reviews.id });
-  return deleted.length > 0;
+  return db.transaction(async (tx) => {
+    const current = await lockReview(tx, workspaceId, reviewId);
+    if (!current) return false;
+    if (current.status === 'merged') throw new ReviewMergedError();
+    await tx.delete(reviews).where(eq(reviews.id, current.id));
+    return true;
+  });
 }
 
 const reviewFileColumns = {

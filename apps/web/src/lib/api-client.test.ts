@@ -396,7 +396,7 @@ describe('review calls', () => {
       REVIEW.workspaceId,
       { status: null, mine: false },
       'abc',
-      makeFetch(200, { items: [{ ...REVIEW, status: 'merged' }], nextCursor: null }),
+      makeFetch(200, { items: [{ ...REVIEW, status: 'approved' }], nextCursor: null }),
     );
     expect(result).toMatchObject({ ok: false, code: 'unexpected_response' });
   });

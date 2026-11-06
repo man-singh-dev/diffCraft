@@ -9,9 +9,9 @@ The database design: implemented and proposed tables, constraints, indexes, tran
 ## Database Design
 
 > [!NOTE]
-> **Implemented:** the `users`, `sessions`, `workspaces`, `workspace_members`, `reviews`, `review_files`, `comment_threads` and `comments` tables (Drizzle schema in `apps/api/src/db/schema`, migrations in `apps/api/drizzle`). The workspace tables are served by `/api/v1/workspaces` (see [api.md](api.md#workspaces-and-membership)). The review tables are served by the review routes (see [api.md](api.md#reviews)). The comment tables are served by the thread routes (see [api.md](api.md#comment-threads)). Every other table below is a **proposal**. It will change during implementation and will not be considered final until it exists as Drizzle schema and migrations.
+> **Implemented:** the `users`, `sessions`, `workspaces`, `workspace_members`, `reviews`, `review_files`, `comment_threads`, `comments`, `review_reviewers`, `review_decisions` and `review_events` tables (Drizzle schema in `apps/api/src/db/schema`, migrations in `apps/api/drizzle`). The workspace tables are served by `/api/v1/workspaces` (see [api.md](api.md#workspaces-and-membership)). The review tables are served by the review routes (see [api.md](api.md#reviews)). The comment tables are served by the thread routes (see [api.md](api.md#comment-threads)). The approval tables have a data layer (`apps/api/src/modules/approvals/service.ts`) but no routes yet. Every other table below is a **proposal**. It will change during implementation and will not be considered final until it exists as Drizzle schema and migrations.
 
-### Entity-relationship diagram (`users`, `sessions`, `workspaces`, `workspace_members`, `reviews`, `review_files`, `comment_threads` and `comments` implemented; the rest proposed)
+### Entity-relationship diagram (`ai_analysis_jobs` and `ai_findings` proposed; the rest implemented)
 
 ```mermaid
 erDiagram
@@ -27,8 +27,13 @@ erDiagram
     users |o--o{ comment_threads : "starts / resolves"
     comment_threads ||--|{ comments : "contains"
     users |o--o{ comments : "writes"
-    reviews ||--o{ review_approvals : "receives"
-    users ||--o{ review_approvals : "submits"
+    users |o--o{ reviews : "merges"
+    reviews ||--o{ review_reviewers : "assigns"
+    users ||--o{ review_reviewers : "reviews"
+    reviews ||--o{ review_decisions : "receives"
+    users |o--o{ review_decisions : "submits"
+    reviews ||--o{ review_events : "logs"
+    users |o--o{ review_events : "acts in"
     reviews ||--o{ ai_analysis_jobs : "has"
     users ||--o{ ai_analysis_jobs : "requests"
     ai_analysis_jobs ||--o{ ai_findings : "produces"
@@ -56,6 +61,8 @@ erDiagram
         text slug UK
         uuid created_by FK "nullable, ON DELETE SET NULL"
         int last_review_number "default 0; hands out reviews.number"
+        int required_approvals "default 1, CHECK 0..10"
+        boolean require_resolved_threads "default false"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -72,7 +79,9 @@ erDiagram
         uuid author_id FK "nullable, ON DELETE SET NULL"
         text title
         text description "nullable"
-        text status "CHECK: open | closed"
+        text status "CHECK: open | closed | merged"
+        uuid merged_by FK "nullable, ON DELETE SET NULL"
+        timestamptz merged_at "set exactly when merged"
         text patch "raw upload"
         int files_changed
         int additions
@@ -115,13 +124,26 @@ erDiagram
         timestamptz updated_at
         timestamptz deleted_at "nullable"
     }
-    review_approvals {
-        uuid id PK
-        uuid review_id FK
-        uuid reviewer_id FK
-        int revision
-        text decision "approved | changes_requested"
-        text note
+    review_reviewers {
+        uuid review_id PK, FK "ON DELETE CASCADE"
+        uuid user_id PK, FK "ON DELETE CASCADE"
+        uuid assigned_by FK "nullable, ON DELETE SET NULL"
+        timestamptz created_at
+    }
+    review_decisions {
+        uuid id PK "uuidv7()"
+        uuid review_id FK "ON DELETE CASCADE"
+        uuid reviewer_id FK "nullable, ON DELETE SET NULL"
+        text decision "CHECK: approve | request_changes"
+        text body "nullable"
+        timestamptz created_at
+    }
+    review_events {
+        uuid id PK "uuidv7()"
+        uuid review_id FK "ON DELETE CASCADE"
+        uuid actor_id FK "nullable, ON DELETE SET NULL"
+        text type "CHECK: reviewer_assigned | reviewer_removed | decision | closed | reopened | merged"
+        jsonb data "default {}"
         timestamptz created_at
     }
     ai_analysis_jobs {
@@ -170,11 +192,13 @@ erDiagram
 | `review_files`      | One row per file of a review, in patch order (`position`): paths, change type, binary flag, line counts and the parsed hunks as `jsonb` (always read whole, never queried into). **Implemented**; a `revision` column is planned.                                                                                                                                                                                                                                                             |
 | `comment_threads`   | A discussion on a review: about the review as a whole, or anchored to one line on one side (`old` / `new`) of one file. The anchor is `file_id`, `side`, `line` and `line_content` (the line's text when the thread started), all set or all `NULL` (`comment_threads_anchor_check`). `status` is `open` or `resolved`; `resolved_at` is set exactly when resolved (`comment_threads_resolved_check`). The creator and resolver become `NULL` if their accounts are deleted. **Implemented.** |
 | `comments`          | The comments of a thread, oldest first. Deleting one is a **soft delete**: `deleted_at` is set and `body` emptied, but the row stays so the thread keeps its shape. The author becomes `NULL` if their account is deleted. **Implemented.**                                                                                                                                                                                                                                                   |
-| `review_approvals`  | Reviewer decisions per revision (`approved` / `changes_requested`). A new revision invalidates earlier decisions by default.                                                                                                                                                                                                                                                                                                                                                                  |
+| `review_reviewers`  | Who is asked to review a review. One row per (review, user); `assigned_by` becomes `NULL` if the assigner's account is deleted. Removing a reviewer deletes the row, so their decisions stop counting. **Implemented.**                                                                                                                                                                                                                                                                       |
+| `review_decisions`  | **Append-only** reviewer decisions (`approve` / `request_changes`, optional `body`). A changed mind is a new row; a reviewer's latest row is the one that counts. `reviewer_id` becomes `NULL` if their account is deleted, keeping the history. **Implemented.**                                                                                                                                                                                                                             |
+| `review_events`     | The review's history: reviewer assigned/removed, decisions, closed, reopened, merged, with the actor and a small `jsonb` payload (e.g. `{ "userId": … }`). Written in the same transaction as the change it records. **Implemented.**                                                                                                                                                                                                                                                         |
 | `ai_analysis_jobs`  | Lifecycle and audit record for each analysis request: status, attempts, error code, model and prompt version.                                                                                                                                                                                                                                                                                                                                                                                 |
 | `ai_findings`       | Structured findings from a job, linked to the review and — when applicable — a specific file, side and line range.                                                                                                                                                                                                                                                                                                                                                                            |
 
-Reviewer assignment and notifications will likely require additional tables (`review_reviewers`, `notifications`), which are included in the roadmap.
+`workspaces.required_approvals` and `workspaces.require_resolved_threads` hold the workspace's merge rules. `reviews.status` gained `merged` (final), with `merged_by` / `merged_at`. Notifications will need another table (`notifications`), which is in the roadmap.
 
 ### Foreign keys and referential integrity
 
@@ -183,21 +207,22 @@ Reviewer assignment and notifications will likely require additional tables (`re
 - **Implemented:** `ON DELETE CASCADE` from `workspaces` to `reviews` and from `reviews` to `review_files`. `ON DELETE SET NULL` from `users` to `reviews.author_id`, so a review survives its author's account.
 - **Implemented:** `ON DELETE CASCADE` from `reviews` and `review_files` to `comment_threads`, and from `comment_threads` to `comments`. `ON DELETE SET NULL` from `users` to `comment_threads.created_by`, `comment_threads.resolved_by` and `comments.author_id`, so a discussion survives the accounts of the people in it.
 - **Implemented:** comments are soft-deleted (`deleted_at`, empty `body`), so a thread keeps its replies in place.
-- `ON DELETE CASCADE` from `reviews` to `review_approvals`, `ai_analysis_jobs` and `ai_findings`, so deleting a review cannot leave orphans.
-- **Implemented:** `CHECK` constraints `workspace_members_role_check` (the four roles), `reviews_status_check` (`open`, `closed`), `review_files_change_type_check`, and on `comment_threads`: the side and status lists, `line > 0`, the all-or-nothing anchor (`num_nulls(file_id, side, line, line_content) in (0, 4)`) and `(status = 'resolved') = (resolved_at is not null)`. Each list comes from a shared `as const` array.
+- **Implemented:** `ON DELETE CASCADE` from `reviews` to `review_reviewers`, `review_decisions` and `review_events`, and from `users` to `review_reviewers.user_id`. `ON DELETE SET NULL` from `users` to `reviews.merged_by`, `review_reviewers.assigned_by`, `review_decisions.reviewer_id` and `review_events.actor_id`, so the history survives the accounts of the people in it.
+- `ON DELETE CASCADE` from `reviews` to `ai_analysis_jobs` and `ai_findings`, so deleting a review cannot leave orphans.
+- **Implemented:** `CHECK` constraints `workspace_members_role_check` (the four roles), `reviews_status_check` (`open`, `closed`, `merged`), `reviews_merged_check` (`(status = 'merged') = (merged_at is not null)`; `merged_by` is left out because it becomes `NULL` when the account is deleted), `workspaces_required_approvals_check` (`0..10`), `review_decisions_decision_check`, `review_events_type_check`, `review_files_change_type_check`, and on `comment_threads`: the side and status lists, `line > 0`, the all-or-nothing anchor (`num_nulls(file_id, side, line, line_content) in (0, 4)`) and `(status = 'resolved') = (resolved_at is not null)`. Each list comes from a shared `as const` array.
 - A thread's file must belong to the thread's review. The service checks this (and that the line exists on that side of the file's hunks) before inserting; a composite foreign key on `(file_id, review_id)` could enforce it in the database too.
 
 ### Unique constraints
 
-| Constraint                                               | Purpose                                                                                        |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `users(lower(email))`                                    | One account per email address, case-insensitive. **Implemented.**                              |
-| `workspaces(slug)`                                       | Stable, unique URLs. **Implemented** (`workspaces_slug_unique`).                               |
-| `workspace_members(workspace_id, user_id)` (primary key) | A user has exactly one role per workspace. **Implemented.**                                    |
-| `reviews(workspace_id, number)`                          | One review per number in a workspace. **Implemented** (`reviews_workspace_id_number_unique`).  |
-| `review_files(review_id, position)`                      | One file per position in a review. **Implemented** (`review_files_review_id_position_unique`). |
-| `review_approvals(review_id, reviewer_id, revision)`     | One decision per reviewer per revision (updates replace it).                                   |
-| `ai_analysis_jobs(idempotency_key)`                      | Prevents duplicate jobs for the same review revision, analysis type and prompt version.        |
+| Constraint                                               | Purpose                                                                                              |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `users(lower(email))`                                    | One account per email address, case-insensitive. **Implemented.**                                    |
+| `workspaces(slug)`                                       | Stable, unique URLs. **Implemented** (`workspaces_slug_unique`).                                     |
+| `workspace_members(workspace_id, user_id)` (primary key) | A user has exactly one role per workspace. **Implemented.**                                          |
+| `reviews(workspace_id, number)`                          | One review per number in a workspace. **Implemented** (`reviews_workspace_id_number_unique`).        |
+| `review_files(review_id, position)`                      | One file per position in a review. **Implemented** (`review_files_review_id_position_unique`).       |
+| `review_reviewers(review_id, user_id)` (primary key)     | A user is assigned to a review at most once. **Implemented** (inserts use `ON CONFLICT DO NOTHING`). |
+| `ai_analysis_jobs(idempotency_key)`                      | Prevents duplicate jobs for the same review revision, analysis type and prompt version.              |
 
 ### Indexes for common access patterns
 
@@ -210,7 +235,10 @@ Reviewer assignment and notifications will likely require additional tables (`re
 | The `file_id` foreign key (cascade from `review_files`)             | `comment_threads(file_id)` (`comment_threads_file_id_idx`). **Implemented.**                                                                    |
 | Comments of threads, oldest first (and the `thread_id` foreign key) | `comments(thread_id, created_at)` (`comments_thread_id_created_at_idx`). **Implemented.**                                                       |
 | `SET NULL` when a user is deleted                                   | `comment_threads(created_by)`, `comment_threads(resolved_by)`, `comments(author_id)`. **Implemented.**                                          |
-| Latest decisions                                                    | `review_approvals(review_id, revision)`                                                                                                         |
+| Latest decision per reviewer (and the `review_id` foreign key)      | `review_decisions(review_id, reviewer_id, created_at DESC)`, read with `DISTINCT ON (reviewer)`. **Implemented.**                               |
+| Reviews waiting for me                                              | `review_reviewers(user_id)` (`review_reviewers_user_id_idx`). **Implemented.**                                                                  |
+| A review's history, oldest first                                    | `review_events(review_id, created_at)`. **Implemented.**                                                                                        |
+| `SET NULL` when a user is deleted (approvals)                       | `reviews(merged_by)`, `review_reviewers(assigned_by)`, `review_decisions(reviewer_id)`, `review_events(actor_id)`. **Implemented.**             |
 | Active analysis jobs                                                | Partial index `ai_analysis_jobs(review_id) WHERE status IN ('queued','running')`                                                                |
 | Findings for a file                                                 | `ai_findings(review_file_id, line_start)`                                                                                                       |
 | Workspaces for a user                                               | `workspace_members(user_id)` (`workspace_members_user_id_idx`). **Implemented.**                                                                |
@@ -222,14 +250,16 @@ Operations that change more than one row run in a single transaction, for exampl
 - **Starting a thread (Implemented):** insert the `comment_threads` row and its first `comments` row together, so a thread never exists without a comment. The anchor is checked before the transaction opens.
 - **Creating a workspace (Implemented):** insert the `workspaces` row and the creator's `owner` membership together, so a workspace never exists without an owner. On a slug collision the whole transaction is retried with a suffixed slug (a failed statement aborts a Postgres transaction, so it can't be retried inside it).
 - **Creating a review (Implemented):** the patch is parsed first, outside the transaction. Then `UPDATE workspaces SET last_review_number = last_review_number + 1 … RETURNING` takes the next number (the row lock serialises concurrent creates), and the review and all its files are inserted (the files in one multi-row `INSERT`). A failure rolls everything back, including the number.
-- **Submitting a decision:** insert/update `review_approvals`, recompute and update `reviews.status`, bump `reviews.version`.
+- **Submitting a decision (Implemented):** lock the review row (`SELECT … FOR UPDATE`), check it is open and the user is an assigned reviewer, then insert the `review_decisions` row and its `decision` event.
+- **Assigning or removing reviewers, closing, reopening (Implemented):** the change and its `review_events` row(s) in one transaction, under the review's row lock. Status changes go through the shared `canTransition`.
+- **Merging (Implemented):** lock the review row, then re-read the rules, latest decisions and open-thread count inside the transaction, evaluate them, and only then set `status = 'merged'`, `merged_by`, `merged_at` and write the `merged` event.
 - **Submitting a new revision:** insert new `review_files`, increment `current_revision`, mark comments on changed lines `is_outdated`, set status back to `in_review`.
 - **Completing an analysis:** insert all `ai_findings` and set the job to `succeeded` atomically, so clients never see a "succeeded" job with partial findings.
 
 ### Concurrency
 
 - **Optimistic locking** on `reviews.version`: state-changing requests include the version they read, and the update uses `WHERE id = $1 AND version = $2`. A zero-row update returns `409 Conflict`, and the client re-fetches.
-- **Row locks** (`SELECT … FOR UPDATE` on the review row) for status recomputation, so two simultaneous decisions cannot produce an inconsistent status.
+- **Row locks (Implemented):** every approval write (decision, assignment, close/reopen, delete, merge) starts with `SELECT … FOR UPDATE` on the review row. A merge and a racing request for changes are serialised: whichever locks second sees the other's committed result (the merge is refused, or the decision finds a merged review). Under `READ COMMITTED` each statement after the lock reads fresh data, which is why the merge re-reads everything _after_ locking.
 - Thread resolution is idempotent: resolving an already-resolved thread is a no-op.
 
 ### Pagination

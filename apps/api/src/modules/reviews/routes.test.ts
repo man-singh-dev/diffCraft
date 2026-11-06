@@ -460,7 +460,7 @@ describeWithDb('review routes', () => {
       expect(page.nextCursor).toEqual(expect.any(String));
     });
 
-    it.each(['?limit=0', '?limit=51', '?limit=abc', '?status=merged', '?author=someone'])(
+    it.each(['?limit=0', '?limit=51', '?limit=abc', '?status=approved', '?author=someone'])(
       'answers 422 validation_error for %s',
       async (query) => {
         const { owner, workspace } = await setup();
@@ -602,7 +602,8 @@ describeWithDb('review routes', () => {
       ['an empty body', {}],
       ['only unknown fields', { patch: PATCH }],
       ['a blank title', { title: ' ' }],
-      ['an unknown status', { status: 'merged' }],
+      ['an unknown status', { status: 'approved' }],
+      ['merged, which only the merge action sets', { status: 'merged' }],
     ])('answers 422 for %s', async (_, body) => {
       const { owner, workspace, review } = await setup();
       const res = await call('PATCH', reviewsUrl(workspace.id, `/${review.number}`), owner, body);
