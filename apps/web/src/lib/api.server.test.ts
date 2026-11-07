@@ -15,8 +15,21 @@ vi.mock('server-only', () => ({}));
 const cookieStore = { get: vi.fn<(name: string) => { value: string } | undefined>() };
 vi.mock('next/headers', () => ({ cookies: () => Promise.resolve(cookieStore) }));
 
-const { fetchApi, getMembers, getReview, getReviewFiles, getReviews, getWorkspace, getWorkspaces } =
-  await import('./api.server.js');
+const {
+  fetchApi,
+  getDecisions,
+  getMembers,
+  getReview,
+  getReviewers,
+  getReviewEvents,
+  getReviewFiles,
+  getReviews,
+  getReviewState,
+  getRules,
+  getWorkspace,
+  getWorkspaces,
+  sendApi,
+} = await import('./api.server.js');
 
 const API_URL = 'http://api.test.invalid';
 const TOKEN = 'a'.repeat(43);
@@ -168,7 +181,9 @@ describe('getReviews, getReview and getReviewFiles', () => {
   it('getReviews sends the filters (mine as author=me) and parses the page', async () => {
     const page = { items: [REVIEW], nextCursor: 'next' };
     respond(200, page);
-    expect(await getReviews(WORKSPACE.id, { status: 'closed', mine: true })).toEqual({
+    expect(
+      await getReviews(WORKSPACE.id, { status: 'closed', mine: true, reviewing: false }),
+    ).toEqual({
       ok: true,
       data: page,
     });
@@ -193,10 +208,12 @@ describe('getReviews, getReview and getReviewFiles', () => {
 
   it('passes a 422 through', async () => {
     respond(422, { error: { code: 'validation_error', message: 'Invalid.' } });
-    expect(await getReviews(WORKSPACE.id, { status: null, mine: false })).toEqual({
-      ok: false,
-      status: 422,
-    });
+    expect(await getReviews(WORKSPACE.id, { status: null, mine: false, reviewing: false })).toEqual(
+      {
+        ok: false,
+        status: 422,
+      },
+    );
   });
 
   it('returns status 0 for a review with the wrong shape', async () => {
@@ -216,7 +233,9 @@ describe('getReviews, getReview and getReviewFiles', () => {
   it.each(['..', 'abc'])(
     'returns 404 without calling the API for the workspace id %j',
     async (workspaceId) => {
-      expect(await getReviews(workspaceId, { status: null, mine: false })).toEqual({
+      expect(
+        await getReviews(workspaceId, { status: null, mine: false, reviewing: false }),
+      ).toEqual({
         ok: false,
         status: 404,
       });
@@ -225,4 +244,70 @@ describe('getReviews, getReview and getReviewFiles', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('approval reads', () => {
+  let fetchSpy: MockInstance<typeof fetch>;
+  const STATE = {
+    state: 'pending',
+    approvals: 0,
+    requiredApprovals: 1,
+    openThreads: 0,
+    canMerge: false,
+    reasons: ['0 of 1 required approval'],
+  };
+
+  beforeAll(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+  beforeEach(() => {
+    cookieStore.get.mockReturnValue({ value: TOKEN });
+    fetchSpy.mockReset();
+  });
+  afterAll(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('fetches the state under the review and validates it', async () => {
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify(STATE), { status: 200 }));
+    expect(await getReviewState(WORKSPACE.id, '7')).toEqual({ ok: true, data: STATE });
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toMatch(
+      new RegExp(`/api/v1/workspaces/${WORKSPACE.id}/reviews/7/state$`),
+    );
+
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify({ ...STATE, approvals: -1 })));
+    expect(await getReviewState(WORKSPACE.id, '7')).toEqual({ ok: false, status: 0 });
+  });
+
+  it.each([
+    ['..', '7'],
+    [WORKSPACE.id, '01'],
+    [WORKSPACE.id, '../7'],
+  ])('returns 404 without calling the API for %j / %j', async (workspaceId, reviewNumber) => {
+    for (const get of [getReviewState, getReviewers, getDecisions, getReviewEvents]) {
+      expect(await get(workspaceId, reviewNumber)).toEqual({ ok: false, status: 404 });
+    }
+    expect(await getRules('..')).toEqual({ ok: false, status: 404 });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('sendApi error details', () => {
+  it('keeps the details of a failure for the caller to map', async () => {
+    const details = { reasons: ['0 of 1 required approval'] };
+    const fetchImpl = makeFetch(409, {
+      error: { code: 'merge_blocked', message: 'blocked', details },
+    });
+    expect(
+      await sendApi(API_URL, 'POST', '/x', TOKEN, undefined, WorkspaceSchema, fetchImpl),
+    ).toEqual({ ok: false, status: 409, code: 'merge_blocked', fieldErrors: {}, details });
+  });
+
+  it('accepts an empty 204 for a schema that expects nothing', async () => {
+    const { z } = await import('zod');
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    expect(
+      await sendApi(API_URL, 'DELETE', '/x', TOKEN, undefined, z.undefined(), fetchImpl),
+    ).toEqual({ ok: true, data: undefined });
+  });
 });

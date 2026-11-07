@@ -6,9 +6,10 @@ import { FormError } from '@/components/form-field';
 import { PageCard } from '@/components/page-card';
 import { RoleBadge } from '@/components/role-badge';
 import { secondaryButton } from '@/components/styles';
-import { getMembers, getWorkspace } from '@/lib/api.server';
+import { getMembers, getRules, getWorkspace } from '@/lib/api.server';
 import { getCurrentUser } from '@/lib/auth.server';
 import { AddMemberForm } from './add-member-form';
+import { ApprovalRulesCard } from './approval-rules-card';
 import { DeleteWorkspace } from './delete-workspace';
 import { LeaveWorkspace } from './leave-workspace';
 import { MemberControls } from './member-controls';
@@ -23,10 +24,11 @@ const sectionHeading = 'text-sm font-semibold text-slate-200';
 
 export default async function WorkspacePage(props: PageProps<'/workspaces/[workspaceId]'>) {
   const { workspaceId } = await props.params;
-  const [user, workspace, members] = await Promise.all([
+  const [user, workspace, members, rules] = await Promise.all([
     getCurrentUser(),
     getWorkspace(workspaceId),
     getMembers(workspaceId),
+    getRules(workspaceId),
   ]);
 
   if (!user || [workspace, members].some((r) => !r.ok && r.status === 401)) redirect('/login');
@@ -104,6 +106,25 @@ export default async function WorkspacePage(props: PageProps<'/workspaces/[works
             );
           })}
         </ul>
+      </section>
+
+      <section aria-labelledby="approval-rules" className="space-y-3">
+        <h2 id="approval-rules" className={sectionHeading}>
+          Approval rules
+        </h2>
+        {rules.ok ? (
+          <ApprovalRulesCard
+            // Remount after a save, so the form starts from the saved values.
+            key={`${rules.data.requiredApprovals}:${rules.data.requireResolvedThreads}`}
+            workspaceId={workspace.data.id}
+            rules={rules.data}
+            role={role}
+          />
+        ) : (
+          <FormError>
+            Couldn&apos;t load the approval rules. Please try again in a moment.
+          </FormError>
+        )}
       </section>
 
       {hasAtLeastRole(role, 'admin') && (

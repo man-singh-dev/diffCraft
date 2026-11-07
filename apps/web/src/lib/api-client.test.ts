@@ -331,7 +331,7 @@ describe('review calls', () => {
     {
       name: 'listReviews',
       call: (f: typeof fetch) =>
-        listReviews(REVIEW.workspaceId, { status: 'open', mine: true }, 'abc', f),
+        listReviews(REVIEW.workspaceId, { status: 'open', mine: true, reviewing: false }, 'abc', f),
       method: 'GET',
       url: `${REVIEWS}?status=open&author=me&cursor=abc`,
       body: undefined,
@@ -394,7 +394,7 @@ describe('review calls', () => {
   it('treats a 200 list with the wrong shape as a failure', async () => {
     const result = await listReviews(
       REVIEW.workspaceId,
-      { status: null, mine: false },
+      { status: null, mine: false, reviewing: false },
       'abc',
       makeFetch(200, { items: [{ ...REVIEW, status: 'approved' }], nextCursor: null }),
     );

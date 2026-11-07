@@ -161,6 +161,11 @@ diffCraft/
 │   │   │   │   │   ├── session.ts    # Session tokens, hashing, cookie options, 7-day expiry
 │   │   │   │   │   ├── password.ts   # Argon2id hash and verify
 │   │   │   │   │   └── require-auth.ts # requireAuth preHandler (401 without a valid session)
+│   │   │   │   ├── approvals/
+│   │   │   │   │   ├── routes.ts     # Under a review: state, reviewers, decisions, merge, events; /:workspaceId/rules
+│   │   │   │   │   ├── service.ts    # Rules, reviewers, decisions (only since the current assignment), merge under
+│   │   │   │   │   │                 # the review lock, events
+│   │   │   │   │   └── errors.ts     # invalid_reviewers, not_a_reviewer, review_not_open, merge_blocked, …
 │   │   │   │   ├── comments/
 │   │   │   │   │   ├── service.ts    # Threads and comments: create (anchor checked), list (2 queries), reply,
 │   │   │   │   │   │                 # edit, soft delete, resolve / reopen; all scoped by workspace
@@ -204,10 +209,12 @@ diffCraft/
 │   │   │   │       ├── profile/      # page.tsx
 │   │   │   │       └── workspaces/   # page.tsx (list), create-workspace-form.tsx
 │   │   │   │           └── [workspaceId]/ # page.tsx, not-found.tsx, member-controls.tsx, add-member-form.tsx,
-│   │   │   │               │              # rename-workspace-form.tsx, delete-workspace.tsx, leave-workspace.tsx
+│   │   │   │               │              # rename-workspace-form.tsx, delete-workspace.tsx, leave-workspace.tsx,
+│   │   │   │               │              # approval-rules-card.tsx
 │   │   │   │               └── reviews/  # page.tsx (list, filters), load-more-reviews.tsx
 │   │   │   │                   ├── new/  # page.tsx, new-review-form.tsx, patch-preview.tsx
-│   │   │   │                   └── [reviewNumber]/ # page.tsx, not-found.tsx, review-controls.tsx
+│   │   │   │                   └── [reviewNumber]/ # page.tsx, not-found.tsx, review-controls.tsx, merge-box.tsx,
+│   │   │   │                       │                   # reviewers-panel.tsx, decision-box.tsx, review-history.tsx
 │   │   │   │                       └── files/ # "Files changed": page.tsx, file-section.tsx, eager-file-diff.tsx,
 │   │   │   │                                  # lazy-file-diff.tsx, hash-target.tsx
 │   │   │   ├── components/           # form-field.tsx, page-card.tsx, styles.ts, nav.tsx, logout-button.tsx,
@@ -215,7 +222,8 @@ diffCraft/
 │   │   │   │                         # diff-table.tsx (unified / split diff table), comments-provider.tsx
 │   │   │   │                         # (threads state + actions), comment-thread.tsx, comment-item.tsx,
 │   │   │   │                         # comment-composer.tsx, line-comments.tsx (islands in the diff),
-│   │   │   │                         # review-conversation.tsx (review page)
+│   │   │   │                         # review-conversation.tsx (review page), approval-ui.tsx (decision
+│   │   │   │                         # state badge, decision marks, UTC date-time)
 │   │   │   └── lib/
 │   │   │       ├── api-client.ts     # Browser calls to the API via relative /api URLs
 │   │   │       ├── api-errors.ts     # API error codes → friendly messages
@@ -225,13 +233,17 @@ diffCraft/
 │   │   │       ├── diff-actions.ts   # loadFileDiff Server Action ("Load diff")
 │   │   │       ├── comment-actions.ts # Comment Server Actions (create, reply, edit, delete, resolve)
 │   │   │       ├── comment-errors.ts # API failures → typed comment errors with messages
+│   │   │       ├── approval-actions.ts # Approval Server Actions (assign, remove, decide, merge, update rules)
+│   │   │       ├── approval-errors.ts # API failures → typed approval errors (merge reasons, per-reviewer)
+│   │   │       ├── approval-timeline.ts # Events + decisions → one chronological history (two pointers)
+│   │   │       ├── eligible-reviewers.ts # Members who can still be assigned to a review
 │   │   │       ├── thread-anchors.ts # Thread keys; which threads a unified row or split cell shows
 │   │   │       ├── diff-view.server.ts # Highlighted unified / split rows
 │   │   │       ├── highlight.server.ts # Shiki highlighter (JS regex engine, language allow-list)
 │   │   │       ├── reveal-file.ts    # Window event that expands and loads a file (deep links)
 │   │   │       ├── decode-patch-file.ts # Patch file bytes → text (UTF-8 / UTF-16 by BOM, 1 MiB limit)
-│   │   │       ├── api.server.ts     # Server-side GETs with the session cookie (workspaces, members, reviews, file diffs, threads)
-│   │   │       │                     # and apiSend for the comment mutations
+│   │   │       ├── api.server.ts     # Server-side GETs with the session cookie (workspaces, members, reviews, file diffs, threads,
+│   │   │       │                     # approval state, reviewers, decisions, events, rules) and apiSend for the mutations
 │   │   │       ├── api-health.ts     # Fetches and validates GET /health
 │   │   │       ├── auth.server.ts    # Server-side current-user lookup
 │   │   │       ├── form-errors.ts    # Client-side form validation; API errors → field messages
@@ -247,6 +259,8 @@ diffCraft/
 │   └── shared/                       # Zod schemas and inferred types (raw TS, no build step)
 │       ├── src/
 │       │   ├── index.ts
+│       │   ├── approvals.ts          # Approval rules, decisions, reviewers, events, evaluateReview,
+│       │   │                         # canAssignReviewers / canDecide / canMerge / canTransition
 │       │   ├── auth.ts               # Register/login requests, public user, error response
 │       │   ├── comments.ts           # Thread and comment schemas, canComment / canEditComment / canDeleteComment /
 │       │   │                         # canResolveThread
@@ -306,13 +320,13 @@ All tests use Vitest, sit next to the file they test (`*.test.ts`), and run with
 
 ### Exists now
 
-| Level             | What is covered today                                                                                                                                                                                                                                                                                        |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Unit              | API config validation, logger, password hashing, error handler, CSRF Origin check.                                                                                                                                                                                                                           |
-| API integration   | Auth routes, sessions and the auth service, `/health`, `/ready`, the unique email index, and the workspaces service and its constraints (slug retry, transaction atomicity, composite key, role `CHECK`, `CASCADE` / `SET NULL`), exercised with Fastify's `inject` against a real PostgreSQL test database. |
-| Schema / contract | Shared Zod schemas in `packages/shared` (health, readiness, auth requests and responses, the Zod error formatter).                                                                                                                                                                                           |
-| Web helpers       | `apps/web/src/lib`: the API client, API health fetch, server-side current-user lookup, form error mapping, syntax highlighting, diff view params and the `loadFileDiff` Server Action's validation; `DiffTable` rendered to static markup.                                                                   |
-| CI                | GitHub Actions runs typecheck, lint, format check, the full test suite against a PostgreSQL 18 service container, and the API and web builds on every PR and push to `main`.                                                                                                                                 |
+| Level             | What is covered today                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit              | API config validation, logger, password hashing, error handler, CSRF Origin check.                                                                                                                                                                                                                                                                                                                                                                         |
+| API integration   | Auth routes, sessions and the auth service, `/health`, `/ready`, the unique email index, and the workspaces service and its constraints (slug retry, transaction atomicity, composite key, role `CHECK`, `CASCADE` / `SET NULL`), exercised with Fastify's `inject` against a real PostgreSQL test database.                                                                                                                                               |
+| Schema / contract | Shared Zod schemas in `packages/shared` (health, readiness, auth requests and responses, the Zod error formatter).                                                                                                                                                                                                                                                                                                                                         |
+| Web helpers       | `apps/web/src/lib`: the API client, API health fetch, server-side current-user lookup, form error mapping, syntax highlighting, diff view params, the Server Actions' argument validation and error mapping (diff, comments, approvals), the approval history merge and eligible reviewers; `DiffTable`, comment threads and the approval panels rendered to static markup (`renderToStaticMarkup`, with `next/navigation` and the Server Actions mocked). |
+| CI                | GitHub Actions runs typecheck, lint, format check, the full test suite against a PostgreSQL 18 service container, and the API and web builds on every PR and push to `main`.                                                                                                                                                                                                                                                                               |
 
 ### Planned
 

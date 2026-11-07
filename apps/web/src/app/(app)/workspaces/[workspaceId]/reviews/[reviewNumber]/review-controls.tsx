@@ -1,6 +1,6 @@
 'use client';
 
-import { UpdateReviewRequestSchema, type Review } from '@diffcraft/shared';
+import { canTransition, UpdateReviewRequestSchema, type Review } from '@diffcraft/shared';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { FormError, FormField, TextAreaField } from '@/components/form-field';
@@ -51,11 +51,13 @@ export function ReviewControls({ workspaceId, review }: { workspaceId: string; r
     router.refresh();
   }
 
+  const nextStatus = review.status === 'open' ? 'closed' : 'open';
+  const canToggle = canTransition(review.status, nextStatus);
+
   async function handleStatus() {
     setError(null);
     setPending('status');
-    const status = review.status === 'open' ? 'closed' : 'open';
-    const result = await updateReview(workspaceId, review.number, { status });
+    const result = await updateReview(workspaceId, review.number, { status: nextStatus });
     setPending(null);
     if (!result.ok) setError(describeReviewError(result));
     // Also after a failure: a 403 or 404 means this page is out of date.
@@ -131,18 +133,20 @@ export function ReviewControls({ workspaceId, review }: { workspaceId: string; r
           >
             Edit
           </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={handleStatus}
-            className={smallSecondaryButton}
-          >
-            {pending === 'status'
-              ? 'Saving…'
-              : review.status === 'open'
-                ? 'Close review'
-                : 'Reopen review'}
-          </button>
+          {canToggle && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleStatus}
+              className={smallSecondaryButton}
+            >
+              {pending === 'status'
+                ? 'Saving…'
+                : nextStatus === 'closed'
+                  ? 'Close review'
+                  : 'Reopen review'}
+            </button>
+          )}
 
           {confirmingDelete ? (
             <>

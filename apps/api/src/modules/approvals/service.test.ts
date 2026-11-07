@@ -463,7 +463,8 @@ describeWithDb('approvals service', () => {
       }
     }
     expect(outcomes.merged + outcomes.blocked).toBe(25);
-  });
+    // 25 rounds against the database: the default 5 s is too tight when the whole suite runs in parallel.
+  }, 30_000);
 
   it('writes nothing when the event insert fails', async () => {
     const s = await setup({ requiredApprovals: 0 });

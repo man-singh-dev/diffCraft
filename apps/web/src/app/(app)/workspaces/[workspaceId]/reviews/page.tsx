@@ -16,6 +16,7 @@ const TABS: readonly { label: string; status: ReviewFilters['status'] }[] = [
   { label: 'All', status: null },
   { label: 'Open', status: 'open' },
   { label: 'Closed', status: 'closed' },
+  { label: 'Merged', status: 'merged' },
 ];
 
 const tabClass =
@@ -41,7 +42,7 @@ export default async function ReviewsPage(props: PageProps<'/workspaces/[workspa
 
   const canCreate = hasAtLeastRole(workspace.data.role, 'member');
   const newHref = `/workspaces/${workspaceId}/reviews/new`;
-  const filtered = filters.status !== null || filters.mine;
+  const filtered = filters.status !== null || filters.mine || filters.reviewing;
 
   return (
     <PageCard wide title="Reviews" description={`Code reviews in ${workspace.data.name}.`}>
@@ -69,13 +70,22 @@ export default async function ReviewsPage(props: PageProps<'/workspaces/[workspa
             </Link>
           ))}
         </nav>
-        <Link
-          href={reviewsPageHref(workspaceId, { ...filters, mine: !filters.mine })}
-          aria-current={filters.mine ? 'page' : undefined}
-          className={tabClass}
-        >
-          {filters.mine ? '✓ ' : ''}Only mine
-        </Link>
+        <div className="flex flex-wrap gap-1">
+          <Link
+            href={reviewsPageHref(workspaceId, { ...filters, reviewing: !filters.reviewing })}
+            aria-current={filters.reviewing ? 'page' : undefined}
+            className={tabClass}
+          >
+            {filters.reviewing ? '✓ ' : ''}Waiting for my review
+          </Link>
+          <Link
+            href={reviewsPageHref(workspaceId, { ...filters, mine: !filters.mine })}
+            aria-current={filters.mine ? 'page' : undefined}
+            className={tabClass}
+          >
+            {filters.mine ? '✓ ' : ''}Only mine
+          </Link>
+        </div>
       </div>
 
       {reviews.data.items.length === 0 ? (

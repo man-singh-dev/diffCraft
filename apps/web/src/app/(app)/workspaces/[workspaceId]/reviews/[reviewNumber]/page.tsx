@@ -19,10 +19,27 @@ import {
   OpenThreadsSummary,
   ReviewConversation,
 } from '@/components/review-conversation';
-import { getReview, getReviewFiles, getThreads, getWorkspace } from '@/lib/api.server';
+import { approvalCount, DateTime, DecisionStateBadge } from '@/components/approval-ui';
+import {
+  getDecisions,
+  getMembers,
+  getReview,
+  getReviewers,
+  getReviewEvents,
+  getReviewFiles,
+  getReviewState,
+  getThreads,
+  getWorkspace,
+} from '@/lib/api.server';
+import { DELETED_USER } from '@/lib/approval-timeline';
 import { fileSectionId } from '@/lib/diff-params';
+import { eligibleReviewers } from '@/lib/eligible-reviewers';
 import { getCurrentUser } from '@/lib/auth.server';
+import { DecisionBox } from './decision-box';
+import { MergeBox } from './merge-box';
 import { ReviewControls } from './review-controls';
+import { ReviewersPanel } from './reviewers-panel';
+import { ReviewHistory } from './review-history';
 
 export const metadata: Metadata = { title: 'Review · DiffCraft' };
 
@@ -32,15 +49,21 @@ export default async function ReviewPage(
   props: PageProps<'/workspaces/[workspaceId]/reviews/[reviewNumber]'>,
 ) {
   const { workspaceId, reviewNumber } = await props.params;
-  const [user, workspace, review, files, threads] = await Promise.all([
-    getCurrentUser(),
-    getWorkspace(workspaceId),
-    getReview(workspaceId, reviewNumber),
-    getReviewFiles(workspaceId, reviewNumber),
-    getThreads(workspaceId, reviewNumber),
-  ]);
+  const [user, workspace, review, files, threads, state, reviewers, decisions, events, members] =
+    await Promise.all([
+      getCurrentUser(),
+      getWorkspace(workspaceId),
+      getReview(workspaceId, reviewNumber),
+      getReviewFiles(workspaceId, reviewNumber),
+      getThreads(workspaceId, reviewNumber),
+      getReviewState(workspaceId, reviewNumber),
+      getReviewers(workspaceId, reviewNumber),
+      getDecisions(workspaceId, reviewNumber),
+      getReviewEvents(workspaceId, reviewNumber),
+      getMembers(workspaceId),
+    ]);
 
-  const results = [workspace, review, files, threads];
+  const results = [workspace, review, files, threads, state, reviewers, decisions, events, members];
   if (!user || results.some((r) => !r.ok && r.status === 401)) redirect('/login');
   if (results.some((r) => !r.ok && r.status === 404)) notFound();
   // Threads failing on their own still shows the review, with commenting off.
@@ -53,8 +76,27 @@ export default async function ReviewPage(
   }
 
   const r = review.data;
+  const viewer = { userId: user.id, role: workspace.data.role };
   // The API enforces this; the UI only hides what would be refused.
-  const editable = canEditReview(workspace.data.role, user.id, r);
+  const editable = canEditReview(viewer.role, user.id, r) && r.status !== 'merged';
+  // Approvals failing on their own still shows the review, without the approval panels.
+  const approvals =
+    state.ok && reviewers.ok && decisions.ok && events.ok
+      ? {
+          state: state.data,
+          reviewers: reviewers.data,
+          decisions: decisions.data,
+          events: events.data,
+        }
+      : null;
+  const mergedEvent = approvals?.events.findLast((e) => e.type === 'merged');
+  const names = new Map<string, string>([
+    ...(members.ok ? members.data.map((m): [string, string] => [m.userId, m.displayName]) : []),
+    ...(approvals?.reviewers ?? []).map((rv): [string, string] => [
+      rv.user.id,
+      rv.user.displayName,
+    ]),
+  ]);
   const filesHref = `/workspaces/${workspaceId}/reviews/${r.number}/files`;
   const filePaths = Object.fromEntries(files.data.map((file) => [file.id, filePath(file)]));
 
@@ -78,6 +120,15 @@ export default async function ReviewPage(
               <StatusBadge status={r.status} />
             </dd>
           </div>
+          {approvals && (
+            <div className="flex items-center gap-2">
+              <dt className="sr-only">Approval</dt>
+              <dd className="flex items-center gap-2">
+                <DecisionStateBadge state={approvals.state.state} />
+                <span className="text-slate-400">{approvalCount(approvals.state)}</span>
+              </dd>
+            </div>
+          )}
           <div className="flex gap-2">
             <dt className="text-slate-500">Author</dt>
             <dd className="text-slate-200">{authorName(r)}</dd>
@@ -96,6 +147,23 @@ export default async function ReviewPage(
             </dd>
           </div>
         </dl>
+
+        {r.status === 'merged' && (
+          <p
+            role="status"
+            className="rounded-xl border border-violet-700 bg-violet-950/50 px-4 py-3 text-sm text-violet-200"
+          >
+            Merged
+            {mergedEvent && (
+              <>
+                {' '}
+                by {mergedEvent.actor?.displayName ?? DELETED_USER} on{' '}
+                <DateTime value={mergedEvent.createdAt} />
+              </>
+            )}
+            .
+          </p>
+        )}
 
         <section aria-labelledby="description" className="space-y-2">
           <h2 id="description" className={sectionHeading}>
@@ -118,6 +186,40 @@ export default async function ReviewPage(
             workspaceId={workspaceId}
             review={r}
           />
+        )}
+
+        {approvals ? (
+          <>
+            {r.status !== 'merged' && (
+              <MergeBox
+                workspaceId={workspaceId}
+                review={r}
+                state={approvals.state}
+                viewer={viewer}
+              />
+            )}
+            <ReviewersPanel
+              // Remount when the reviewers change, so the picker starts empty.
+              key={approvals.reviewers.map((rv) => rv.user.id).join(',')}
+              workspaceId={workspaceId}
+              review={r}
+              viewer={viewer}
+              reviewers={approvals.reviewers}
+              eligible={
+                members.ok
+                  ? eligibleReviewers(members.data, approvals.reviewers, r.author?.id ?? null)
+                  : []
+              }
+            />
+            <DecisionBox
+              workspaceId={workspaceId}
+              review={r}
+              viewer={viewer}
+              isAssigned={approvals.reviewers.some((rv) => rv.user.id === user.id)}
+            />
+          </>
+        ) : (
+          <FormError>Couldn&apos;t load the approvals. Please try again in a moment.</FormError>
         )}
 
         <section aria-labelledby="files" className="space-y-3">
@@ -166,6 +268,10 @@ export default async function ReviewPage(
           </h2>
           <ReviewConversation />
         </section>
+
+        {approvals && (
+          <ReviewHistory events={approvals.events} decisions={approvals.decisions} names={names} />
+        )}
       </CommentsProvider>
     </PageCard>
   );

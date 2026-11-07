@@ -15,15 +15,17 @@ export function isReviewNumber(value: string): boolean {
 export interface ReviewFilters {
   status: ReviewStatus | null;
   mine: boolean;
+  reviewing: boolean;
 }
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
 export function parseReviewFilters(searchParams: SearchParams): ReviewFilters {
-  const { status, mine } = searchParams;
+  const { status, mine, reviewer } = searchParams;
   return {
-    status: status === 'open' || status === 'closed' ? status : null,
+    status: status === 'open' || status === 'closed' || status === 'merged' ? status : null,
     mine: mine === '1',
+    reviewing: reviewer === 'me',
   };
 }
 
@@ -31,6 +33,7 @@ export function reviewListQuery(filters: ReviewFilters, cursor?: string | null):
   const query = new URLSearchParams();
   if (filters.status) query.set('status', filters.status);
   if (filters.mine) query.set('author', 'me');
+  if (filters.reviewing) query.set('reviewer', 'me');
   if (cursor) query.set('cursor', cursor);
   const text = query.toString();
   return text ? `?${text}` : '';
@@ -40,6 +43,7 @@ export function reviewsPageHref(workspaceId: string, filters: ReviewFilters): st
   const query = new URLSearchParams();
   if (filters.status) query.set('status', filters.status);
   if (filters.mine) query.set('mine', '1');
+  if (filters.reviewing) query.set('reviewer', 'me');
   const text = query.toString();
   return `/workspaces/${workspaceId}/reviews${text ? `?${text}` : ''}`;
 }

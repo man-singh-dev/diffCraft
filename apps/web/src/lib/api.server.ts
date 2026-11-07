@@ -1,18 +1,31 @@
 import 'server-only';
 
 import {
+  ApprovalRulesSchema,
   CommentSchema,
   ErrorResponseSchema,
+  ReviewDecisionSchema,
+  ReviewerSchema,
+  ReviewEventSchema,
   ReviewFileDiffSchema,
   ReviewFileSchema,
   ReviewListResponseSchema,
   ReviewSchema,
+  ReviewStateSchema,
   WorkspaceMemberSchema,
   WorkspaceSchema,
   ThreadSchema,
+  type ApprovalRules,
+  type AssignReviewersRequest,
   type Comment,
   type CreateThreadRequest,
   type Review,
+  type ReviewDecision,
+  type Reviewer,
+  type ReviewEvent,
+  type ReviewState,
+  type SubmitDecisionRequest,
+  type UpdateApprovalRulesRequest,
   type ReviewFile,
   type ReviewFileDiff,
   type ReviewListResponse,
@@ -129,11 +142,50 @@ export async function getThreads(
   );
 }
 
+function reviewPath(workspaceId: string, reviewNumber: string): string | null {
+  return isUuid(workspaceId) && isReviewNumber(reviewNumber)
+    ? `/api/v1/workspaces/${workspaceId}/reviews/${reviewNumber}`
+    : null;
+}
+
+function getFromReview<T>(
+  workspaceId: string,
+  reviewNumber: string,
+  rest: string,
+  schema: z.ZodType<T>,
+): Promise<ServerApiResult<T>> {
+  const base = reviewPath(workspaceId, reviewNumber);
+  return base ? apiGet(`${base}${rest}`, schema) : Promise.resolve(NOT_FOUND);
+}
+
+export const getReviewState = (workspaceId: string, reviewNumber: string) =>
+  getFromReview<ReviewState>(workspaceId, reviewNumber, '/state', ReviewStateSchema);
+
+export const getReviewers = (workspaceId: string, reviewNumber: string) =>
+  getFromReview<Reviewer[]>(workspaceId, reviewNumber, '/reviewers', ReviewerSchema.array());
+
+export const getDecisions = (workspaceId: string, reviewNumber: string) =>
+  getFromReview<ReviewDecision[]>(
+    workspaceId,
+    reviewNumber,
+    '/decisions',
+    ReviewDecisionSchema.array(),
+  );
+
+export const getReviewEvents = (workspaceId: string, reviewNumber: string) =>
+  getFromReview<ReviewEvent[]>(workspaceId, reviewNumber, '/events', ReviewEventSchema.array());
+
+export async function getRules(workspaceId: string): Promise<ServerApiResult<ApprovalRules>> {
+  if (!isUuid(workspaceId)) return NOT_FOUND;
+  return apiGet(`/api/v1/workspaces/${workspaceId}/rules`, ApprovalRulesSchema);
+}
+
 export interface ServerSendFailure {
   ok: false;
   status: number;
   code: string | null;
   fieldErrors: FieldErrors;
+  details?: unknown;
 }
 export type ServerSendResult<T> = { ok: true; data: T } | ServerSendFailure;
 
@@ -184,9 +236,11 @@ export async function sendApi<T>(
       if (!error.success) return sendFailure(res.status);
       const issues =
         res.status === 422 ? FieldIssuesSchema.safeParse(error.data.error.details) : null;
+      const { code, details } = error.data.error;
       return {
-        ...sendFailure(res.status, error.data.error.code),
+        ...sendFailure(res.status, code),
         fieldErrors: issues?.success ? toFieldErrors(issues.data) : {},
+        ...(details !== undefined && { details }),
       };
     }
     const parsed = schema.safeParse(json);
@@ -258,4 +312,51 @@ export async function deleteCommentRequest(
   const base = threadsPath(workspaceId, reviewNumber);
   if (!base || !isUuid(threadId) || !isUuid(commentId)) return SEND_NOT_FOUND;
   return apiSend('DELETE', `${base}/${threadId}/comments/${commentId}`, undefined, CommentSchema);
+}
+
+export async function postReviewers(
+  workspaceId: string,
+  reviewNumber: string,
+  input: AssignReviewersRequest,
+): Promise<ServerSendResult<Reviewer[]>> {
+  const base = reviewPath(workspaceId, reviewNumber);
+  if (!base) return SEND_NOT_FOUND;
+  return apiSend('POST', `${base}/reviewers`, input, ReviewerSchema.array());
+}
+
+export async function deleteReviewerRequest(
+  workspaceId: string,
+  reviewNumber: string,
+  userId: string,
+): Promise<ServerSendResult<undefined>> {
+  const base = reviewPath(workspaceId, reviewNumber);
+  if (!base || !isUuid(userId)) return SEND_NOT_FOUND;
+  return apiSend('DELETE', `${base}/reviewers/${userId}`, undefined, z.undefined());
+}
+
+export async function postDecision(
+  workspaceId: string,
+  reviewNumber: string,
+  input: SubmitDecisionRequest,
+): Promise<ServerSendResult<ReviewDecision>> {
+  const base = reviewPath(workspaceId, reviewNumber);
+  if (!base) return SEND_NOT_FOUND;
+  return apiSend('POST', `${base}/decisions`, input, ReviewDecisionSchema);
+}
+
+export async function postMerge(
+  workspaceId: string,
+  reviewNumber: string,
+): Promise<ServerSendResult<Review>> {
+  const base = reviewPath(workspaceId, reviewNumber);
+  if (!base) return SEND_NOT_FOUND;
+  return apiSend('POST', `${base}/merge`, undefined, ReviewSchema);
+}
+
+export async function patchRules(
+  workspaceId: string,
+  input: UpdateApprovalRulesRequest,
+): Promise<ServerSendResult<ApprovalRules>> {
+  if (!isUuid(workspaceId)) return SEND_NOT_FOUND;
+  return apiSend('PATCH', `/api/v1/workspaces/${workspaceId}/rules`, input, ApprovalRulesSchema);
 }
