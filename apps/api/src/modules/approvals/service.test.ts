@@ -21,6 +21,7 @@ import {
   assignReviewers,
   getReviewState,
   getRules,
+  listDecisions,
   listEvents,
   listReviewers,
   mergeReview,
@@ -205,6 +206,57 @@ describeWithDb('approvals service', () => {
     expect((await s.events()).filter((type) => type === 'reviewer_removed')).toHaveLength(2);
   });
 
+  it('counts only decisions made since the current assignment after a re-assignment', async () => {
+    const s = await setup();
+    const bo = await s.member('Bo');
+    await s.assign(bo);
+    await s.decide(bo, 'approve');
+    expect(await s.state()).toMatchObject({ state: 'approved', canMerge: true });
+
+    await removeReviewer(app.db, { ...s, actorId: s.authorId, userId: bo });
+    await s.assign(bo);
+    expect(await s.state()).toMatchObject({ state: 'pending', approvals: 0, canMerge: false });
+    expect(await listReviewers(app.db, s.workspaceId, s.reviewId)).toEqual([
+      { user: { id: bo, displayName: 'Bo' }, latestDecision: null, decidedAt: null },
+    ]);
+    await expect(s.merge()).rejects.toMatchObject({ code: 'merge_blocked' });
+
+    await s.decide(bo, 'approve');
+    expect(await s.state()).toMatchObject({ state: 'approved', approvals: 1, canMerge: true });
+    expect((await s.merge()).status).toBe('merged');
+  });
+
+  it('lists every decision oldest first, including former reviewers and deleted users', async () => {
+    const s = await setup();
+    const [bo, cy] = [await s.member('Bo'), await s.member('Cy')];
+    await s.assign(bo, cy);
+    await s.decide(bo, 'request_changes', 'Rename it');
+    await s.decide(cy, 'approve');
+    await s.decide(bo, 'approve');
+    await removeReviewer(app.db, { ...s, actorId: s.authorId, userId: cy });
+    await app.db.delete(users).where(eq(users.id, bo));
+
+    const decisions = await listDecisions(app.db, s.workspaceId, s.reviewId);
+    expect(decisions.map((d) => [d.reviewer?.id ?? null, d.decision, d.body])).toEqual([
+      [null, 'request_changes', 'Rename it'],
+      [cy, 'approve', null],
+      [null, 'approve', null],
+    ]);
+    const other = await setup();
+    await expect(listDecisions(app.db, other.workspaceId, s.reviewId)).resolves.toEqual([]);
+  });
+
+  it('updates only the rules that are given', async () => {
+    const s = await setup();
+    await expect(updateRules(app.db, s.workspaceId, { requiredApprovals: 2 })).resolves.toEqual({
+      requiredApprovals: 2,
+      requireResolvedThreads: false,
+    });
+    await expect(
+      updateRules(app.db, s.workspaceId, { requireResolvedThreads: true }),
+    ).resolves.toEqual({ requiredApprovals: 2, requireResolvedThreads: true });
+  });
+
   it('applies the resolved-threads rule only when it is on', async () => {
     const s = await setup();
     const bo = await s.member('Bo');
@@ -350,10 +402,7 @@ describeWithDb('approvals service', () => {
       actor: { id: admin, displayName: 'Root' },
     });
 
-    await expect(s.merge()).rejects.toMatchObject({
-      code: 'merge_blocked',
-      details: { reasons: ['The review is already merged'] },
-    });
+    await expect(s.merge()).rejects.toMatchObject({ statusCode: 409, code: 'review_merged' });
     expect(await s.state()).toMatchObject({ canMerge: false });
   });
 

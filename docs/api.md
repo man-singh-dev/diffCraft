@@ -9,7 +9,7 @@ The REST API design: conventions, every implemented and proposed endpoint, and w
 ## API Design
 
 > [!NOTE]
-> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, the five member endpoints, the seven review endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
+> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, the five member endpoints, the seven review endpoints, the seven comment endpoints, the ten approval endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
 
 Conventions (the base path, error shape, `400`, `401`, `403`, `404`, `413`, `422` and cursor pagination are **Implemented**; the rest are proposed):
 
@@ -90,18 +90,19 @@ Reviews are addressed by their per-workspace **number** (`#12`), not their UUID.
 
 **List query** (`ListReviewsQuerySchema`):
 
-| Parameter | Values                                | Default |
-| --------- | ------------------------------------- | ------- |
-| `status`  | `open` or `closed`                    | all     |
-| `author`  | `me` or a user UUID                   | all     |
-| `limit`   | integer 1–50                          | 20      |
-| `cursor`  | the `nextCursor` of the previous page | none    |
+| Parameter  | Values                                            | Default |
+| ---------- | ------------------------------------------------- | ------- |
+| `status`   | `open` or `closed`                                | all     |
+| `author`   | `me` or a user UUID                               | all     |
+| `reviewer` | `me`: reviews the caller is currently assigned to | all     |
+| `limit`    | integer 1–50                                      | 20      |
+| `cursor`   | the `nextCursor` of the previous page             | none    |
 
 #### Pagination
 
 Lists are ordered by `created_at DESC, id DESC` and paginated by keyset, not offset: the next page is the rows strictly after the `(created_at, id)` of the last item, served by the `(workspace_id, created_at DESC, id DESC)` index. Rows created while paging don't shift pages, and nothing is repeated or skipped. `nextCursor` is `null` on the last page.
 
-The cursor is opaque to clients. It is the base64url encoding of `{"createdAt":"2026-01-01T00:00:00.000900Z","id":"<uuid>"}`, where `createdAt` is the database value in UTC with all **six** fractional digits. It never goes through a JS `Date` (milliseconds only), which would skip or repeat rows created within the same millisecond. A cursor the API didn't produce is `400 invalid_cursor`; start again without one. Cursors don't carry the filters, so send the same `status` and `author` with every page.
+The cursor is opaque to clients. It is the base64url encoding of `{"createdAt":"2026-01-01T00:00:00.000900Z","id":"<uuid>"}`, where `createdAt` is the database value in UTC with all **six** fractional digits. It never goes through a JS `Date` (milliseconds only), which would skip or repeat rows created within the same millisecond. A cursor the API didn't produce is `400 invalid_cursor`; start again without one. Cursors don't carry the filters, so send the same `status`, `author` and `reviewer` with every page.
 
 Errors on the review routes (in addition to the workspace errors above):
 
@@ -113,7 +114,7 @@ Errors on the review routes (in addition to the workspace errors above):
 | `400`  | `invalid_patch`         | The parser rejected the patch. `details: { reason, line }`: `reason` is the parser's code (below), `line` is 1-based or `null`.    |
 | `400`  | `invalid_cursor`        | `cursor` can't be decoded.                                                                                                         |
 | `413`  | `payload_too_large`     | The JSON body is over 3 MiB (`POST` reviews) or 1 MiB (every other route).                                                         |
-| `422`  | `validation_error`      | Invalid body, or invalid list query (`limit`, `status`, `author`).                                                                 |
+| `422`  | `validation_error`      | Invalid body, or invalid list query (`limit`, `status`, `author`, `reviewer`).                                                     |
 
 `invalid_patch` reasons: `empty_patch`, `too_large`, `too_many_files`, `too_many_lines`, `line_too_long`, `not_a_patch`, `malformed_header`, `malformed_hunk`, `count_mismatch`, and `unsupported_encoding` (the text contains NUL characters, usually a UTF-16 or binary file: save it as UTF-8. Postgres `text` can't store NUL, so such input never reaches the database).
 
@@ -187,10 +188,41 @@ The web app links to it through its `/api` rewrite, so the session cookie is sen
 
 ### Review approvals
 
-| Method | Path                                  | Purpose                                                                                                  | Auth              |
-| ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------- |
-| `GET`  | `/api/v1/reviews/:reviewId/approvals` | List decisions for the current (or given) revision.                                                      | Member            |
-| `POST` | `/api/v1/reviews/:reviewId/approvals` | Submit `approved` or `changes_requested` with an optional note. Authors cannot approve their own review. | Assigned reviewer |
+Assigned reviewers approve or request changes; a review merges when the workspace's rules pass. The routes are nested under the review like the comment routes, so the auth, workspace and review checks run first. `R` below stands for `/api/v1/workspaces/:workspaceId/reviews/:reviewNumber`.
+
+| Method   | Path                                    | Purpose                                                                                                                                 | Auth                                                         | Status          |
+| -------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------- |
+| `GET`    | `R/state`                               | Approval state and whether it can merge. `200 ReviewState`.                                                                             | Member (viewer and up)                                       | **Implemented** |
+| `GET`    | `R/reviewers`                           | Current reviewers with their latest decision. `200 Reviewer[]`.                                                                         | Member (viewer and up)                                       | **Implemented** |
+| `POST`   | `R/reviewers`                           | Assign reviewers. Body `{ userIds }` (1–10 distinct UUIDs); already-assigned users are ignored. `200 Reviewer[]` (the full list).       | Author (member and up) or Admin                              | **Implemented** |
+| `DELETE` | `R/reviewers/:userId`                   | Unassign a reviewer. `204`.                                                                                                             | Author (member and up) or Admin; any reviewer for themselves | **Implemented** |
+| `POST`   | `R/decisions`                           | Approve or request changes. Body `{ decision: "approve" \| "request_changes", body? }`. `201 ReviewDecision`.                           | Assigned reviewer (member and up), never the author          | **Implemented** |
+| `GET`    | `R/decisions`                           | Every decision, oldest first, including those of former reviewers and deleted users. `200 ReviewDecision[]`.                            | Member (viewer and up)                                       | **Implemented** |
+| `POST`   | `R/merge`                               | Merge when the rules pass. `200 Review` with `status: "merged"`.                                                                        | Author (member and up) or Admin                              | **Implemented** |
+| `GET`    | `R/events`                              | The review's history, oldest first. `200 ReviewEvent[]`.                                                                                | Member (viewer and up)                                       | **Implemented** |
+| `GET`    | `/api/v1/workspaces/:workspaceId/rules` | The workspace's approval rules. `200 ApprovalRules`.                                                                                    | Member (viewer and up)                                       | **Implemented** |
+| `PATCH`  | `/api/v1/workspaces/:workspaceId/rules` | Change the rules. Body: at least one of `requiredApprovals` (integer 0–10) and `requireResolvedThreads` (boolean). `200 ApprovalRules`. | Admin                                                        | **Implemented** |
+
+Schemas are in `packages/shared/src/approvals.ts`. `ReviewState` is `{ state: "pending" | "approved" | "changes_requested", approvals, requiredApprovals, openThreads, canMerge, reasons }`. `Reviewer` is `{ user, latestDecision, decidedAt }`. `ReviewDecision` is `{ id, reviewId, reviewer, decision, body, createdAt }`. `ReviewEvent` is `{ id, reviewId, actor, type, data, createdAt }`, with `type` one of `reviewer_assigned`, `reviewer_removed`, `decision`, `closed`, `reopened`, `merged`. `ApprovalRules` is `{ requiredApprovals, requireResolvedThreads }` (default `1` and `false`). Users are `{ id, displayName }`, or `null` once the account is deleted.
+
+**Rules:** a review can merge when it is open, no current reviewer's latest decision is `request_changes`, at least `requiredApprovals` current reviewers' latest decision is `approve`, and (if `requireResolvedThreads`) no thread is open. A reviewer's decisions count only if made since their **current** assignment: removing a reviewer drops their decisions from the count, and re-assigning them doesn't bring the old ones back (they stay in `GET R/decisions`). `state` is `approved` only once someone approved, even with `requiredApprovals: 0`.
+
+**Order of checks** (each stops at the first failure): the workspace guard (`401`, `404 workspace_not_found`, `403 forbidden` below member on the `POST` and `DELETE` routes) → the review (`404 review_not_found`) → the target (`:userId` is a UUID and a current reviewer of this review, else `404 reviewer_not_found`) → the permission (`403`) → the body (`422`) → the review's state (`409`).
+
+**403, 409 or 422:** `403` means the caller may not do this on this review (role or relationship); `409` means they may, but not in the review's current state; `422` means the request itself is invalid.
+
+| Status | Code                 | When                                                                                                                                                                                                                                           |
+| ------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `404`  | `reviewer_not_found` | `DELETE R/reviewers/:userId`: `:userId` is not a UUID, or not a current reviewer of this review.                                                                                                                                               |
+| `403`  | `forbidden`          | Below the route's minimum role; assigning, unassigning someone else or merging by a member who isn't the author; the author deciding on their own review.                                                                                      |
+| `403`  | `not_a_reviewer`     | `POST R/decisions` by a member who isn't assigned to this review.                                                                                                                                                                              |
+| `409`  | `review_not_open`    | `POST R/decisions` on a closed or merged review.                                                                                                                                                                                               |
+| `409`  | `review_merged`      | Merging again, or assigning or unassigning on a merged review.                                                                                                                                                                                 |
+| `409`  | `merge_blocked`      | `POST R/merge` when the rules fail; nothing changes. `details: { reasons: string[] }`, the same `reasons` as `GET R/state`, e.g. `["Bo requested changes", "0 of 1 required approval", "2 unresolved threads"]` (`MergeBlockedDetailsSchema`). |
+| `422`  | `invalid_reviewers`  | Some `userIds` can't review: `details: [{ userId, reason }]`, `reason` one of `not_a_member`, `viewer`, `author` (`InvalidReviewersDetailsSchema`). Nobody is assigned.                                                                        |
+| `422`  | `validation_error`   | Invalid body: `userIds` missing, empty, over 10, duplicated or not UUIDs; unknown `decision`; invalid `body`; rules out of range or empty.                                                                                                     |
+
+Merging and deciding lock the review row, so a request for changes racing a merge either lands first (the merge is blocked) or after it (`409 review_not_open`); a merge never goes past it.
 
 ### AI analysis and findings
 

@@ -10,6 +10,7 @@ import {
   evaluateReview,
   REVIEW_EVENT_TYPES,
   SubmitDecisionRequestSchema,
+  UpdateApprovalRulesRequestSchema,
   type Decision,
   type EvaluateReviewInput,
   type ReviewState,
@@ -305,5 +306,34 @@ describe('permissions', () => {
     it('allows deciding on a review whose author was deleted', () => {
       expect(canDecide('member', OTHER, { author: null, status: 'open' }, true)).toBe(true);
     });
+  });
+});
+
+describe('UpdateApprovalRulesRequestSchema', () => {
+  it('accepts either field alone or both', () => {
+    expect(UpdateApprovalRulesRequestSchema.parse({ requiredApprovals: 0 })).toEqual({
+      requiredApprovals: 0,
+    });
+    expect(UpdateApprovalRulesRequestSchema.parse({ requireResolvedThreads: false })).toEqual({
+      requireResolvedThreads: false,
+    });
+    expect(
+      UpdateApprovalRulesRequestSchema.parse({
+        requiredApprovals: 10,
+        requireResolvedThreads: true,
+      }),
+    ).toEqual({ requiredApprovals: 10, requireResolvedThreads: true });
+  });
+
+  it.each([
+    {},
+    { requiredApprovals: 11 },
+    { requiredApprovals: -1 },
+    { requiredApprovals: 2.5 },
+    { requiredApprovals: '2' },
+    { requireResolvedThreads: 'true' },
+    { requiredApprovals: null },
+  ])('rejects %j', (body) => {
+    expect(UpdateApprovalRulesRequestSchema.safeParse(body).success).toBe(false);
   });
 });

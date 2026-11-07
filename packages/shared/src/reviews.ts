@@ -71,6 +71,7 @@ export const REVIEW_LIST_MAX_LIMIT = 50;
 export const ListReviewsQuerySchema = z.object({
   status: ReviewStatusSchema.optional(),
   author: z.union([z.literal('me'), z.uuid()]).optional(),
+  reviewer: z.literal('me').optional(),
   limit: z.coerce.number().int().min(1).max(REVIEW_LIST_MAX_LIMIT).default(20),
   cursor: z.string().optional(),
 });

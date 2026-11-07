@@ -17,6 +17,7 @@ import {
   requireWorkspaceRole,
   UUID_PATTERN,
 } from '../workspaces/require-workspace-role.js';
+import { approvalRoutes } from '../approvals/routes.js';
 import { commentRoutes } from '../comments/routes.js';
 import { decodeCursor } from './cursor.js';
 import {
@@ -106,6 +107,7 @@ const singleReviewRoutes: FastifyPluginAsync = async (app) => {
   );
 
   await app.register(commentRoutes, { prefix: '/threads' });
+  await app.register(approvalRoutes);
 };
 
 export const reviewRoutes: FastifyPluginAsync = async (app) => {
@@ -138,14 +140,16 @@ export const reviewRoutes: FastifyPluginAsync = async (app) => {
       if (!parsed.success) {
         throw new ValidationError(parsed.error.issues, 'The query string is invalid.');
       }
-      const { status, author, limit, cursor: rawCursor } = parsed.data;
+      const { status, author, reviewer, limit, cursor: rawCursor } = parsed.data;
 
       const cursor = rawCursor === undefined ? undefined : decodeCursor(rawCursor);
       if (cursor === null) throw new InvalidCursorError();
 
+      const me = authUser(request).id;
       return listReviews(app.db, requestWorkspace(request).id, {
         status,
-        authorId: author === 'me' ? authUser(request).id : author,
+        authorId: author === 'me' ? me : author,
+        reviewerId: reviewer === 'me' ? me : undefined,
         limit,
         cursor,
       });

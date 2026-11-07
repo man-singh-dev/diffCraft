@@ -26,6 +26,12 @@ export const ApprovalRulesSchema = z.object({
 });
 export type ApprovalRules = z.infer<typeof ApprovalRulesSchema>;
 
+export const UpdateApprovalRulesRequestSchema = ApprovalRulesSchema.partial().refine(
+  (body) => Object.values(body).some((value) => value !== undefined),
+  { message: 'Provide at least one of requiredApprovals and requireResolvedThreads.' },
+);
+export type UpdateApprovalRulesRequest = z.infer<typeof UpdateApprovalRulesRequestSchema>;
+
 export const SubmitDecisionRequestSchema = z.object({
   decision: DecisionSchema,
   body: CommentBodySchema.optional(),
@@ -69,6 +75,16 @@ export const ReviewerSchema = z.object({
   decidedAt: z.iso.datetime().nullable(),
 });
 export type Reviewer = z.infer<typeof ReviewerSchema>;
+
+export const INVALID_REVIEWER_REASONS = ['not_a_member', 'viewer', 'author'] as const;
+
+export const InvalidReviewersDetailsSchema = z.array(
+  z.object({ userId: z.string(), reason: z.enum(INVALID_REVIEWER_REASONS) }),
+);
+export type InvalidReviewersDetails = z.infer<typeof InvalidReviewersDetailsSchema>;
+
+export const MergeBlockedDetailsSchema = z.object({ reasons: z.array(z.string()) });
+export type MergeBlockedDetails = z.infer<typeof MergeBlockedDetailsSchema>;
 
 export const REVIEW_STATES = ['pending', 'approved', 'changes_requested'] as const;
 

@@ -9,7 +9,7 @@ import {
   type Reviewer,
   type ReviewState,
 } from '@diffcraft/shared';
-import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import {
   commentThreads,
   reviewDecisions,
@@ -49,18 +49,24 @@ export async function getRules(db: Executor, workspaceId: string): Promise<Appro
 export async function updateRules(
   db: Database,
   workspaceId: string,
-  rules: ApprovalRules,
+  rules: Partial<ApprovalRules>,
 ): Promise<ApprovalRules | null> {
   const [row] = await db
     .update(workspaces)
-    .set(rules)
+    .set({
+      ...(rules.requiredApprovals !== undefined && { requiredApprovals: rules.requiredApprovals }),
+      ...(rules.requireResolvedThreads !== undefined && {
+        requireResolvedThreads: rules.requireResolvedThreads,
+      }),
+    })
     .where(eq(workspaces.id, workspaceId))
     .returning(rulesColumns);
   return row ?? null;
 }
 
 // One query: DISTINCT ON keeps each current reviewer's newest decision. Starting from
-// review_reviewers is what makes a removed reviewer's decisions stop counting.
+// review_reviewers and joining only decisions since the current assignment is what makes a
+// removed (or removed and re-assigned) reviewer's earlier decisions stop counting.
 export async function listReviewers(
   db: Executor,
   workspaceId: string,
@@ -85,6 +91,7 @@ export async function listReviewers(
       and(
         eq(reviewDecisions.reviewId, reviewReviewers.reviewId),
         eq(reviewDecisions.reviewerId, reviewReviewers.userId),
+        gte(reviewDecisions.createdAt, reviewReviewers.createdAt),
       ),
     )
     .where(eq(reviewReviewers.reviewId, reviewId))
@@ -103,6 +110,23 @@ export async function listReviewers(
       latestDecision: row.decision,
       decidedAt: row.decidedAt?.toISOString() ?? null,
     }));
+}
+
+export async function isReviewer(
+  db: Executor,
+  workspaceId: string,
+  reviewId: string,
+  userId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ userId: reviewReviewers.userId })
+    .from(reviewReviewers)
+    .innerJoin(
+      reviews,
+      and(eq(reviews.id, reviewReviewers.reviewId), eq(reviews.workspaceId, workspaceId)),
+    )
+    .where(and(eq(reviewReviewers.reviewId, reviewId), eq(reviewReviewers.userId, userId)));
+  return row !== undefined;
 }
 
 async function countOpenThreads(db: Executor, reviewId: string): Promise<number> {
@@ -140,6 +164,9 @@ export async function getReviewState(
 ): Promise<ReviewState | null> {
   return computeState(db, workspaceId, reviewId);
 }
+
+// Not now() (transaction start): a transaction that waited on the review lock must still be dated after what it waited for.
+const assignedOrDecidedAt = sql<Date>`clock_timestamp()`;
 
 async function lockChangeableReview(tx: Tx, workspaceId: string, reviewId: string) {
   const review = await lockReview(tx, workspaceId, reviewId);
@@ -181,7 +208,14 @@ export async function assignReviewers(
 
     const added = await tx
       .insert(reviewReviewers)
-      .values(userIds.map((userId) => ({ reviewId: review.id, userId, assignedBy: actorId })))
+      .values(
+        userIds.map((userId) => ({
+          reviewId: review.id,
+          userId,
+          assignedBy: actorId,
+          createdAt: assignedOrDecidedAt,
+        })),
+      )
       .onConflictDoNothing()
       .returning({ userId: reviewReviewers.userId });
 
@@ -254,7 +288,13 @@ export async function submitDecision(
 
     const [row] = await tx
       .insert(reviewDecisions)
-      .values({ reviewId: review.id, reviewerId, decision, body: body ?? null })
+      .values({
+        reviewId: review.id,
+        reviewerId,
+        decision,
+        body: body ?? null,
+        createdAt: assignedOrDecidedAt,
+      })
       .returning();
     if (!row) throw new Error('INSERT ... RETURNING returned no row');
 
@@ -274,6 +314,35 @@ export async function submitDecision(
       createdAt: row.createdAt.toISOString(),
     };
   });
+}
+
+export async function listDecisions(
+  db: Database,
+  workspaceId: string,
+  reviewId: string,
+): Promise<ReviewDecision[]> {
+  const rows = await db
+    .select({ decision: reviewDecisions, reviewerName: users.displayName })
+    .from(reviewDecisions)
+    .innerJoin(
+      reviews,
+      and(eq(reviews.id, reviewDecisions.reviewId), eq(reviews.workspaceId, workspaceId)),
+    )
+    .leftJoin(users, eq(users.id, reviewDecisions.reviewerId))
+    .where(eq(reviewDecisions.reviewId, reviewId))
+    .orderBy(asc(reviewDecisions.createdAt), asc(reviewDecisions.id));
+
+  return rows.map(({ decision, reviewerName }) => ({
+    id: decision.id,
+    reviewId: decision.reviewId,
+    reviewer:
+      decision.reviewerId !== null && reviewerName !== null
+        ? { id: decision.reviewerId, displayName: reviewerName }
+        : null,
+    decision: decision.decision,
+    body: decision.body,
+    createdAt: decision.createdAt.toISOString(),
+  }));
 }
 
 export async function listEvents(
@@ -313,6 +382,7 @@ export async function mergeReview(
     // Lock first, then read: a state computed before the lock could miss a decision that commits in between.
     const review = await lockReview(tx, workspaceId, reviewId);
     if (!review) throw new ReviewNotFoundError();
+    if (review.status === 'merged') throw new ReviewMergedError();
 
     const state = await computeState(tx, workspaceId, review.id);
     if (!state) throw new ReviewNotFoundError();

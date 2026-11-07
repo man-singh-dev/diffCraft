@@ -136,6 +136,11 @@ describe('ListReviewsQuerySchema', () => {
       author,
     });
     expect(ListReviewsQuerySchema.parse({ author: 'me' }).author).toBe('me');
+    expect(ListReviewsQuerySchema.parse({ reviewer: 'me', status: 'open' })).toEqual({
+      limit: 20,
+      reviewer: 'me',
+      status: 'open',
+    });
   });
 
   it.each([
@@ -147,6 +152,8 @@ describe('ListReviewsQuerySchema', () => {
     { status: 'approved' },
     { status: ['open', 'closed'] },
     { author: 'someone' },
+    { reviewer: '01a17e5e-aa56-7985-be46-bf5f1c7e7fd2' },
+    { reviewer: '' },
   ])('rejects %j', (query) => {
     expect(ListReviewsQuerySchema.safeParse(query).success).toBe(false);
   });

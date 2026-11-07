@@ -8,10 +8,11 @@ import {
   type ReviewStatus,
   type UpdateReviewRequest,
 } from '@diffcraft/shared';
-import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, sql, type SQL } from 'drizzle-orm';
 import {
   reviewEvents,
   reviewFiles,
+  reviewReviewers,
   reviews,
   users,
   workspaces,
@@ -159,6 +160,7 @@ export async function getReviewByNumber(
 export interface ListReviewsOptions {
   status?: ReviewStatus;
   authorId?: string;
+  reviewerId?: string;
   limit: number;
   cursor?: ReviewCursor;
 }
@@ -166,7 +168,7 @@ export interface ListReviewsOptions {
 export async function listReviews(
   db: Database,
   workspaceId: string,
-  { status, authorId, limit, cursor }: ListReviewsOptions,
+  { status, authorId, reviewerId, limit, cursor }: ListReviewsOptions,
 ): Promise<{ items: Review[]; nextCursor: string | null }> {
   const rows = await db
     .select({
@@ -181,6 +183,19 @@ export async function listReviews(
         eq(reviews.workspaceId, workspaceId),
         status !== undefined ? eq(reviews.status, status) : undefined,
         authorId !== undefined ? eq(reviews.authorId, authorId) : undefined,
+        reviewerId !== undefined
+          ? exists(
+              db
+                .select({ one: sql`1` })
+                .from(reviewReviewers)
+                .where(
+                  and(
+                    eq(reviewReviewers.reviewId, reviews.id),
+                    eq(reviewReviewers.userId, reviewerId),
+                  ),
+                ),
+            )
+          : undefined,
         cursor !== undefined
           ? sql`(${reviews.createdAt}, ${reviews.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
           : undefined,

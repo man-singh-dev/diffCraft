@@ -40,10 +40,10 @@ Roles are ranked **viewer < member < admin < owner**. `hasAtLeastRole(role, mini
 | Manage members and roles                  |   ✓   |   ✓   |   —    |   —    |
 | Delete the workspace / transfer ownership |   ✓   |   —   |   —    |   —    |
 
-**2. Review relationship** (author, assigned reviewer). The author rule is **Implemented**; the rest is **Planned** (Stages 4–6).
+**2. Review relationship** (author, assigned reviewer). The author and reviewer rules are **Implemented**; revisions are **Planned**.
 
 - Editing, closing, reopening or deleting a review is allowed for its **author** (if they are still a member or above) and for any **admin or owner**. A viewer, or a member acting on someone else's review, gets `403`. The rule is one pure function, `canEditReview` in `packages/shared`, used by the API and (for hiding buttons) the web UI.
-- Only **assigned reviewers** can submit approval decisions; an **author** cannot approve their own review.
+- Only **assigned reviewers** can submit approval decisions; an **author** cannot approve their own review. See [Approvals](#approvals-implemented).
 - Only the **author** can submit new revisions.
 - Comment rules are **Implemented**; see [Comments](#comments-implemented).
 
@@ -103,6 +103,26 @@ Code: `apps/api/src/modules/comments/routes.ts`. The rules are pure functions in
 - **Order of checks:** review → thread → comment → permission → body. A caller learns nothing about threads or comments they can't reach, and a forbidden request is `403` whatever its body.
 - **A demoted author** (now a viewer) can still edit their own comment, but can no longer delete it or comment again.
 - **Closed reviews** still accept comments: closing a review ends the review, not the discussion.
+
+### Approvals (Implemented)
+
+Code: `apps/api/src/modules/approvals/routes.ts` and `service.ts`. The rules are pure functions in `packages/shared/src/approvals.ts` (`canAssignReviewers`, `canDecide`, `canMerge`, `evaluateReview`), so the web UI can offer only what the API allows.
+
+| Action                                              | Rule                                                                                                                                     |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Read state, reviewers, decisions, history and rules | Any member (viewer and up).                                                                                                              |
+| Assign reviewers                                    | `canAssignReviewers`: the review's author (member and up) or any admin or owner. Reviewers must be members or above, and not the author. |
+| Unassign a reviewer                                 | The same, or the reviewer themselves (stepping down).                                                                                    |
+| Approve or request changes                          | `canDecide`: a member or above who is assigned to the review and isn't its author, on an open review.                                    |
+| Merge                                               | `canMerge`: the author (member and up) or any admin or owner, and only when `evaluateReview` passes the workspace's rules.               |
+| Change the rules                                    | Admins and owners.                                                                                                                       |
+
+- **Separation of duties:** the author never counts towards their own approvals: they can't be assigned (`422 invalid_reviewers`, reason `author`) and can't decide (`403`), even as an admin or owner. With `requiredApprovals ≥ 1`, someone other than the author must approve before the author (or an admin) can merge. An admin can merge someone else's review, but only when the rules pass; there is no override in the API. `requiredApprovals: 0` turns this off for the workspace, and only an admin can choose that.
+- **Stale approvals don't count:** only decisions of **current** reviewers made since their current assignment count. Removing a reviewer (or the reviewer stepping down) drops their approval or request for changes, and re-assigning them requires a new decision, so an approval can't be carried over by removing and re-adding someone. Assignments and decisions are dated with `clock_timestamp()` after the review lock, not `now()`, so a transaction that waited for the lock is still dated after what it waited for.
+- **Races:** assigning, unassigning, deciding and merging lock the review row (`SELECT … FOR UPDATE`) and re-check its state under the lock. The merge computes the state after taking the lock, so a racing request for changes either commits first and blocks the merge or runs after it and gets `409 review_not_open` (tested 25 times in a row).
+- **Merged is final:** a merged review can't be edited, closed, reopened or deleted, its reviewers can't change and it takes no decisions (`409`).
+- **Nesting and IDOR:** every query is scoped by the review _and_ its workspace, so the state, reviewers, decisions and events of a review in workspace B are `404` through workspace A, even for a user in both (tested). Unassigning someone who isn't a reviewer of _this_ review is `404 reviewer_not_found`, checked before the permission.
+- **History is kept:** decisions and events are append-only and survive account deletion, with the user set to `null`.
 
 ---
 

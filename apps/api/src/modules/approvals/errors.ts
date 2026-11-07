@@ -1,9 +1,10 @@
-import { AppError } from '../../errors.js';
+import type { InvalidReviewersDetails } from '@diffcraft/shared';
+import { AppError, NotFoundError } from '../../errors.js';
 
-export type InvalidReviewerReason = 'not_a_member' | 'viewer' | 'author';
+export type InvalidReviewerReason = InvalidReviewersDetails[number]['reason'];
 
 export class InvalidReviewersError extends AppError {
-  constructor(invalid: { userId: string; reason: InvalidReviewerReason }[]) {
+  constructor(invalid: InvalidReviewersDetails) {
     super(
       422,
       'invalid_reviewers',
@@ -30,5 +31,11 @@ export class MergeBlockedError extends AppError {
     super(409, 'merge_blocked', `This review can't be merged: ${reasons.join('; ')}.`, {
       reasons,
     });
+  }
+}
+
+export class ReviewerNotFoundError extends NotFoundError {
+  constructor() {
+    super('reviewer_not_found', 'That user is not a reviewer of this review.');
   }
 }
