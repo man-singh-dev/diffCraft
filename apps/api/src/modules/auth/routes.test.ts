@@ -7,6 +7,7 @@ import { buildApp } from '../../app.js';
 import { loadConfig } from '../../config.js';
 import { sessions, users } from '../../db/schema/index.js';
 import { describeWithDb, testDatabaseUrl } from '../../test/db.js';
+import { FakeMailer } from '../../test/fake-mailer.js';
 import { hashSessionToken, SESSION_COOKIE_NAME, SESSION_TTL_SECONDS } from './session.js';
 
 const REGISTER_URL = '/api/v1/auth/register';
@@ -22,7 +23,9 @@ describeWithDb('POST /api/v1/auth/register', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: testDatabaseUrl }));
+    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: testDatabaseUrl }), {
+      mailer: new FakeMailer(),
+    });
   });
 
   afterAll(async () => {
@@ -44,7 +47,7 @@ describeWithDb('POST /api/v1/auth/register', () => {
 
     expect(res.statusCode).toBe(201);
     const user = PublicUserSchema.strict().parse(res.json());
-    expect(user).toMatchObject({ email, displayName: 'Ada' });
+    expect(user).toMatchObject({ email, displayName: 'Ada', emailVerified: false });
     expect(res.body).not.toContain(PASSWORD);
     expect(res.body).not.toContain('argon2');
 
@@ -130,6 +133,7 @@ describeWithDb('login, /me and logout', () => {
   beforeAll(async () => {
     app = await buildApp(
       loadConfig({ LOG_LEVEL: 'silent', NODE_ENV: 'test', DATABASE_URL: testDatabaseUrl }),
+      { mailer: new FakeMailer() },
     );
   });
 

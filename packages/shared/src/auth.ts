@@ -16,9 +16,20 @@ export const PublicUserSchema = z.object({
   id: z.uuid(),
   email: z.email(),
   displayName: z.string(),
+  emailVerified: z.boolean(),
   createdAt: z.iso.datetime(),
 });
 export type PublicUser = z.infer<typeof PublicUserSchema>;
+
+// Only a length cap: a malformed token gets the same invalid_token as an unknown one.
+export const VerifyEmailRequestSchema = z.object({ token: z.string().max(256) });
+export type VerifyEmailRequest = z.infer<typeof VerifyEmailRequestSchema>;
+
+export const VerifyEmailResponseSchema = z.object({ verified: z.literal(true) });
+export type VerifyEmailResponse = z.infer<typeof VerifyEmailResponseSchema>;
+
+export const ResendVerificationResponseSchema = z.object({ alreadyVerified: z.boolean() });
+export type ResendVerificationResponse = z.infer<typeof ResendVerificationResponseSchema>;
 export const ErrorResponseSchema = z.object({
   error: z.object({
     code: z.string(),

@@ -25,6 +25,16 @@ export class UserNotFoundError extends NotFoundError {
   }
 }
 
+export class EmailNotVerifiedError extends AppError {
+  constructor() {
+    super(
+      422,
+      'email_not_verified',
+      'This person needs to verify their email before they can be added.',
+    );
+  }
+}
+
 export class AlreadyMemberError extends AppError {
   constructor() {
     super(409, 'already_member', 'This user is already a member of the workspace.');
@@ -132,10 +142,11 @@ export async function addMember(
     assertCanManage(actor.role, null, input.role);
 
     const [user] = await tx
-      .select({ id: users.id })
+      .select({ id: users.id, emailVerifiedAt: users.emailVerifiedAt })
       .from(users)
       .where(eq(sql`lower(${users.email})`, input.email));
     if (!user) throw new UserNotFoundError();
+    if (!user.emailVerifiedAt) throw new EmailNotVerifiedError();
 
     try {
       await tx.insert(workspaceMembers).values({ workspaceId, userId: user.id, role: input.role });

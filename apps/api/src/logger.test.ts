@@ -16,10 +16,11 @@ function captureLogs() {
 }
 
 describe('loggerOptions', () => {
-  it('redacts passwords, cookies and authorization headers', async () => {
+  it('redacts passwords, tokens, cookies and authorization headers', async () => {
     const { app, output } = captureLogs();
 
     app.log.info({ password: 'pw-top-secret', body: { password: 'pw-nested-secret' } }, 'body');
+    app.log.info({ token: 'verify-top-secret', body: { token: 'verify-nested-secret' } }, 'token');
     app.log.info(
       {
         req: { headers: { authorization: 'Bearer token-secret', cookie: 'sid=cookie-secret' } },
@@ -36,6 +37,8 @@ describe('loggerOptions', () => {
       'token-secret',
       'cookie-secret',
       'set-cookie-secret',
+      'verify-top-secret',
+      'verify-nested-secret',
     ]) {
       expect(logged).not.toContain(secret);
     }

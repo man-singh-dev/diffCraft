@@ -24,28 +24,40 @@ Conventions (the base path, error shape, `400`, `401`, `403`, `404`, `413`, `422
 
 ### Authentication
 
-| Method | Path                    | Purpose                                    | Auth                                | Status          |
-| ------ | ----------------------- | ------------------------------------------ | ----------------------------------- | --------------- |
-| `POST` | `/api/v1/auth/register` | Create an account.                         | Public (rate limiting planned)      | **Implemented** |
-| `POST` | `/api/v1/auth/login`    | Start a session (sets an HttpOnly cookie). | Public (rate limiting planned)      | **Implemented** |
-| `POST` | `/api/v1/auth/logout`   | End the current session.                   | Public (clears the session, if any) | **Implemented** |
-| `GET`  | `/api/v1/auth/me`       | Return the current user.                   | User                                | **Implemented** |
+| Method | Path                               | Purpose                                                               | Auth                                | Status          |
+| ------ | ---------------------------------- | --------------------------------------------------------------------- | ----------------------------------- | --------------- |
+| `POST` | `/api/v1/auth/register`            | Create an account.                                                    | Public (rate limiting planned)      | **Implemented** |
+| `POST` | `/api/v1/auth/login`               | Start a session (sets an HttpOnly cookie).                            | Public (rate limiting planned)      | **Implemented** |
+| `POST` | `/api/v1/auth/logout`              | End the current session.                                              | Public (clears the session, if any) | **Implemented** |
+| `GET`  | `/api/v1/auth/me`                  | Return the current user.                                              | User                                | **Implemented** |
+| `POST` | `/api/v1/auth/verify-email`        | Confirm an email address. Body `{ token }`. `200 { verified: true }`. | Public (CSRF Origin check)          | **Implemented** |
+| `POST` | `/api/v1/auth/resend-verification` | Send a new verification link. `200 { alreadyVerified: boolean }`.     | User                                | **Implemented** |
+
+`PublicUser` (returned by register, login and `/me`) is `{ id, email, displayName, emailVerified, createdAt }`. Registration also emails a verification link, `${WEB_ORIGIN}/verify-email?token=<token>`, valid for 24 hours; the response is the same `201` whether or not the email could be sent.
+
+| Status | Code                     | When                                                                                                                                 |
+| ------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `400`  | `invalid_token`          | `verify-email` with an unknown, expired, already used or malformed token. One generic message for all of them.                       |
+| `422`  | `validation_error`       | `verify-email` without a `token` string (or one over 256 characters).                                                                |
+| `429`  | `verification_throttled` | `resend-verification` less than 60 s after the user's last link. The `Retry-After` header gives the seconds to wait.                 |
+| `503`  | `email_send_failed`      | `resend-verification` when the email provider refused or was unreachable. The new link exists but wasn't sent; retry after the wait. |
+| `422`  | `email_not_verified`     | `POST /workspaces/:workspaceId/members` for a user who hasn't verified their email yet.                                              |
 
 ### Workspaces and membership
 
-| Method   | Path                                              | Purpose                                                                                          | Auth                             | Status          |
-| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------- | --------------- |
-| `GET`    | `/api/v1/workspaces`                              | List the caller's workspaces with their role in each, newest first. `200 Workspace[]`.           | User                             | **Implemented** |
-| `POST`   | `/api/v1/workspaces`                              | Create a workspace; the creator becomes owner. Body `{ name }` (trimmed, 1–80). `201 Workspace`. | User                             | **Implemented** |
-| `GET`    | `/api/v1/workspaces/:workspaceId`                 | Get one workspace, with the caller's role. `200 Workspace`.                                      | Member (viewer and up)           | **Implemented** |
-| `PATCH`  | `/api/v1/workspaces/:workspaceId`                 | Rename. Body `{ name }` (trimmed, 1–80). The slug does not change. `200 Workspace`.              | Admin                            | **Implemented** |
-| `DELETE` | `/api/v1/workspaces/:workspaceId`                 | Delete the workspace and all its memberships. `204`.                                             | Owner                            | **Implemented** |
-| `GET`    | `/api/v1/workspaces/:workspaceId/members`         | List members, owners first, then by join date. `200 WorkspaceMember[]`.                          | Member (viewer and up)           | **Implemented** |
-| `POST`   | `/api/v1/workspaces/:workspaceId/members`         | Add an existing user by email. Body `{ email, role }`. `201 WorkspaceMember`.                    | Admin (adding an owner: Owner)   | **Implemented** |
-| `PATCH`  | `/api/v1/workspaces/:workspaceId/members/:userId` | Change a member's role. Body `{ role }`. `200 WorkspaceMember`.                                  | Admin (to or from owner: Owner)  | **Implemented** |
-| `DELETE` | `/api/v1/workspaces/:workspaceId/members/:userId` | Remove another member. `204`. Not for yourself: use `/leave`.                                    | Admin (removing an owner: Owner) | **Implemented** |
-| `POST`   | `/api/v1/workspaces/:workspaceId/members/leave`   | The caller leaves the workspace. `204`.                                                          | Member (viewer and up)           | **Implemented** |
-| `POST`   | `/api/v1/workspaces/:workspaceId/invitations`     | Invite someone who has no account yet.                                                           | Admin                            | Planned         |
+| Method   | Path                                              | Purpose                                                                                                                                    | Auth                             | Status          |
+| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- | --------------- |
+| `GET`    | `/api/v1/workspaces`                              | List the caller's workspaces with their role in each, newest first. `200 Workspace[]`.                                                     | User                             | **Implemented** |
+| `POST`   | `/api/v1/workspaces`                              | Create a workspace; the creator becomes owner. Body `{ name }` (trimmed, 1–80). `201 Workspace`.                                           | User                             | **Implemented** |
+| `GET`    | `/api/v1/workspaces/:workspaceId`                 | Get one workspace, with the caller's role. `200 Workspace`.                                                                                | Member (viewer and up)           | **Implemented** |
+| `PATCH`  | `/api/v1/workspaces/:workspaceId`                 | Rename. Body `{ name }` (trimmed, 1–80). The slug does not change. `200 Workspace`.                                                        | Admin                            | **Implemented** |
+| `DELETE` | `/api/v1/workspaces/:workspaceId`                 | Delete the workspace and all its memberships. `204`.                                                                                       | Owner                            | **Implemented** |
+| `GET`    | `/api/v1/workspaces/:workspaceId/members`         | List members, owners first, then by join date. `200 WorkspaceMember[]`.                                                                    | Member (viewer and up)           | **Implemented** |
+| `POST`   | `/api/v1/workspaces/:workspaceId/members`         | Add an existing, verified user by email. Body `{ email, role }`. `201 WorkspaceMember`; `422 email_not_verified` if they haven't verified. | Admin (adding an owner: Owner)   | **Implemented** |
+| `PATCH`  | `/api/v1/workspaces/:workspaceId/members/:userId` | Change a member's role. Body `{ role }`. `200 WorkspaceMember`.                                                                            | Admin (to or from owner: Owner)  | **Implemented** |
+| `DELETE` | `/api/v1/workspaces/:workspaceId/members/:userId` | Remove another member. `204`. Not for yourself: use `/leave`.                                                                              | Admin (removing an owner: Owner) | **Implemented** |
+| `POST`   | `/api/v1/workspaces/:workspaceId/members/leave`   | The caller leaves the workspace. `204`.                                                                                                    | Member (viewer and up)           | **Implemented** |
+| `POST`   | `/api/v1/workspaces/:workspaceId/invitations`     | Invite someone who has no account yet.                                                                                                     | Admin                            | Planned         |
 
 `Workspace` is `{ id, name, slug, createdAt, role }` (`WorkspaceSchema` in `packages/shared`), where `role` is the caller's role. `WorkspaceMember` is `{ userId, email, displayName, role, joinedAt }` (`WorkspaceMemberSchema`). Errors on the `/:workspaceId` routes:
 

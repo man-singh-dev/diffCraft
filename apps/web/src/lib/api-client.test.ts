@@ -20,6 +20,7 @@ const USER = {
   id: '01a17e5e-aa56-7985-be46-bf5f1c7e7fde',
   email: 'ada@example.com',
   displayName: 'Ada',
+  emailVerified: true,
   createdAt: '2026-10-27T17:18:15.633Z',
 };
 const REGISTER_INPUT = { email: USER.email, displayName: 'Ada', password: 'correct horse battery' };

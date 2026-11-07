@@ -17,7 +17,9 @@ describe('trustProxy', () => {
   });
 
   const appWith = async (env: Record<string, string>) => {
-    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL, ...env }));
+    app = await buildApp(
+      loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL, MAIL_TRANSPORT: 'log', ...env }),
+    );
     app.get('/test-ip', async (request) => ({ ip: request.ip }));
     return app;
   };

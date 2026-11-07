@@ -11,7 +11,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { loadConfig } from '../../config.js';
-import { workspaceMembers } from '../../db/schema/index.js';
+import { users, workspaceMembers } from '../../db/schema/index.js';
 import { describeWithDb, testDatabaseUrl } from '../../test/db.js';
 import { addMember, createUserWithSession, type TestUser } from '../../test/fixtures.js';
 
@@ -205,6 +205,33 @@ describeWithDb('workspace member routes', () => {
 
       expect(res.statusCode).toBe(404);
       expect(errorCode(res)).toBe('user_not_found');
+    });
+
+    it('returns 422 email_not_verified for an unverified user, and adds them once verified', async () => {
+      const owner = await createUserWithSession(app.db);
+      const workspace = await createWorkspace(owner);
+      const unverified = await createUserWithSession(app.db, { verified: false });
+
+      const res = await call('POST', membersUrl(workspace.id), owner, {
+        email: unverified.email,
+        role: 'member',
+      });
+      expect(res.statusCode).toBe(422);
+      expect(ErrorResponseSchema.parse(res.json()).error).toEqual({
+        code: 'email_not_verified',
+        message: 'This person needs to verify their email before they can be added.',
+      });
+      expect(await storedRole(workspace.id, unverified.id)).toBeNull();
+
+      await app.db
+        .update(users)
+        .set({ emailVerifiedAt: new Date() })
+        .where(eq(users.id, unverified.id));
+      const added = await call('POST', membersUrl(workspace.id), owner, {
+        email: unverified.email,
+        role: 'member',
+      });
+      expect(added.statusCode).toBe(201);
     });
 
     it('returns 409 already_member and keeps the existing role', async () => {

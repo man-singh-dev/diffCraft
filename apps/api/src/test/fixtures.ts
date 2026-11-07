@@ -12,12 +12,20 @@ export interface TestUser {
   cookies: Record<string, string>;
 }
 
-// Inserted directly with a unique email: test files share one database.
-export async function createUserWithSession(db: Database): Promise<TestUser> {
+// Inserted directly with a unique email: test files share one database. Verified unless asked otherwise.
+export async function createUserWithSession(
+  db: Database,
+  { verified = true }: { verified?: boolean } = {},
+): Promise<TestUser> {
   const email = `user-${randomUUID()}@example.com`;
   const [user] = await db
     .insert(users)
-    .values({ email, displayName: 'Test', passwordHash: 'not-a-real-hash' })
+    .values({
+      email,
+      displayName: 'Test',
+      passwordHash: 'not-a-real-hash',
+      emailVerifiedAt: verified ? new Date() : null,
+    })
     .returning({ id: users.id });
   if (!user) throw new Error('no user returned');
   const { token } = await createSession(db, user.id);

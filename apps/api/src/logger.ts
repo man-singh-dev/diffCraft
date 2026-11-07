@@ -16,6 +16,8 @@ export function loggerOptions(level: Config['LOG_LEVEL']): LoggerOptions {
         'passwordHash',
         '*.password',
         '*.passwordHash',
+        'token',
+        '*.token',
       ],
       censor: '[REDACTED]',
     },

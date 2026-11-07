@@ -65,24 +65,29 @@ All variables live in one root `.env` file (copied from `.env.example`). The API
 
 ### In use now (in `.env.example`)
 
-| Variable            | Used by                  | Description                                                                           | Example placeholder                                              |
-| ------------------- | ------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `NODE_ENV`          | api                      | Runtime environment (`development`, `test`, `production`).                            | `development`                                                    |
-| `HOST`              | api                      | Interface the Fastify server listens on.                                              | `127.0.0.1`                                                      |
-| `API_PORT`          | api                      | Port for the Fastify server. If unset, `PORT` (set by Render), then `4000`.           | `4000`                                                           |
-| `DB_POOL_MAX`       | api                      | Maximum open Postgres connections per API instance.                                   | `10`                                                             |
-| `TRUST_PROXY`       | api (production only)    | Proxy addresses (IPs, CIDRs or presets) to trust for `X-Forwarded-For`.               | `uniquelocal`                                                    |
-| `LOG_LEVEL`         | api                      | Logging verbosity.                                                                    | `info`                                                           |
-| `WEB_ORIGIN`        | api                      | Origin of the web app. Validated at startup; will be the CORS / Socket.IO allow-list. | `http://localhost:3000`                                          |
-| `API_URL`           | web (server-only)        | Base URL the web server uses to call the API. Not exposed to the browser.             | `http://localhost:4000`                                          |
-| `POSTGRES_USER`     | docker-compose           | Postgres superuser created on first start.                                            | `diffcraft`                                                      |
-| `POSTGRES_PASSWORD` | docker-compose           | Password for that user (local only).                                                  | `diffcraft`                                                      |
-| `POSTGRES_DB`       | docker-compose           | Default database created on first start.                                              | `diffcraft`                                                      |
-| `POSTGRES_PORT`     | docker-compose           | Host port for Postgres (bound to `127.0.0.1`).                                        | `5432`                                                           |
-| `REDIS_PORT`        | docker-compose           | Host port for Redis (bound to `127.0.0.1`).                                           | `6379`                                                           |
-| `DATABASE_URL`      | api, drizzle-kit         | PostgreSQL connection string for the API and `pnpm db:*`. **Required.**               | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft`      |
-| `TEST_DATABASE_URL` | api tests                | Separate test database; migrated before the API tests. Optional (tests skip without). | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft_test` |
-| `REDIS_URL`         | _not read yet_ (Stage 7) | Redis connection string for the API and worker (Socket.IO adapter, presence, BullMQ). | `redis://localhost:6379`                                         |
+| Variable            | Used by                  | Description                                                                                                                                                           | Example placeholder                                              |
+| ------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `NODE_ENV`          | api                      | Runtime environment (`development`, `test`, `production`).                                                                                                            | `development`                                                    |
+| `HOST`              | api                      | Interface the Fastify server listens on.                                                                                                                              | `127.0.0.1`                                                      |
+| `API_PORT`          | api                      | Port for the Fastify server. If unset, `PORT` (set by Render), then `4000`.                                                                                           | `4000`                                                           |
+| `DB_POOL_MAX`       | api                      | Maximum open Postgres connections per API instance.                                                                                                                   | `10`                                                             |
+| `TRUST_PROXY`       | api (production only)    | Proxy addresses (IPs, CIDRs or presets) to trust for `X-Forwarded-For`.                                                                                               | `uniquelocal`                                                    |
+| `LOG_LEVEL`         | api                      | Logging verbosity.                                                                                                                                                    | `info`                                                           |
+| `WEB_ORIGIN`        | api                      | Origin of the web app. Validated at startup; will be the CORS / Socket.IO allow-list.                                                                                 | `http://localhost:3000`                                          |
+| `API_URL`           | web (server-only)        | Base URL the web server uses to call the API. Not exposed to the browser.                                                                                             | `http://localhost:4000`                                          |
+| `POSTGRES_USER`     | docker-compose           | Postgres superuser created on first start.                                                                                                                            | `diffcraft`                                                      |
+| `POSTGRES_PASSWORD` | docker-compose           | Password for that user (local only).                                                                                                                                  | `diffcraft`                                                      |
+| `POSTGRES_DB`       | docker-compose           | Default database created on first start.                                                                                                                              | `diffcraft`                                                      |
+| `POSTGRES_PORT`     | docker-compose           | Host port for Postgres (bound to `127.0.0.1`).                                                                                                                        | `5432`                                                           |
+| `REDIS_PORT`        | docker-compose           | Host port for Redis (bound to `127.0.0.1`).                                                                                                                           | `6379`                                                           |
+| `DATABASE_URL`      | api, drizzle-kit         | PostgreSQL connection string for the API and `pnpm db:*`. **Required.**                                                                                               | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft`      |
+| `TEST_DATABASE_URL` | api tests                | Separate test database; migrated before the API tests. Optional (tests skip without).                                                                                 | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft_test` |
+| `REDIS_URL`         | _not read yet_ (Stage 7) | Redis connection string for the API and worker (Socket.IO adapter, presence, BullMQ).                                                                                 | `redis://localhost:6379`                                         |
+| `MAIL_TRANSPORT`    | api                      | `smtp` (default) or `log`. `log` writes each email, link included, to the API log: only for environments without an email provider.                                   | `smtp`                                                           |
+| `MAIL_SMTP_URL`     | api                      | SMTP server, `smtp://` or `smtps://` (may hold credentials: never commit a real one). Defaults to Mailpit outside production; **required** in production with `smtp`. | `smtp://localhost:1025`                                          |
+| `MAIL_FROM`         | api                      | Sender address. Same default and requirement as `MAIL_SMTP_URL`.                                                                                                      | `DiffCraft <noreply@localhost>`                                  |
+| `MAILPIT_SMTP_PORT` | docker-compose           | Host port for Mailpit's SMTP server (bound to `127.0.0.1`).                                                                                                           | `1025`                                                           |
+| `MAILPIT_UI_PORT`   | docker-compose           | Host port for Mailpit's web inbox (bound to `127.0.0.1`).                                                                                                             | `8025`                                                           |
 
 The API validates its variables with a Zod schema at startup and exits with a list of invalid names (never their values). The web app validates `API_URL` the same way.
 
@@ -104,27 +109,30 @@ No session secret is needed: session tokens are random values looked up by their
 
 ## Docker Setup
 
-> Status: **Implemented** for local infrastructure only. The API uses the Postgres service; nothing uses Redis until Stage 7.
+> Status: **Implemented** for local infrastructure only. The API uses Postgres and Mailpit; nothing uses Redis until Stage 7.
 
-`docker-compose.yml` at the repo root runs two services for local development:
+`docker-compose.yml` at the repo root runs three services for local development:
 
-| Service    | Image                | Host port (default) | Data                                                  | Healthcheck      |
-| ---------- | -------------------- | ------------------- | ----------------------------------------------------- | ---------------- |
-| `postgres` | `postgres:18-alpine` | `127.0.0.1:5432`    | Named volume `postgres-data` at `/var/lib/postgresql` | `pg_isready`     |
-| `redis`    | `redis:8-alpine`     | `127.0.0.1:6379`    | Named volume `redis-data` at `/data`                  | `redis-cli ping` |
+| Service    | Image                     | Host port (default)                                   | Data                                                  | Healthcheck          |
+| ---------- | ------------------------- | ----------------------------------------------------- | ----------------------------------------------------- | -------------------- |
+| `postgres` | `postgres:18-alpine`      | `127.0.0.1:5432`                                      | Named volume `postgres-data` at `/var/lib/postgresql` | `pg_isready`         |
+| `redis`    | `redis:8-alpine`          | `127.0.0.1:6379`                                      | Named volume `redis-data` at `/data`                  | `redis-cli ping`     |
+| `mailpit`  | `axllent/mailpit:v1.27.0` | `127.0.0.1:1025` (SMTP), `127.0.0.1:8025` (web inbox) | None (emails are lost on restart)                     | Built into the image |
+
+**Emails in development:** the API sends every email to Mailpit by default (`MAIL_TRANSPORT=smtp`, `MAIL_SMTP_URL=smtp://localhost:1025`). Open **http://localhost:8025** to read them, e.g. the verification link after signing up. Nothing leaves your machine. Tests never send email: they pass an in-memory fake mailer to `buildApp` (`apps/api/src/test/fake-mailer.ts`).
 
 - Ports are bound to `127.0.0.1` only, so other machines on your network cannot reach them.
-- Credentials and ports come from `.env` (`POSTGRES_*`, `REDIS_PORT`), with local defaults in the Compose file.
+- Credentials and ports come from `.env` (`POSTGRES_*`, `REDIS_PORT`, `MAILPIT_*_PORT`), with local defaults in the Compose file.
 - Postgres 18 images store data in `/var/lib/postgresql/18/docker`, so the volume is mounted at `/var/lib/postgresql` (not the older `/var/lib/postgresql/data`).
 - `infra/postgres/init/01-create-test-db.sql` creates a second database, `diffcraft_test`, for tests. Postgres runs init scripts **only when the data volume is empty** (first start). To run them again, delete the volume with `docker compose down -v`, which **deletes all local data**.
 
-| Script            | Runs                     | Purpose                                        |
-| ----------------- | ------------------------ | ---------------------------------------------- |
-| `pnpm infra:up`   | `docker compose up -d`   | Start Postgres and Redis in the background.    |
-| `pnpm infra:down` | `docker compose down`    | Stop and remove the containers (volumes kept). |
-| `pnpm infra:logs` | `docker compose logs -f` | Follow the logs of both services.              |
+| Script            | Runs                     | Purpose                                              |
+| ----------------- | ------------------------ | ---------------------------------------------------- |
+| `pnpm infra:up`   | `docker compose up -d`   | Start Postgres, Redis and Mailpit in the background. |
+| `pnpm infra:down` | `docker compose down`    | Stop and remove the containers (volumes kept).       |
+| `pnpm infra:logs` | `docker compose logs -f` | Follow the logs of all services.                     |
 
-Check that both services are healthy with `docker compose ps`.
+Check that the services are healthy with `docker compose ps`.
 
 Per-app Dockerfiles for `api`, `worker` and `web` are **Planned** (Stage 9).
 
@@ -154,10 +162,14 @@ diffCraft/
 │   │   │   ├── db/
 │   │   │   │   ├── errors.ts         # isUniqueViolation (Postgres error helper)
 │   │   │   │   └── schema/           # Drizzle schema: users, sessions, workspaces, reviews, comments, sql-list.ts
+│   │   │   ├── mail/
+│   │   │   │   ├── mailer.ts         # Mailer interface; SMTP (nodemailer) and log transports, chosen by MAIL_TRANSPORT
+│   │   │   │   └── plugin.ts         # app.mailer (tests pass a fake to buildApp)
 │   │   │   ├── modules/
 │   │   │   │   ├── auth/
-│   │   │   │   │   ├── routes.ts     # POST register/login/logout, GET me under /api/v1/auth
-│   │   │   │   │   ├── service.ts    # registerUser, verifyCredentials (timing-safe)
+│   │   │   │   │   ├── routes.ts     # POST register/login/logout/verify-email/resend-verification, GET me
+│   │   │   │   │   ├── service.ts    # registerUser (user + verification token in one transaction), verifyCredentials
+│   │   │   │   │   ├── verification.ts # Verification tokens (hashed, 24 h, single use), resend throttle, email
 │   │   │   │   │   ├── session.ts    # Session tokens, hashing, cookie options, 7-day expiry
 │   │   │   │   │   ├── password.ts   # Argon2id hash and verify
 │   │   │   │   │   └── require-auth.ts # requireAuth preHandler (401 without a valid session)

@@ -1,6 +1,8 @@
 import type { z } from 'zod';
 
 export class AppError extends Error {
+  headers?: Record<string, string>;
+
   constructor(
     readonly statusCode: number,
     readonly code: string,

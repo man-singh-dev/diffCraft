@@ -1,4 +1,11 @@
-import { LoginRequestSchema, type PublicUser, RegisterRequestSchema } from '@diffcraft/shared';
+import {
+  LoginRequestSchema,
+  type PublicUser,
+  RegisterRequestSchema,
+  type ResendVerificationResponse,
+  VerifyEmailRequestSchema,
+  type VerifyEmailResponse,
+} from '@diffcraft/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import { ValidationError } from '../../errors.js';
 import { authUser, requireAuth } from './require-auth.js';
@@ -9,20 +16,64 @@ import {
   SESSION_COOKIE_NAME,
   sessionCookieOptions,
 } from './session.js';
+import {
+  sendVerificationEmail,
+  startResend,
+  VerificationEmailFailedError,
+  verifyEmail,
+} from './verification.js';
 
 export interface AuthRoutesOptions {
   secureCookies: boolean;
+  webOrigin: string;
 }
-export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (app, { secureCookies }) => {
+export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
+  app,
+  { secureCookies, webOrigin },
+) => {
   const cookieOptions = sessionCookieOptions(secureCookies);
 
   app.post<{ Reply: PublicUser }>('/register', async (request, reply) => {
     const parsed = RegisterRequestSchema.safeParse(request.body);
     if (!parsed.success) throw new ValidationError(parsed.error.issues);
 
-    const user = await registerUser(app.db, parsed.data);
+    const { user, verificationToken } = await registerUser(app.db, parsed.data);
+    // After the commit, so an email never points to a user that was rolled back. A failure is logged; the user can resend.
+    await sendVerificationEmail(app.mailer, request.log, {
+      webOrigin,
+      userId: user.id,
+      email: user.email,
+      token: verificationToken,
+    });
     return reply.code(201).send(user);
   });
+
+  app.post<{ Reply: VerifyEmailResponse }>('/verify-email', async (request) => {
+    const parsed = VerifyEmailRequestSchema.safeParse(request.body);
+    if (!parsed.success) throw new ValidationError(parsed.error.issues);
+
+    await verifyEmail(app.db, parsed.data.token);
+    return { verified: true };
+  });
+
+  app.post<{ Reply: ResendVerificationResponse }>(
+    '/resend-verification',
+    { preHandler: requireAuth },
+    async (request) => {
+      const user = authUser(request);
+      const result = await startResend(app.db, user.id);
+      if (result.alreadyVerified) return { alreadyVerified: true };
+
+      const sent = await sendVerificationEmail(app.mailer, request.log, {
+        webOrigin,
+        userId: user.id,
+        email: result.email,
+        token: result.token,
+      });
+      if (!sent) throw new VerificationEmailFailedError();
+      return { alreadyVerified: false };
+    },
+  );
 
   app.post<{ Reply: PublicUser }>('/login', async (request, reply) => {
     const parsed = LoginRequestSchema.safeParse(request.body);

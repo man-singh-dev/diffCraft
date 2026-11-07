@@ -14,6 +14,49 @@ describe('loadConfig', () => {
       DATABASE_URL,
       DB_POOL_MAX: 10,
       TRUST_PROXY: 'uniquelocal',
+      MAIL_TRANSPORT: 'smtp',
+      MAIL_SMTP_URL: 'smtp://localhost:1025',
+      MAIL_FROM: 'DiffCraft <noreply@localhost>',
+    });
+  });
+
+  describe('mail', () => {
+    it('requires MAIL_SMTP_URL and MAIL_FROM for smtp in production, naming them without values', () => {
+      expect(() => loadConfig({ DATABASE_URL, NODE_ENV: 'production' })).toThrow(
+        /MAIL_SMTP_URL[\s\S]*MAIL_FROM/,
+      );
+      const smtpUrl = 'smtps://user:s3cret@smtp.example.com:465';
+      expect(() =>
+        loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_SMTP_URL: smtpUrl }),
+      ).toThrow(/MAIL_FROM/);
+      try {
+        loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_SMTP_URL: smtpUrl });
+      } catch (error) {
+        expect(String(error)).not.toContain('s3cret');
+      }
+      expect(
+        loadConfig({
+          DATABASE_URL,
+          NODE_ENV: 'production',
+          MAIL_SMTP_URL: smtpUrl,
+          MAIL_FROM: 'DiffCraft <noreply@example.com>',
+        }),
+      ).toMatchObject({ MAIL_TRANSPORT: 'smtp', MAIL_SMTP_URL: smtpUrl });
+    });
+
+    it('accepts MAIL_TRANSPORT=log in production without SMTP settings', () => {
+      expect(
+        loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_TRANSPORT: 'log' }).MAIL_TRANSPORT,
+      ).toBe('log');
+    });
+
+    it.each([
+      { MAIL_TRANSPORT: 'sendmail' },
+      { MAIL_SMTP_URL: 'http://localhost:1025' },
+      { MAIL_SMTP_URL: 'not a url' },
+      { MAIL_FROM: '   ' },
+    ])('rejects %j', (env) => {
+      expect(() => loadConfig({ DATABASE_URL, ...env })).toThrow(/MAIL_/);
     });
   });
 

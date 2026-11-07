@@ -24,6 +24,7 @@ export const errorHandlerPlugin = fp(
             ...(error.details !== undefined && { details: error.details }),
           },
         };
+        if (error.headers) reply.headers(error.headers);
         return reply.code(error.statusCode).send(body);
       }
 

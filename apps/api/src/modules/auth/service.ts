@@ -6,6 +6,7 @@ import { users, type User } from '../../db/schema/index.js';
 import { AppError } from '../../errors.js';
 import type { Database } from '../../plugins/db.js';
 import { hashPassword, verifyPassword } from './password.js';
+import { createVerificationToken } from './verification.js';
 
 const EMAIL_UNIQUE_INDEX = 'users_email_lower_unique';
 
@@ -25,23 +26,26 @@ export class InvalidCredentialsError extends AppError {
   }
 }
 
-export async function registerUser(db: Database, input: RegisterRequest): Promise<PublicUser> {
+export async function registerUser(
+  db: Database,
+  input: RegisterRequest,
+): Promise<{ user: PublicUser; verificationToken: string }> {
   const passwordHash = await hashPassword(input.password);
 
-  let rows: User[];
   try {
-    rows = await db
-      .insert(users)
-      .values({ email: input.email, displayName: input.displayName, passwordHash })
-      .returning();
+    return await db.transaction(async (tx) => {
+      const [user] = await tx
+        .insert(users)
+        .values({ email: input.email, displayName: input.displayName, passwordHash })
+        .returning();
+      if (!user) throw new Error('INSERT ... RETURNING returned no row');
+      const verificationToken = await createVerificationToken(tx, user.id);
+      return { user: toPublicUser(user), verificationToken };
+    });
   } catch (error) {
     if (isUniqueViolation(error, EMAIL_UNIQUE_INDEX)) throw new EmailTakenError();
     throw error;
   }
-
-  const [user] = rows;
-  if (!user) throw new Error('INSERT ... RETURNING returned no row');
-  return toPublicUser(user);
 }
 
 export async function verifyCredentials(
@@ -71,12 +75,13 @@ export async function verifyCredentials(
 }
 
 export function toPublicUser(
-  user: Pick<User, 'id' | 'email' | 'displayName' | 'createdAt'>,
+  user: Pick<User, 'id' | 'email' | 'displayName' | 'emailVerifiedAt' | 'createdAt'>,
 ): PublicUser {
   return {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
+    emailVerified: user.emailVerifiedAt !== null,
     createdAt: user.createdAt.toISOString(),
   };
 }

@@ -4,6 +4,9 @@ import {
   LoginRequestSchema,
   PublicUserSchema,
   RegisterRequestSchema,
+  ResendVerificationResponseSchema,
+  VerifyEmailRequestSchema,
+  VerifyEmailResponseSchema,
 } from './auth.js';
 
 const validRegister = {
@@ -96,8 +99,16 @@ describe('PublicUserSchema', () => {
     id: '0199f3a4-5b6c-7d8e-9f01-23456789abcd',
     email: 'user@example.com',
     displayName: 'Ada',
+    emailVerified: false,
     createdAt: '2026-10-24T10:00:00.000Z',
   };
+
+  it('requires emailVerified as a boolean', () => {
+    expect(PublicUserSchema.safeParse({ ...validUser, emailVerified: undefined }).success).toBe(
+      false,
+    );
+    expect(PublicUserSchema.safeParse({ ...validUser, emailVerified: 'yes' }).success).toBe(false);
+  });
 
   it('parses a valid public user', () => {
     expect(PublicUserSchema.parse(validUser)).toEqual(validUser);
@@ -127,5 +138,23 @@ describe('ErrorResponseSchema', () => {
   it('rejects a body without code or message', () => {
     expect(ErrorResponseSchema.safeParse({ error: { message: 'x' } }).success).toBe(false);
     expect(ErrorResponseSchema.safeParse({ error: { code: 'x' } }).success).toBe(false);
+  });
+});
+
+describe('email verification schemas', () => {
+  it('accepts any token string up to 256 characters, so a bad one gets the generic error', () => {
+    expect(VerifyEmailRequestSchema.parse({ token: 'abc' })).toEqual({ token: 'abc' });
+    expect(VerifyEmailRequestSchema.parse({ token: '' })).toEqual({ token: '' });
+    expect(VerifyEmailRequestSchema.safeParse({ token: 'x'.repeat(257) }).success).toBe(false);
+    expect(VerifyEmailRequestSchema.safeParse({}).success).toBe(false);
+    expect(VerifyEmailRequestSchema.safeParse({ token: 42 }).success).toBe(false);
+  });
+
+  it('parses the responses', () => {
+    expect(VerifyEmailResponseSchema.parse({ verified: true })).toEqual({ verified: true });
+    expect(VerifyEmailResponseSchema.safeParse({ verified: false }).success).toBe(false);
+    expect(ResendVerificationResponseSchema.parse({ alreadyVerified: false })).toEqual({
+      alreadyVerified: false,
+    });
   });
 });

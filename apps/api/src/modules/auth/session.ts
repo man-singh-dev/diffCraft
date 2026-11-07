@@ -45,6 +45,7 @@ export async function findSessionUser(db: Database, token: string): Promise<Sess
         id: users.id,
         email: users.email,
         displayName: users.displayName,
+        emailVerifiedAt: users.emailVerifiedAt,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       },
