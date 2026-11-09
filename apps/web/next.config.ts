@@ -13,5 +13,14 @@ const nextConfig: NextConfig = {
   rewrites() {
     return [{ source: '/api/:path*', destination: `${apiUrl}/api/:path*` }];
   },
+  // Also as a header (not only the page's meta tag): the token in the URL must never leak via Referer.
+  headers() {
+    return [
+      {
+        source: '/verify-email',
+        headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }],
+      },
+    ];
+  },
 };
 export default nextConfig;

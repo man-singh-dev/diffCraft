@@ -1,8 +1,10 @@
 import {
   ErrorResponseSchema,
   PublicUserSchema,
+  ResendVerificationResponseSchema,
   ReviewListResponseSchema,
   ReviewSchema,
+  VerifyEmailResponseSchema,
   WorkspaceMemberSchema,
   WorkspaceSchema,
   type AddMemberRequest,
@@ -11,15 +13,18 @@ import {
   type LoginRequest,
   type PublicUser,
   type RegisterRequest,
+  type ResendVerificationResponse,
   type Review,
   type ReviewListResponse,
   type UpdateMemberRoleRequest,
   type UpdateReviewRequest,
   type UpdateWorkspaceRequest,
+  type VerifyEmailResponse,
   type Workspace,
   type WorkspaceMember,
 } from '@diffcraft/shared';
 import { z } from 'zod';
+import { parseRetryAfter } from './email-verification';
 import { toFieldErrors, type FieldErrors } from './form-errors';
 import { reviewListQuery, type ReviewFilters } from './review-params';
 
@@ -33,6 +38,8 @@ export interface ApiFailure {
   message: string;
   fieldErrors: FieldErrors;
   details?: unknown;
+  /** Only on 429. */
+  retryAfterSeconds?: number;
 }
 export type ApiResult<T> = { ok: true; data: T } | ApiFailure;
 
@@ -87,6 +94,9 @@ async function request<T>(
       ...failure(res.status, code, message),
       fieldErrors: issues?.success ? toFieldErrors(issues.data) : {},
       ...(details !== undefined && res.status !== 422 && { details }),
+      ...(res.status === 429 && {
+        retryAfterSeconds: parseRetryAfter(res.headers.get('retry-after')),
+      }),
     };
   }
 
@@ -111,6 +121,26 @@ export function login(
 
 export function logout(fetchImpl: typeof fetch = fetch): Promise<ApiResult<void>> {
   return request<void>('POST', '/api/v1/auth/logout', undefined, null, fetchImpl);
+}
+
+export function verifyEmail(
+  token: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<VerifyEmailResponse>> {
+  return request(
+    'POST',
+    '/api/v1/auth/verify-email',
+    { token },
+    VerifyEmailResponseSchema,
+    fetchImpl,
+  );
+}
+
+export function resendVerification(
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<ResendVerificationResponse>> {
+  const path = '/api/v1/auth/resend-verification';
+  return request('POST', path, undefined, ResendVerificationResponseSchema, fetchImpl);
 }
 
 // Ids come from API responses, but are encoded anyway so a path can never be rewritten.

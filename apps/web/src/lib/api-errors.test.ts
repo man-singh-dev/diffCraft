@@ -15,6 +15,7 @@ describe('describeApiError', () => {
     [409, 'last_owner', /at least one owner/],
     [409, 'already_member', /already a member/],
     [404, 'user_not_found', /no diffcraft account/i],
+    [422, 'email_not_verified', /needs to verify their email before they can be added/],
     [403, 'forbidden', /permission/],
     [422, 'validation_error', /highlighted fields/],
   ])('explains %i %s', (status, code, expected) => {

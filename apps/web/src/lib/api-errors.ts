@@ -3,6 +3,7 @@ import type { ApiFailure } from './api-client';
 const MESSAGES: Partial<Record<string, string>> = {
   last_owner: 'A workspace needs at least one owner. Make someone else an owner first.',
   already_member: 'That person is already a member of this workspace.',
+  email_not_verified: 'This person needs to verify their email before they can be added.',
   user_not_found: 'No DiffCraft account uses that email. Ask them to sign up first.',
   member_not_found: 'That person is no longer a member. Refresh the page to see the latest list.',
   workspace_not_found: "This workspace doesn't exist any more, or you are no longer a member.",

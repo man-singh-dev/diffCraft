@@ -21,7 +21,18 @@ export default async function ProfilePage() {
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-slate-500">Email</dt>
-          <dd className="truncate font-mono text-slate-200">{user.email}</dd>
+          <dd className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-mono text-slate-200">{user.email}</span>
+            {user.emailVerified ? (
+              <span className="shrink-0 rounded-full border border-emerald-800/60 bg-emerald-950/40 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                Verified
+              </span>
+            ) : (
+              <span className="shrink-0 rounded-full border border-amber-800/60 bg-amber-950/40 px-2 py-0.5 text-xs font-medium text-amber-300">
+                Not verified
+              </span>
+            )}
+          </dd>
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-slate-500">Member since</dt>

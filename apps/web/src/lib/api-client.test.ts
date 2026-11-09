@@ -13,7 +13,9 @@ import {
   register,
   removeMember,
   renameWorkspace,
+  resendVerification,
   updateReview,
+  verifyEmail,
 } from './api-client.js';
 
 const USER = {
@@ -406,5 +408,77 @@ describe('review calls', () => {
     const fetchImpl = makeFetch(204);
     await deleteReview('../auth', 1, fetchImpl);
     expect(fetchImpl.mock.calls[0]![0]).toBe('/api/v1/workspaces/..%2Fauth/reviews/1');
+  });
+});
+
+describe('verifyEmail', () => {
+  const TOKEN = 'a'.repeat(43);
+
+  it('POSTs the token and returns verified', async () => {
+    const fetchImpl = makeFetch(200, { verified: true });
+    expect(await verifyEmail(TOKEN, fetchImpl)).toEqual({ ok: true, data: { verified: true } });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe('/api/v1/auth/verify-email');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({ token: TOKEN });
+  });
+
+  it('passes on the generic invalid_token message', async () => {
+    const message = 'This verification link is invalid or has expired.';
+    const result = await verifyEmail(TOKEN, makeFetch(400, errorBody('invalid_token', message)));
+    expect(result).toMatchObject({ ok: false, status: 400, code: 'invalid_token', message });
+  });
+});
+
+describe('resendVerification', () => {
+  const throttled = (retryAfter?: string) =>
+    vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(errorBody('verification_throttled', 'Wait.')), {
+        status: 429,
+        headers: {
+          'content-type': 'application/json',
+          ...(retryAfter !== undefined && { 'retry-after': retryAfter }),
+        },
+      }),
+    );
+
+  it('POSTs with no body and returns alreadyVerified', async () => {
+    const fetchImpl = makeFetch(200, { alreadyVerified: false });
+    expect(await resendVerification(fetchImpl)).toEqual({
+      ok: true,
+      data: { alreadyVerified: false },
+    });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe('/api/v1/auth/resend-verification');
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBeUndefined();
+  });
+
+  it('reports an already verified account', async () => {
+    const result = await resendVerification(makeFetch(200, { alreadyVerified: true }));
+    expect(result).toEqual({ ok: true, data: { alreadyVerified: true } });
+  });
+
+  it('reads the wait from Retry-After on 429', async () => {
+    const result = await resendVerification(throttled('42'));
+    expect(result).toMatchObject({
+      ok: false,
+      status: 429,
+      code: 'verification_throttled',
+      retryAfterSeconds: 42,
+    });
+  });
+
+  it.each([undefined, 'soon'])('waits 60 s when Retry-After is %j', async (header) => {
+    const result = await resendVerification(throttled(header));
+    expect(result).toMatchObject({ ok: false, status: 429, retryAfterSeconds: 60 });
+  });
+
+  it('returns 503 email_send_failed without a retry time', async () => {
+    const result = await resendVerification(
+      makeFetch(503, errorBody('email_send_failed', "We couldn't send the email.")),
+    );
+    expect(result).toMatchObject({ ok: false, status: 503, code: 'email_send_failed' });
+    expect(result).not.toHaveProperty('retryAfterSeconds');
   });
 });

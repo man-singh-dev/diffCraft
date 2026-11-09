@@ -2,17 +2,19 @@ import 'server-only';
 
 import { PublicUserSchema, type PublicUser } from '@diffcraft/shared';
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import { env } from './env.server';
 
 // Must match SESSION_COOKIE_NAME in apps/api/src/modules/auth/session.ts.
 export const SESSION_COOKIE_NAME = 'diffcraft_session';
 
-export async function getCurrentUser(): Promise<PublicUser | null> {
+// Per request: the (app) layout and its page both ask, and should share one /me call.
+export const getCurrentUser = cache(async (): Promise<PublicUser | null> => {
   // Outside the try on purpose: during prerendering cookies() throws to mark the page dynamic, which must not be swallowed.
   const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
   return fetchCurrentUser(env.API_URL, token);
-}
+});
 
 export async function fetchCurrentUser(
   apiUrl: string,

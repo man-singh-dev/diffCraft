@@ -30,7 +30,7 @@ More in [docs/architecture.md](docs/architecture.md).
 ## Screenshots
 
 > [!NOTE]
-> So far the UI has the home, sign-up, login, profile, workspace and review pages (review list, new review, review details with its file list, the "Files changed" diff viewer, and line and review comments). The AI screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
+> So far the UI has the home, sign-up, login, email verification, profile, workspace and review pages (review list, new review, review details with its file list, the "Files changed" diff viewer, and line and review comments). The AI screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
 
 | Screen                                                             | Status                         |
 | ------------------------------------------------------------------ | ------------------------------ |
@@ -50,6 +50,7 @@ More in [docs/architecture.md](docs/architecture.md).
 **Implemented**
 
 - Email/password sign-up, login, logout and a profile page.
+- Email verification: a single-use link (24 h) sent on sign-up, a banner with "Resend email" until you verify, and a `/verify-email` page that only verifies when you press Confirm, so email scanners can't use up the link. Only verified users can be added to a workspace.
 - Workspaces with owner, admin, member and viewer roles: create, rename and delete them, and add, re-role and remove members, in the API and the web app. A workspace always keeps at least one owner ([security](docs/security.md#member-management-implemented)).
 - Reviews from a pasted or uploaded unified diff (UTF-8 or UTF-16, up to 1 MiB) with a live parse preview; a review list with status and "only mine" filters; review pages with the changed files; edit, close, reopen and delete for the author or an admin ([API](docs/api.md#reviews)).
 - Comment threads on any line of the diff or on the review as a whole: replies, edit, soft delete and resolve/reopen, with the same permission rules in the API and the UI ([security](docs/security.md#comments-implemented)).
@@ -147,7 +148,7 @@ pnpm dev                             # web http://localhost:3000, API http://loc
 | 3. Reviews and diff ingestion    | **Implemented** |
 | 4. Diff viewer                   | **Implemented** |
 | 5. Comments and threads          | **In progress** |
-| 6. Approvals and lifecycle       | Planned         |
+| 6. Approvals and lifecycle       | **Implemented** |
 | 7. Real-time                     | Planned         |
 | 8. AI analysis                   | Planned         |
 | 9. Hardening and deployment      | Planned         |
