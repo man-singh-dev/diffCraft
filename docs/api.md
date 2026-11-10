@@ -236,6 +236,21 @@ Schemas are in `packages/shared/src/approvals.ts`. `ReviewState` is `{ state: "p
 
 Merging and deciding lock the review row, so a request for changes racing a merge either lands first (the merge is blocked) or after it (`409 review_not_open`); a merge never goes past it.
 
+### Real-time
+
+| Method | Path                      | Purpose                                                                                                             | Auth                     | Status          |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------ | --------------- |
+| `POST` | `/api/v1/realtime/ticket` | A single-use ticket for the Socket.IO handshake. `200 { ticket, expiresInSeconds: 30 }`, `Cache-Control: no-store`. | User (CSRF Origin check) | **Implemented** |
+
+Socket.IO runs on the API itself at path `/socket.io`, WebSocket transport only, and accepts only `Origin: WEB_ORIGIN`. Connect with `auth: { ticket }`; a missing, invalid, expired or used ticket fails with the connect error `unauthorized`. Client events, each answered with an acknowledgement (types in `packages/shared/src/realtime.ts`):
+
+| Event          | Payload                         | Acknowledgement                                                                                                                               |
+| -------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `review:join`  | `{ workspaceId, reviewNumber }` | `{ ok: true, reviewId }`, or `{ ok: false, error }` with `not_found`, `invalid_request`, `rate_limited`, `too_many_rooms` or `internal_error` |
+| `review:leave` | `{ reviewId }`                  | `{ ok: true }`, or `{ ok: false, error: 'invalid_request' }`                                                                                  |
+
+No server events are emitted yet (Stage 7, step 2). Delivery is at most once: after reconnecting, re-join and re-fetch over HTTP.
+
 ### AI analysis and findings
 
 | Method  | Path                                  | Purpose                                                                                              | Auth                              |

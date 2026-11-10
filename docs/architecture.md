@@ -205,9 +205,9 @@ flowchart LR
 
 ## Technology Stack
 
-**In use now:** Next.js, TypeScript, Tailwind CSS, Node.js, Fastify (with `@fastify/cookie`), Zod, PostgreSQL with Drizzle ORM (schema, migrations and the `pg` driver), Argon2id (`@node-rs/argon2`), esbuild (API production bundle), Vitest, Docker (local PostgreSQL and Redis), GitHub Actions CI, and Vercel, Render and Neon for deployment.
+**In use now:** Next.js, TypeScript, Tailwind CSS, Node.js, Fastify (with `@fastify/cookie`), Zod, PostgreSQL with Drizzle ORM (schema, migrations and the `pg` driver), Argon2id (`@node-rs/argon2`), Redis (`ioredis`), Socket.IO with `@socket.io/redis-adapter`, esbuild (API production bundle), Vitest, Docker (local PostgreSQL, Redis and Mailpit), GitHub Actions CI, and Vercel, Render and Neon for deployment.
 
-**Planned:** Socket.IO, BullMQ, the LLM provider integration and OpenAPI generation. Redis runs locally but no application code uses it until Stage 7.
+**Planned:** BullMQ, the LLM provider integration and OpenAPI generation.
 
 | Layer            | Technology                                    | Rationale                                                                                                            |
 | ---------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -248,6 +248,36 @@ flowchart LR
 On reconnect, the client re-joins its rooms and re-fetches the review state over HTTP. Events are treated as hints to refresh rather than as the only copy of the data, so missed events do not cause permanent inconsistency.
 
 ---
+
+## Real-time
+
+**Implemented: infrastructure** (Stage 7, step 1: tickets, the Socket.IO server, review rooms, the Redis adapter). No domain events are emitted yet, and the web app doesn't connect yet.
+
+**Why tickets.** In production the web app (Vercel) and the API (Render) are on different domains. The web app reaches the API through a `/api/*` rewrite, but a rewrite can't carry a WebSocket upgrade, and the session cookie belongs to the web app's domain, so the browser can't send it to the API directly. The socket therefore connects straight to the API and proves who it is with a short-lived, single-use **ticket**:
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant W as Web (Next.js)
+    participant A as API
+    participant R as Redis
+    B->>W: POST /api/v1/realtime/ticket (session cookie)
+    W->>A: rewrite (same request)
+    A->>R: SET realtime:ticket:<sha256(ticket)> {userId} EX 30 NX
+    A-->>B: { ticket, expiresInSeconds: 30 }
+    B->>A: WebSocket /socket.io (auth: { ticket }, Origin = WEB_ORIGIN)
+    A->>R: GETDEL realtime:ticket:<sha256(ticket)>
+    A->>A: user still exists, so socket.data.userId is set
+    A-->>B: connected
+```
+
+- **Transport: WebSocket only.** Long polling spreads one session over many HTTP requests, which would need sticky sessions across API instances; one WebSocket stays on the instance it reached.
+- **Rooms.** A client sends `review:join` `{ workspaceId, reviewNumber }`. The server checks membership (`getMembership`, viewer or higher) and loads the review **within that workspace** (`getReviewByNumber`), the same service functions the HTTP routes use, then joins `review:<reviewId>` and acknowledges `{ ok: true, reviewId }`. A missing review and a workspace you aren't in both get `{ ok: false, error: 'not_found' }`. `review:leave` `{ reviewId }` leaves the room. Each socket can be in at most 20 review rooms and may attempt 10 joins per 10 s (`rate_limited`).
+- **Emitting.** `app.realtime.emitToReview(reviewId, event, payload)` emits to the room. Event names and payload types live in `packages/shared/src/realtime.ts` (`ReviewRoomEvents`; step 2 adds the domain events, emitted after commit).
+- **Several API instances.** `@socket.io/redis-adapter` publishes every room emit on Redis (one publisher and one subscriber connection per instance, separate from the main client), so a socket on instance A receives an event emitted on instance B. An instance joins only once it listens.
+- **Delivery is at most once.** Events aren't stored or replayed: a socket that is disconnected, or an instance that can't reach Redis (it then delivers to its own sockets only), misses them. Events are hints that something changed. After reconnecting, a client gets a new ticket, re-joins its rooms and re-fetches over HTTP (the [recovery path](#recovery-path)).
+- **Shutdown.** `app.close()` closes Socket.IO first (sockets see a transport close, so clients reconnect, to another instance during a deploy), then the Redis connections.
+- **Redis client: ioredis.** Clients are created with `lazyConnect`, like the pg pool: an app that never touches Redis (most tests, which use `inject()`) never connects. ioredis also re-subscribes after a reconnect, and the Socket.IO adapter supports it directly.
 
 ## Diff Parsing
 

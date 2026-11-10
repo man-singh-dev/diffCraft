@@ -23,8 +23,12 @@ const ConfigSchema = z
     MAIL_TRANSPORT: z.enum(['smtp', 'log']).default('smtp'),
     MAIL_SMTP_URL: z.url({ protocol: /^smtps?$/ }).optional(),
     MAIL_FROM: z.string().trim().min(1).optional(),
+    REDIS_URL: z.url({ protocol: /^rediss?$/ }).optional(),
   })
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'production' && !env.REDIS_URL) {
+      ctx.addIssue({ code: 'custom', path: ['REDIS_URL'], message: 'Required in production' });
+    }
     // Outside production, smtp falls back to the local Mailpit; production must name its provider.
     if (env.NODE_ENV !== 'production' || env.MAIL_TRANSPORT !== 'smtp') return;
     for (const key of ['MAIL_SMTP_URL', 'MAIL_FROM'] as const) {
@@ -33,11 +37,12 @@ const ConfigSchema = z
       }
     }
   })
-  .transform(({ API_PORT, PORT, MAIL_SMTP_URL, MAIL_FROM, ...rest }) => ({
+  .transform(({ API_PORT, PORT, MAIL_SMTP_URL, MAIL_FROM, REDIS_URL, ...rest }) => ({
     ...rest,
     API_PORT: API_PORT ?? PORT ?? 4000,
     MAIL_SMTP_URL: MAIL_SMTP_URL ?? 'smtp://localhost:1025',
     MAIL_FROM: MAIL_FROM ?? 'DiffCraft <noreply@localhost>',
+    REDIS_URL: REDIS_URL ?? 'redis://localhost:6379',
   }));
 
 export type Config = z.output<typeof ConfigSchema>;

@@ -1,11 +1,49 @@
 import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { Redis } from 'ioredis';
 import pg from 'pg';
+import type { TestProject } from 'vitest/node';
 
 const migrationsFolder = fileURLToPath(new URL('../../drizzle', import.meta.url));
 
-export default async function setup(): Promise<void> {
+declare module 'vitest' {
+  export interface ProvidedContext {
+    testRedisUrl: string | null;
+  }
+}
+
+export default async function setup(project: TestProject): Promise<void> {
+  project.provide('testRedisUrl', await reachableRedisUrl());
+  await migrateTestDatabase();
+}
+
+async function reachableRedisUrl(): Promise<string | null> {
+  const url = process.env.TEST_REDIS_URL ?? process.env.REDIS_URL ?? 'redis://localhost:6379';
+  const client = new Redis(url, {
+    lazyConnect: true,
+    connectTimeout: 2_000,
+    maxRetriesPerRequest: 0,
+    retryStrategy: () => null,
+  });
+  client.on('error', () => {});
+  try {
+    await client.connect();
+    await client.ping();
+    return url;
+  } catch {
+    // The URL isn't printed: it may hold a password.
+    console.warn(
+      '\n[api] Redis is not reachable (TEST_REDIS_URL, else REDIS_URL, else redis://localhost:6379):\n' +
+        '      tests that need Redis (realtime, /ready) will be SKIPPED. Start it with `pnpm infra:up`.\n',
+    );
+    return null;
+  } finally {
+    client.disconnect();
+  }
+}
+
+async function migrateTestDatabase(): Promise<void> {
   const url = process.env.TEST_DATABASE_URL;
   if (!url) {
     console.warn(

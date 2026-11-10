@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
 
 const DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
+const REDIS_URL = 'rediss://default:r3dis-secret@redis.example.com:6380';
 
 describe('loadConfig', () => {
   it('applies defaults when only required vars are set', () => {
@@ -17,20 +18,45 @@ describe('loadConfig', () => {
       MAIL_TRANSPORT: 'smtp',
       MAIL_SMTP_URL: 'smtp://localhost:1025',
       MAIL_FROM: 'DiffCraft <noreply@localhost>',
+      REDIS_URL: 'redis://localhost:6379',
     });
+  });
+
+  describe('redis', () => {
+    it('requires REDIS_URL in production, naming it without values', () => {
+      expect(() =>
+        loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_TRANSPORT: 'log' }),
+      ).toThrow(/REDIS_URL/);
+      expect(
+        loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_TRANSPORT: 'log', REDIS_URL })
+          .REDIS_URL,
+      ).toBe(REDIS_URL);
+    });
+
+    it.each(['http://localhost:6379', 'not a url', 'rediss://default:r3dis-secret@'])(
+      'rejects %j without printing it',
+      (value) => {
+        expect(() => loadConfig({ DATABASE_URL, REDIS_URL: value })).toThrow(/REDIS_URL/);
+        try {
+          loadConfig({ DATABASE_URL, REDIS_URL: value });
+        } catch (error) {
+          expect(String(error)).not.toContain('r3dis-secret');
+        }
+      },
+    );
   });
 
   describe('mail', () => {
     it('requires MAIL_SMTP_URL and MAIL_FROM for smtp in production, naming them without values', () => {
-      expect(() => loadConfig({ DATABASE_URL, NODE_ENV: 'production' })).toThrow(
+      expect(() => loadConfig({ DATABASE_URL, NODE_ENV: 'production', REDIS_URL })).toThrow(
         /MAIL_SMTP_URL[\s\S]*MAIL_FROM/,
       );
       const smtpUrl = 'smtps://user:s3cret@smtp.example.com:465';
       expect(() =>
-        loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_SMTP_URL: smtpUrl }),
+        loadConfig({ DATABASE_URL, NODE_ENV: 'production', REDIS_URL, MAIL_SMTP_URL: smtpUrl }),
       ).toThrow(/MAIL_FROM/);
       try {
-        loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_SMTP_URL: smtpUrl });
+        loadConfig({ DATABASE_URL, NODE_ENV: 'production', REDIS_URL, MAIL_SMTP_URL: smtpUrl });
       } catch (error) {
         expect(String(error)).not.toContain('s3cret');
       }
@@ -38,6 +64,7 @@ describe('loadConfig', () => {
         loadConfig({
           DATABASE_URL,
           NODE_ENV: 'production',
+          REDIS_URL,
           MAIL_SMTP_URL: smtpUrl,
           MAIL_FROM: 'DiffCraft <noreply@example.com>',
         }),
@@ -46,7 +73,8 @@ describe('loadConfig', () => {
 
     it('accepts MAIL_TRANSPORT=log in production without SMTP settings', () => {
       expect(
-        loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_TRANSPORT: 'log' }).MAIL_TRANSPORT,
+        loadConfig({ DATABASE_URL, NODE_ENV: 'production', REDIS_URL, MAIL_TRANSPORT: 'log' })
+          .MAIL_TRANSPORT,
       ).toBe('log');
     });
 

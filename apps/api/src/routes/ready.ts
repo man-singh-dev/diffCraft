@@ -4,11 +4,14 @@ import type { FastifyPluginAsync } from 'fastify';
 
 const READY_TIMEOUT_MS = 2_000;
 
-// Unlike /health, readiness checks the database.
+// Unlike /health, readiness checks the database and Redis.
 export const readyRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Reply: ReadyResponse }>('/ready', async (request, reply) => {
     try {
-      await withTimeout(app.db.execute(sql`select 1`), READY_TIMEOUT_MS);
+      await withTimeout(
+        Promise.all([app.db.execute(sql`select 1`), app.redis.ping()]),
+        READY_TIMEOUT_MS,
+      );
       return { status: 'ready' };
     } catch (err) {
       request.log.warn({ err }, 'readiness check failed');

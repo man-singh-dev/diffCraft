@@ -4,12 +4,19 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { describeWithDb, testDatabaseUrl, UNUSED_DATABASE_URL } from '../test/db.js';
+import { describeWithDbAndRedis, testRedisUrl, UNUSED_REDIS_URL } from '../test/redis.js';
 
-describeWithDb('GET /ready (database up)', () => {
+describeWithDbAndRedis('GET /ready (database and Redis up)', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: testDatabaseUrl }));
+    app = await buildApp(
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        DATABASE_URL: testDatabaseUrl,
+        REDIS_URL: testRedisUrl ?? undefined,
+      }),
+    );
   });
 
   afterAll(async () => {
@@ -30,6 +37,31 @@ describe('GET /ready (database down)', () => {
   beforeAll(async () => {
     // Port 1 is closed, so the connection is refused.
     app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: UNUSED_DATABASE_URL }));
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('returns 503 {"status":"not_ready"}', async () => {
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+
+    expect(res.statusCode).toBe(503);
+    expect(ReadyResponseSchema.parse(res.json())).toEqual({ status: 'not_ready' });
+  });
+});
+
+describeWithDb('GET /ready (Redis down)', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    app = await buildApp(
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        DATABASE_URL: testDatabaseUrl,
+        REDIS_URL: UNUSED_REDIS_URL,
+      }),
+    );
   });
 
   afterAll(async () => {

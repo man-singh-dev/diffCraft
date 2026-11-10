@@ -40,27 +40,43 @@ describe('trustProxy', () => {
 
   describe('in production', () => {
     it('uses the client address the proxy added', async () => {
-      const instance = await appWith({ NODE_ENV: 'production' });
+      const instance = await appWith({
+        NODE_ENV: 'production',
+        REDIS_URL: 'redis://localhost:6379',
+      });
       expect(await ipFor(instance, PROXY, CLIENT)).toBe(CLIENT);
     });
 
     it('ignores addresses a client put in front (spoofing)', async () => {
-      const instance = await appWith({ NODE_ENV: 'production' });
+      const instance = await appWith({
+        NODE_ENV: 'production',
+        REDIS_URL: 'redis://localhost:6379',
+      });
       expect(await ipFor(instance, PROXY, `6.6.6.6, ${CLIENT}`)).toBe(CLIENT);
     });
 
     it('skips several private proxy hops', async () => {
-      const instance = await appWith({ NODE_ENV: 'production' });
+      const instance = await appWith({
+        NODE_ENV: 'production',
+        REDIS_URL: 'redis://localhost:6379',
+      });
       expect(await ipFor(instance, PROXY, `6.6.6.6, ${CLIENT}, 10.0.0.2`)).toBe(CLIENT);
     });
 
     it('ignores the header from a peer that is not a trusted proxy', async () => {
-      const instance = await appWith({ NODE_ENV: 'production' });
+      const instance = await appWith({
+        NODE_ENV: 'production',
+        REDIS_URL: 'redis://localhost:6379',
+      });
       expect(await ipFor(instance, '198.51.100.9', CLIENT)).toBe('198.51.100.9');
     });
 
     it('trusts only the proxies listed in TRUST_PROXY', async () => {
-      const instance = await appWith({ NODE_ENV: 'production', TRUST_PROXY: '10.0.0.0/24' });
+      const instance = await appWith({
+        NODE_ENV: 'production',
+        REDIS_URL: 'redis://localhost:6379',
+        TRUST_PROXY: '10.0.0.0/24',
+      });
       expect(await ipFor(instance, PROXY, CLIENT)).toBe(CLIENT);
       expect(await ipFor(instance, '10.0.1.1', CLIENT)).toBe('10.0.1.1');
     });

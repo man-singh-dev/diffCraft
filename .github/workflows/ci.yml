@@ -32,6 +32,15 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -63,6 +72,7 @@ jobs:
         run: pnpm test
         env:
           TEST_DATABASE_URL: postgresql://diffcraft:diffcraft@localhost:5432/diffcraft_test
+          TEST_REDIS_URL: redis://localhost:6379/1
 
       # The production bundle (dist/server.js, dist/migrate.js) that Render runs.
       - name: Build API
