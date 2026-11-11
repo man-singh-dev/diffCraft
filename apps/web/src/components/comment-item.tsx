@@ -11,7 +11,7 @@ import { suggestionPatchUrl } from '@/lib/api-client';
 import { CommentBody } from './comment-body';
 import { CommentComposer } from './comment-composer';
 import { useComments } from './comments-provider';
-import { CreatedDate } from './review-ui';
+import { LocalTime } from './local-time';
 import { smallDangerButton } from './styles';
 
 const linkButton =
@@ -52,7 +52,7 @@ export function CommentItem({
         <span className="font-semibold text-slate-200">
           {comment.author?.displayName ?? 'Deleted user'}
         </span>
-        <CreatedDate value={comment.createdAt} />
+        <LocalTime iso={comment.createdAt} />
         {comment.edited && <span className="text-slate-500">(edited)</span>}
       </p>
 

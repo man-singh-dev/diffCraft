@@ -1,16 +1,5 @@
 import type { Decision, ReviewState } from '@diffcraft/shared';
 
-// UTC so the time doesn't depend on the server's (or browser's) time zone.
-const dateTime = new Intl.DateTimeFormat('en', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'UTC',
-});
-
-export function DateTime({ value }: { value: string }) {
-  return <time dateTime={value}>{dateTime.format(new Date(value))} UTC</time>;
-}
-
 const badge = 'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium';
 
 const STATE_STYLES: Record<ReviewState['state'], { label: string; className: string }> = {

@@ -95,7 +95,9 @@ describe('CommentThread', () => {
     ]);
     const html = renderThread(thread, OTHER, 'member');
     expect(html).toContain('Ada');
-    expect(html).toContain('<time dateTime="2026-11-05T10:00:00.000Z">Nov 5, 2026</time>');
+    expect(html).toMatch(
+      /<time dateTime="2026-11-05T10:00:00.000Z"[^>]*>Nov 5, 2026, 10:00 AM UTC<\/time>/,
+    );
     expect(html.match(/\(edited\)/g)).toHaveLength(1);
     expect(html).toContain('This comment was deleted.');
     expect(html).toContain('Deleted user');

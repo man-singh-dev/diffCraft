@@ -1,14 +1,8 @@
 import type { Review, ReviewFile, ReviewStatus } from '@diffcraft/shared';
 import Link from 'next/link';
+import { LocalTime } from './local-time';
 
 // Shared by server pages and the client "Load more" list, so no hooks and no server-only code.
-
-// UTC so the date doesn't depend on the server's (or browser's) time zone.
-const createdDate = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' });
-
-export function CreatedDate({ value }: { value: string }) {
-  return <time dateTime={value}>{createdDate.format(new Date(value))}</time>;
-}
 
 const badge = 'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium';
 
@@ -77,7 +71,7 @@ export function ReviewRow({ review }: { review: Review }) {
           {review.filesChanged} {review.filesChanged === 1 ? 'file' : 'files'}
         </span>
         <LineCounts additions={review.additions} deletions={review.deletions} />
-        <CreatedDate value={review.createdAt} />
+        <LocalTime iso={review.createdAt} />
       </p>
     </li>
   );

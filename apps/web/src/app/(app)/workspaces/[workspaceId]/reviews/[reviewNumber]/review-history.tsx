@@ -1,5 +1,5 @@
 import type { ReviewDecision, ReviewEvent } from '@diffcraft/shared';
-import { DateTime } from '@/components/approval-ui';
+import { LocalTime } from '@/components/local-time';
 import { describeEntry, mergeTimeline } from '@/lib/approval-timeline';
 
 export function ReviewHistory({
@@ -27,7 +27,7 @@ export function ReviewHistory({
               <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
                 <span className="text-slate-200">{describeEntry(entry, names)}</span>
                 <span className="text-xs text-slate-500">
-                  <DateTime value={entry.createdAt} />
+                  <LocalTime iso={entry.createdAt} />
                 </span>
               </p>
               {entry.kind === 'decision' && entry.decision.body && (

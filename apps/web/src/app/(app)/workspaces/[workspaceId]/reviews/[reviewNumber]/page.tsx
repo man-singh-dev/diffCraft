@@ -7,7 +7,6 @@ import { PageCard } from '@/components/page-card';
 import {
   authorName,
   ChangeTypeBadge,
-  CreatedDate,
   filePath,
   LineCounts,
   StatusBadge,
@@ -20,7 +19,8 @@ import {
   OpenThreadsSummary,
   ReviewConversation,
 } from '@/components/review-conversation';
-import { approvalCount, DateTime, DecisionStateBadge } from '@/components/approval-ui';
+import { approvalCount, DecisionStateBadge } from '@/components/approval-ui';
+import { LocalTime } from '@/components/local-time';
 import {
   getDecisions,
   getMembers,
@@ -141,7 +141,7 @@ export default async function ReviewPage(
           <div className="flex gap-2">
             <dt className="text-slate-500">Created</dt>
             <dd className="text-slate-200">
-              <CreatedDate value={r.createdAt} />
+              <LocalTime iso={r.createdAt} />
             </dd>
           </div>
           <div className="flex items-center gap-2">
@@ -169,7 +169,7 @@ export default async function ReviewPage(
               <>
                 {' '}
                 by {mergedEvent.actor?.displayName ?? DELETED_USER} on{' '}
-                <DateTime value={mergedEvent.createdAt} />
+                <LocalTime iso={mergedEvent.createdAt} />
               </>
             )}
             .

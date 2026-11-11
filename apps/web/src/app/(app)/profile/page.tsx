@@ -1,12 +1,10 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { LocalTime } from '@/components/local-time';
 import { PageCard } from '@/components/page-card';
 import { getCurrentUser } from '@/lib/auth.server';
 
 export const metadata: Metadata = { title: 'Profile · DiffCraft' };
-
-// UTC so the date doesn't depend on the server's time zone.
-const memberSince = new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' });
 
 export default async function ProfilePage() {
   const user = await getCurrentUser();
@@ -37,7 +35,7 @@ export default async function ProfilePage() {
         <div className="flex justify-between gap-4">
           <dt className="text-slate-500">Member since</dt>
           <dd className="text-slate-200">
-            <time dateTime={user.createdAt}>{memberSince.format(new Date(user.createdAt))}</time>
+            <LocalTime iso={user.createdAt} dateOnly />
           </dd>
         </div>
       </dl>

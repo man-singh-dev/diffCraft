@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { FormError } from '@/components/form-field';
+import { LocalTime } from '@/components/local-time';
 import { PageCard } from '@/components/page-card';
 import { RoleBadge } from '@/components/role-badge';
 import { secondaryButton } from '@/components/styles';
@@ -16,9 +17,6 @@ import { MemberControls } from './member-controls';
 import { RenameWorkspaceForm } from './rename-workspace-form';
 
 export const metadata: Metadata = { title: 'Workspace · DiffCraft' };
-
-// UTC so the date doesn't depend on the server's time zone.
-const joinedDate = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' });
 
 const sectionHeading = 'text-sm font-semibold text-slate-200';
 
@@ -85,10 +83,7 @@ export default async function WorkspacePage(props: PageProps<'/workspaces/[works
                   </p>
                   <p className="truncate font-mono text-xs text-slate-400">{member.email}</p>
                   <p className="text-xs text-slate-500">
-                    Joined{' '}
-                    <time dateTime={member.joinedAt}>
-                      {joinedDate.format(new Date(member.joinedAt))}
-                    </time>
+                    Joined <LocalTime iso={member.joinedAt} dateOnly />
                   </p>
                 </div>
                 {manageable ? (

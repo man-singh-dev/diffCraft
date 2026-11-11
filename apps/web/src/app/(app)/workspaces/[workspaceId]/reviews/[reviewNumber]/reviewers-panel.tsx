@@ -10,7 +10,8 @@ import {
 } from '@diffcraft/shared';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
-import { DateTime, DecisionMark } from '@/components/approval-ui';
+import { DecisionMark } from '@/components/approval-ui';
+import { LocalTime } from '@/components/local-time';
 import { FormError } from '@/components/form-field';
 import { smallDangerButton, smallSecondaryButton } from '@/components/styles';
 import { assignReviewers, removeReviewer } from '@/lib/approval-actions';
@@ -125,7 +126,7 @@ export function ReviewersPanel({
                 <DecisionMark decision={latestDecision} />
                 {decidedAt && (
                   <span className="text-xs text-slate-500">
-                    <DateTime value={decidedAt} />
+                    <LocalTime iso={decidedAt} />
                   </span>
                 )}
                 {isMe && canLeave ? (
