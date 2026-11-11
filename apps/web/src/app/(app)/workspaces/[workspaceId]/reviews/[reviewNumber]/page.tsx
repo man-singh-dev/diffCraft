@@ -21,6 +21,7 @@ import {
 } from '@/components/review-conversation';
 import { approvalCount, DecisionStateBadge } from '@/components/approval-ui';
 import { LocalTime } from '@/components/local-time';
+import { ThreadHashRedirect } from '@/components/thread-hash-redirect';
 import {
   getDecisions,
   getMembers,
@@ -272,6 +273,7 @@ export default async function ReviewPage(
             </ul>
           )}
           <OpenThreadsSummary filesHref={filesHref} filePaths={filePaths} />
+          <ThreadHashRedirect filesHref={filesHref} />
         </section>
 
         <section aria-labelledby="conversation" className="space-y-3">

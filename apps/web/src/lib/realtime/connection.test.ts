@@ -96,4 +96,14 @@ describe('createRealtimeConnection', () => {
     timers[0]!.fn();
     expect(socket.connectCalls).toBe(1);
   });
+
+  it('closes for good: disconnects, reports offline and never reconnects', () => {
+    const { socket, connection, timers } = setup([]);
+    socket.serverConnect();
+    connection.close();
+    socket.receive('disconnect', 'io client disconnect');
+    expect(socket.disconnectCalls).toBe(1);
+    expect(connection.status()).toBe('offline');
+    expect(timers).toEqual([]);
+  });
 });

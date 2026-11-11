@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { logout } from '@/lib/api-client';
+import { closeRealtimeConnection } from '@/lib/realtime/connection';
 
 export function LogoutButton({ className }: { className: string }) {
   const router = useRouter();
@@ -19,6 +20,7 @@ export function LogoutButton({ className }: { className: string }) {
       setError(result.message);
       return;
     }
+    closeRealtimeConnection();
     router.push('/login');
     router.refresh();
   }

@@ -15,6 +15,7 @@ import {
   WorkspaceMemberSchema,
   WorkspaceSchema,
   ThreadSchema,
+  UnreadCountResponseSchema,
   type ApprovalRules,
   type AssignReviewersRequest,
   type Comment,
@@ -76,6 +77,11 @@ export async function fetchApi<T>(
 }
 
 const NOT_FOUND = { ok: false, status: 404 } as const;
+
+export async function getUnreadNotificationCount(): Promise<ServerApiResult<number>> {
+  const result = await apiGet('/api/v1/notifications/unread-count', UnreadCountResponseSchema);
+  return result.ok ? { ok: true, data: result.data.count } : result;
+}
 
 export function getWorkspaces(): Promise<ServerApiResult<Workspace[]>> {
   return apiGet('/api/v1/workspaces', WorkspaceSchema.array());

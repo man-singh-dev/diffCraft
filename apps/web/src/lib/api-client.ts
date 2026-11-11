@@ -1,9 +1,11 @@
 import {
   ErrorResponseSchema,
+  NotificationListResponseSchema,
   PublicUserSchema,
   ResendVerificationResponseSchema,
   ReviewListResponseSchema,
   ReviewSchema,
+  UnreadCountResponseSchema,
   VerifyEmailResponseSchema,
   WorkspaceMemberSchema,
   WorkspaceSchema,
@@ -11,6 +13,7 @@ import {
   type CreateReviewRequest,
   type CreateWorkspaceRequest,
   type LoginRequest,
+  type NotificationListResponse,
   type PublicUser,
   type RegisterRequest,
   type ResendVerificationResponse,
@@ -18,6 +21,7 @@ import {
   type ReviewListResponse,
   type UpdateMemberRoleRequest,
   type UpdateReviewRequest,
+  type UnreadCountResponse,
   type UpdateWorkspaceRequest,
   type VerifyEmailResponse,
   type Workspace,
@@ -251,4 +255,37 @@ export function deleteReview(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<void>> {
   return request<void>('DELETE', reviewPath(workspaceId, reviewNumber), undefined, null, fetchImpl);
+}
+
+const NOTIFICATIONS_PATH = '/api/v1/notifications';
+
+export function listNotifications(
+  cursor: string | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<NotificationListResponse>> {
+  const path = cursor
+    ? `${NOTIFICATIONS_PATH}?cursor=${encodeURIComponent(cursor)}`
+    : NOTIFICATIONS_PATH;
+  return request('GET', path, undefined, NotificationListResponseSchema, fetchImpl);
+}
+
+export function getUnreadCount(
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<UnreadCountResponse>> {
+  const path = `${NOTIFICATIONS_PATH}/unread-count`;
+  return request('GET', path, undefined, UnreadCountResponseSchema, fetchImpl);
+}
+
+export function markNotificationRead(
+  id: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<void>> {
+  const path = `${NOTIFICATIONS_PATH}/${encodeURIComponent(id)}/read`;
+  return request<void>('POST', path, undefined, null, fetchImpl);
+}
+
+export function markAllNotificationsRead(
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<void>> {
+  return request<void>('POST', `${NOTIFICATIONS_PATH}/read-all`, undefined, null, fetchImpl);
 }

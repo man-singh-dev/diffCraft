@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LogoutButton } from './logout-button';
+import { NotificationBell } from './notification-bell';
 
 const LINKS = [
   { href: '/workspaces', label: 'Workspaces' },
@@ -12,7 +13,7 @@ const LINKS = [
 const linkClass =
   'rounded-md px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 aria-[current=page]:bg-slate-800 aria-[current=page]:text-white disabled:opacity-60';
 
-export function Nav() {
+export function Nav({ unreadCount }: { unreadCount: number | null }) {
   const pathname = usePathname();
 
   return (
@@ -39,7 +40,10 @@ export function Nav() {
             );
           })}
         </div>
-        <LogoutButton className={linkClass} />
+        <div className="flex items-center gap-2">
+          {unreadCount !== null && <NotificationBell initialUnread={unreadCount} />}
+          <LogoutButton className={linkClass} />
+        </div>
       </nav>
     </header>
   );

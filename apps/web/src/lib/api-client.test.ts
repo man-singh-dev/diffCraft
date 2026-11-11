@@ -6,10 +6,14 @@ import {
   createWorkspace,
   deleteReview,
   deleteWorkspace,
+  getUnreadCount,
   leaveWorkspace,
+  listNotifications,
   listReviews,
   login,
   logout,
+  markAllNotificationsRead,
+  markNotificationRead,
   register,
   removeMember,
   renameWorkspace,
@@ -17,6 +21,7 @@ import {
   updateReview,
   verifyEmail,
 } from './api-client.js';
+import { notification } from './notification-fixture';
 
 const USER = {
   id: '01a17e5e-aa56-7985-be46-bf5f1c7e7fde',
@@ -480,5 +485,63 @@ describe('resendVerification', () => {
     );
     expect(result).toMatchObject({ ok: false, status: 503, code: 'email_send_failed' });
     expect(result).not.toHaveProperty('retryAfterSeconds');
+  });
+});
+
+describe('notification requests', () => {
+  const N = notification();
+
+  it.each([
+    {
+      name: 'listNotifications (first page)',
+      call: (f: typeof fetch) => listNotifications(null, f),
+      method: 'GET',
+      url: '/api/v1/notifications',
+      response: [200, { items: [N], nextCursor: 'c+/=' }],
+    },
+    {
+      name: 'listNotifications (next page)',
+      call: (f: typeof fetch) => listNotifications('c+/=', f),
+      method: 'GET',
+      url: '/api/v1/notifications?cursor=c%2B%2F%3D',
+      response: [200, { items: [], nextCursor: null }],
+    },
+    {
+      name: 'getUnreadCount',
+      call: (f: typeof fetch) => getUnreadCount(f),
+      method: 'GET',
+      url: '/api/v1/notifications/unread-count',
+      response: [200, { count: 4 }],
+    },
+    {
+      name: 'markNotificationRead',
+      call: (f: typeof fetch) => markNotificationRead(N.id, f),
+      method: 'POST',
+      url: `/api/v1/notifications/${N.id}/read`,
+      response: [204, undefined],
+    },
+    {
+      name: 'markAllNotificationsRead',
+      call: (f: typeof fetch) => markAllNotificationsRead(f),
+      method: 'POST',
+      url: '/api/v1/notifications/read-all',
+      response: [204, undefined],
+    },
+  ] as const)('$name sends $method $url', async ({ call, method, url, response }) => {
+    const [status, body] = response;
+    const fetchImpl = makeFetch(status, body);
+    expect(await call(fetchImpl)).toEqual({ ok: true, data: body });
+    const [calledUrl, init] = fetchImpl.mock.calls[0]!;
+    expect(calledUrl).toBe(url);
+    expect(init?.method).toBe(method);
+    expect(init?.body).toBeUndefined();
+  });
+
+  it('rejects a list whose items fail the schema', async () => {
+    const result = await listNotifications(
+      null,
+      makeFetch(200, { items: [{ ...N, type: 'mentioned' }], nextCursor: null }),
+    );
+    expect(result).toMatchObject({ ok: false, code: 'unexpected_response' });
   });
 });

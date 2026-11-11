@@ -23,6 +23,7 @@ export interface RealtimeConnection {
   socket: RealtimeSocket;
   status(): ConnectionStatus;
   subscribe(listener: () => void): () => void;
+  close(): void;
 }
 
 // Same as Socket.IO's reconnection defaults (reconnectionDelay, reconnectionDelayMax, randomizationFactor).
@@ -113,6 +114,11 @@ export function createRealtimeConnection({
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    close() {
+      stopped = true;
+      socket.disconnect();
+      setStatus('offline');
+    },
   };
 }
 
@@ -136,4 +142,10 @@ export function getRealtimeConnection(): RealtimeConnection | null {
       })
     : null;
   return connection;
+}
+
+// The socket is authenticated as whoever was logged in: it must not outlive the session in this tab.
+export function closeRealtimeConnection(): void {
+  connection?.close();
+  connection = undefined;
 }
