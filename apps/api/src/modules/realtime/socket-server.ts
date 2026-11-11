@@ -72,7 +72,7 @@ export interface RealtimePluginOptions {
   limits?: Partial<RealtimeLimits>;
 }
 
-const safeError = (err: unknown) =>
+export const safeError = (err: unknown) =>
   err instanceof Error ? { name: err.name, message: err.message } : { message: String(err) };
 
 export const realtimePlugin = fp<RealtimePluginOptions>(

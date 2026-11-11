@@ -251,7 +251,7 @@ On reconnect, the client re-joins its rooms and re-fetches the review state over
 
 ## Real-time
 
-**Implemented: infrastructure** (Stage 7, step 1: tickets, the Socket.IO server, review rooms, the Redis adapter). No domain events are emitted yet, and the web app doesn't connect yet.
+**Implemented: infrastructure and domain events** (Stage 7, steps 1–2: tickets, the Socket.IO server, review rooms, the Redis adapter, and events for comments, approvals and review changes). The web app doesn't connect yet.
 
 **Why tickets.** In production the web app (Vercel) and the API (Render) are on different domains. The web app reaches the API through a `/api/*` rewrite, but a rewrite can't carry a WebSocket upgrade, and the session cookie belongs to the web app's domain, so the browser can't send it to the API directly. The socket therefore connects straight to the API and proves who it is with a short-lived, single-use **ticket**:
 
@@ -273,9 +273,18 @@ sequenceDiagram
 
 - **Transport: WebSocket only.** Long polling spreads one session over many HTTP requests, which would need sticky sessions across API instances; one WebSocket stays on the instance it reached.
 - **Rooms.** A client sends `review:join` `{ workspaceId, reviewNumber }`. The server checks membership (`getMembership`, viewer or higher) and loads the review **within that workspace** (`getReviewByNumber`), the same service functions the HTTP routes use, then joins `review:<reviewId>` and acknowledges `{ ok: true, reviewId }`. A missing review and a workspace you aren't in both get `{ ok: false, error: 'not_found' }`. `review:leave` `{ reviewId }` leaves the room. Each socket can be in at most 20 review rooms and may attempt 10 joins per 10 s (`rate_limited`).
-- **Emitting.** `app.realtime.emitToReview(reviewId, event, payload)` emits to the room. Event names and payload types live in `packages/shared/src/realtime.ts` (`ReviewRoomEvents`; step 2 adds the domain events, emitted after commit).
+- **Emitting.** `app.realtime.emitToReview(reviewId, event, payload)` emits to the room. Event names and Zod schemas live in `packages/shared/src/realtime.ts` (`ReviewRoomEventSchemas`, `ReviewRoomEvents`).
 - **Several API instances.** `@socket.io/redis-adapter` publishes every room emit on Redis (one publisher and one subscriber connection per instance, separate from the main client), so a socket on instance A receives an event emitted on instance B. An instance joins only once it listens.
 - **Delivery is at most once.** Events aren't stored or replayed: a socket that is disconnected, or an instance that can't reach Redis (it then delivers to its own sockets only), misses them. Events are hints that something changed. After reconnecting, a client gets a new ticket, re-joins its rooms and re-fetches over HTTP (the [recovery path](#recovery-path)).
+- **Domain events.** Every payload has `reviewId`, `actorId` and `at`; the payloads and the routes that emit them are listed in [api.md](api.md#real-time-events).
+  - `thread:upsert` `{ thread }` after a thread is created, replied to, edited, has a comment deleted, or is resolved/reopened.
+  - `review:changed` `{ reason }` with `reviewers`, `decision`, `merged`, `status` (closed/reopened) or `updated` (title/description).
+  - `review:deleted` after a review is deleted.
+- **After commit.** The services commit their own transactions; the route calls the publisher (`modules/realtime/publish.ts`) only once the service has returned successfully, so a failed or rolled-back request emits nothing and an event never describes uncommitted data. `publishThread` re-reads the thread with `getThread` in a read-only `repeatable read` transaction whose first statement reads `clock_timestamp()`, so `at` and the thread come from the same snapshot; if the thread is gone, nothing is emitted.
+- **Best effort.** A publish failure (the read or the emit) is caught and logged with the error name and message only, never a payload or comment body, and the HTTP response is unaffected. The route awaits the publish, so events from one client's sequential requests leave in order.
+- **Last writer wins by `at`.** `at` comes from the database clock, not an instance's clock, so it is comparable across instances. Events can still arrive out of order (two instances, two Redis publishes), so a client keeps the copy with the latest `at` and ignores an older event. `review:changed` carries no data: the client re-fetches over HTTP.
+- **Known limitation: approval rules.** Changing a workspace's rules (`PATCH …/rules`) can change whether a review can be merged, but it isn't broadcast yet: open review pages see the new state only after a re-fetch.
+- **Planned: transactional outbox.** Between the commit and the emit, a crash loses the event (at most once). An outbox table written in the same transaction as the change, drained by a relay, would make delivery at least once; until then clients resync on reconnect.
 - **Shutdown.** `app.close()` closes Socket.IO first (sockets see a transport close, so clients reconnect, to another instance during a deploy), then the Redis connections.
 - **Redis client: ioredis.** Clients are created with `lazyConnect`, like the pg pool: an app that never touches Redis (most tests, which use `inject()`) never connects. ioredis also re-subscribes after a reconnect, and the Socket.IO adapter supports it directly.
 

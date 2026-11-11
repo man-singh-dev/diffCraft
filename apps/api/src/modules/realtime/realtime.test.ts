@@ -1,144 +1,31 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { AddressInfo } from 'node:net';
-import {
-  ErrorResponseSchema,
-  REALTIME_PATH,
-  RealtimeTicketResponseSchema,
-  ReviewSchema,
-  WorkspaceSchema,
-  type ReviewJoinAck,
-  type ReviewJoinRequest,
-  type ReviewLeaveAck,
-} from '@diffcraft/shared';
+import { ErrorResponseSchema, RealtimeTicketResponseSchema } from '@diffcraft/shared';
 import type { RedisAdapter } from '@socket.io/redis-adapter';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { io as connectClient, type Socket as ClientSocket } from 'socket.io-client';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { buildApp } from '../../app.js';
-import { loadConfig } from '../../config.js';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { users } from '../../db/schema/index.js';
-import { testDatabaseUrl } from '../../test/db.js';
-import { FakeMailer } from '../../test/fake-mailer.js';
 import { addMember, createUserWithSession, type TestUser } from '../../test/fixtures.js';
-import { describeWithDbAndRedis, testRedisUrl } from '../../test/redis.js';
-import type { RealtimeLimits } from './socket-server.js';
+import {
+  closeRealtimeResourcesAfterTests,
+  connect,
+  createReview,
+  createWorkspace,
+  forgetApp,
+  getTicket,
+  join,
+  leave,
+  nextEvent,
+  receivedWithin,
+  startApp,
+  TICKET_URL,
+} from '../../test/realtime.js';
+import { describeWithDbAndRedis } from '../../test/redis.js';
 import { ticketKey } from './ticket.js';
 
-const WEB_ORIGIN = 'http://localhost:3000';
-const TICKET_URL = '/api/v1/realtime/ticket';
-const PATCH = `--- a/a.txt
-+++ b/a.txt
-@@ -1 +1 @@
--old
-+new
-`;
 const TEST_EVENT = 'test:event' as never;
 
-const openSockets = new Set<ClientSocket>();
-const openApps = new Set<FastifyInstance>();
-
-afterEach(() => {
-  for (const socket of openSockets) socket.disconnect();
-  openSockets.clear();
-});
-
-afterAll(async () => {
-  await Promise.all([...openApps].map((app) => app.close()));
-});
-
-async function startApp(realtimeLimits?: Partial<RealtimeLimits>) {
-  const app = await buildApp(
-    loadConfig({
-      LOG_LEVEL: 'silent',
-      DATABASE_URL: testDatabaseUrl,
-      REDIS_URL: testRedisUrl ?? undefined,
-      WEB_ORIGIN,
-    }),
-    { mailer: new FakeMailer(), ...(realtimeLimits && { realtimeLimits }) },
-  );
-  openApps.add(app);
-  await app.listen({ host: '127.0.0.1', port: 0 });
-  const { port } = app.server.address() as AddressInfo;
-  return { app, url: `http://127.0.0.1:${port}` };
-}
-
-async function getTicket(app: FastifyInstance, user: TestUser): Promise<string> {
-  const res = await app.inject({ method: 'POST', url: TICKET_URL, cookies: user.cookies });
-  expect(res.statusCode).toBe(200);
-  return RealtimeTicketResponseSchema.parse(res.json()).ticket;
-}
-
-function connect(
-  url: string,
-  auth: Record<string, unknown>,
-  origin: string = WEB_ORIGIN,
-): Promise<ClientSocket> {
-  const socket = connectClient(url, {
-    path: REALTIME_PATH,
-    transports: ['websocket'],
-    auth,
-    extraHeaders: { origin },
-    reconnection: false,
-    forceNew: true,
-  });
-  openSockets.add(socket);
-  return new Promise((resolve, reject) => {
-    socket.once('connect', () => resolve(socket));
-    socket.once('connect_error', (err) => {
-      socket.disconnect();
-      reject(err);
-    });
-  });
-}
-
-const join = (socket: ClientSocket, request: unknown): Promise<ReviewJoinAck> =>
-  socket.timeout(5_000).emitWithAck('review:join', request as ReviewJoinRequest);
-
-const leave = (socket: ClientSocket, reviewId: string): Promise<ReviewLeaveAck> =>
-  socket.timeout(5_000).emitWithAck('review:leave', { reviewId });
-
-async function createWorkspace(app: FastifyInstance, owner: TestUser) {
-  const res = await app.inject({
-    method: 'POST',
-    url: '/api/v1/workspaces',
-    cookies: owner.cookies,
-    payload: { name: 'Realtime' },
-  });
-  return WorkspaceSchema.parse(res.json());
-}
-
-async function createReview(app: FastifyInstance, owner: TestUser, workspaceId: string) {
-  const res = await app.inject({
-    method: 'POST',
-    url: `/api/v1/workspaces/${workspaceId}/reviews`,
-    cookies: owner.cookies,
-    payload: { title: 'Change', patch: PATCH },
-  });
-  return ReviewSchema.parse(res.json());
-}
-
-function nextEvent(socket: ClientSocket, event: string, timeoutMs = 3_000): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`no ${event} within ${timeoutMs} ms`)),
-      timeoutMs,
-    );
-    socket.once(event, (payload: unknown) => {
-      clearTimeout(timer);
-      resolve(payload);
-    });
-  });
-}
-
-async function receivedWithin(socket: ClientSocket, event: string, ms: number) {
-  let received = false;
-  const listener = () => (received = true);
-  socket.on(event, listener);
-  await new Promise((resolve) => setTimeout(resolve, ms));
-  socket.off(event, listener);
-  return received;
-}
+closeRealtimeResourcesAfterTests();
 
 describeWithDbAndRedis('realtime', () => {
   let app: FastifyInstance;
@@ -393,7 +280,7 @@ describeWithDbAndRedis('realtime', () => {
       const disconnected = nextEvent(socket, 'disconnect');
 
       await instance.app.close();
-      openApps.delete(instance.app);
+      forgetApp(instance.app);
 
       // Not "io server disconnect": after that reason a client would not reconnect by itself.
       expect(await disconnected).toBe('transport close');

@@ -249,7 +249,23 @@ Socket.IO runs on the API itself at path `/socket.io`, WebSocket transport only,
 | `review:join`  | `{ workspaceId, reviewNumber }` | `{ ok: true, reviewId }`, or `{ ok: false, error }` with `not_found`, `invalid_request`, `rate_limited`, `too_many_rooms` or `internal_error` |
 | `review:leave` | `{ reviewId }`                  | `{ ok: true }`, or `{ ok: false, error: 'invalid_request' }`                                                                                  |
 
-No server events are emitted yet (Stage 7, step 2). Delivery is at most once: after reconnecting, re-join and re-fetch over HTTP.
+#### Real-time events
+
+The server emits these to the room `review:<reviewId>` after the change has committed. Each event has a Zod schema in `packages/shared/src/realtime.ts` (`ReviewRoomEventSchemas`), so clients validate what they receive. Every payload carries:
+
+- `reviewId`: the review the event is about.
+- `actorId`: the user who made the change (uuid), or `null`.
+- `at`: an ISO 8601 timestamp read from the database clock when the event was built.
+
+| Event            | Extra fields                                                       | Emitted by                                                                                                                                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `thread:upsert`  | `thread`: the full thread with all its comments (`ThreadSchema`)   | `POST …/threads`, `PATCH …/threads/:threadId`, `POST …/threads/:threadId/comments`, `PATCH …/threads/:threadId/comments/:commentId`, `DELETE …/threads/:threadId/comments/:commentId`                                                                |
+| `review:changed` | `reason`: `reviewers`, `decision`, `status`, `merged` or `updated` | `POST …/reviewers` and `DELETE …/reviewers/:userId` (`reviewers`), `POST …/decisions` (`decision`), `POST …/merge` (`merged`), `PATCH /api/v1/workspaces/:workspaceId/reviews/:reviewNumber` (`status` when the status changed, otherwise `updated`) |
+| `review:deleted` | none                                                               | `DELETE /api/v1/workspaces/:workspaceId/reviews/:reviewNumber`                                                                                                                                                                                       |
+
+`…` is `/api/v1/workspaces/:workspaceId/reviews/:reviewNumber`. A request that fails emits nothing. `review:changed` says only what kind of change happened: re-fetch the review (and its state, reviewers or decisions) over HTTP. `thread:upsert` replaces the client's copy of that thread when its `at` is not older than the copy's. Approval rule changes (`PATCH /api/v1/workspaces/:workspaceId/rules`) are not broadcast yet.
+
+Delivery is at most once: after reconnecting, re-join and re-fetch over HTTP.
 
 ### AI analysis and findings
 

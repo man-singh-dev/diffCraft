@@ -19,6 +19,7 @@ import {
 } from '../workspaces/require-workspace-role.js';
 import { approvalRoutes } from '../approvals/routes.js';
 import { commentRoutes } from '../comments/routes.js';
+import { publishReviewChanged, publishReviewDeleted } from '../realtime/publish.js';
 import { decodeCursor } from './cursor.js';
 import {
   InvalidCursorError,
@@ -64,13 +65,16 @@ const singleReviewRoutes: FastifyPluginAsync = async (app) => {
       const parsed = UpdateReviewRequestSchema.safeParse(request.body);
       if (!parsed.success) throw new ValidationError(parsed.error.issues);
 
+      const actorId = authUser(request).id;
       const updated = await updateReview(app.db, {
         workspaceId: requestWorkspace(request).id,
         reviewId: review.id,
-        actorId: authUser(request).id,
+        actorId,
         changes: parsed.data,
       });
       if (!updated) throw new ReviewNotFoundError();
+      const reason = updated.status === review.status ? 'updated' : 'status';
+      await publishReviewChanged(app, { reviewId: review.id, actorId, reason });
       return updated;
     },
   );
@@ -80,6 +84,7 @@ const singleReviewRoutes: FastifyPluginAsync = async (app) => {
     if (!(await deleteReview(app.db, requestWorkspace(request).id, review.id))) {
       throw new ReviewNotFoundError();
     }
+    await publishReviewDeleted(app, { reviewId: review.id, actorId: authUser(request).id });
     return reply.code(204).send();
   });
 

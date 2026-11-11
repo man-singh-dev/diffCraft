@@ -17,6 +17,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { z } from 'zod';
 import { ForbiddenError, ValidationError } from '../../errors.js';
 import { authUser } from '../auth/require-auth.js';
+import { publishReviewChanged } from '../realtime/publish.js';
 import { ReviewNotFoundError } from '../reviews/errors.js';
 import { loadReview } from '../reviews/load-review.js';
 import {
@@ -79,7 +80,14 @@ export const approvalRoutes: FastifyPluginAsync = async (app) => {
         throw new ForbiddenError();
       }
       const { userIds } = parseBody(AssignReviewersRequestSchema, request.body);
-      return assignReviewers(app.db, { workspaceId, reviewId: review.id, actorId, userIds });
+      const reviewers = await assignReviewers(app.db, {
+        workspaceId,
+        reviewId: review.id,
+        actorId,
+        userIds,
+      });
+      await publishReviewChanged(app, { reviewId: review.id, actorId, reason: 'reviewers' });
+      return reviewers;
     },
   );
 
@@ -106,6 +114,7 @@ export const approvalRoutes: FastifyPluginAsync = async (app) => {
         userId,
       });
       if (!removed) throw new ReviewerNotFoundError();
+      await publishReviewChanged(app, { reviewId: review.id, actorId, reason: 'reviewers' });
       return reply.code(204).send();
     },
   );
@@ -134,6 +143,7 @@ export const approvalRoutes: FastifyPluginAsync = async (app) => {
         decision,
         body,
       });
+      await publishReviewChanged(app, { reviewId: review.id, actorId: userId, reason: 'decision' });
       return reply.code(201).send(created);
     },
   );
@@ -155,7 +165,9 @@ export const approvalRoutes: FastifyPluginAsync = async (app) => {
       const { id: workspaceId, role } = requestWorkspace(request);
       const actorId = authUser(request).id;
       if (!canMerge(role, actorId, review.author?.id ?? null)) throw new ForbiddenError();
-      return mergeReview(app.db, { workspaceId, reviewId: review.id, actorId });
+      const merged = await mergeReview(app.db, { workspaceId, reviewId: review.id, actorId });
+      await publishReviewChanged(app, { reviewId: review.id, actorId, reason: 'merged' });
+      return merged;
     },
   );
 

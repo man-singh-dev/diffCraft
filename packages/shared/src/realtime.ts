@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ThreadSchema } from './comments.ts';
 
 export const REALTIME_PATH = '/socket.io';
 
@@ -27,8 +28,42 @@ export interface ClientToServerEvents {
   'review:leave': (request: ReviewLeaveRequest, ack: (response: ReviewLeaveAck) => void) => void;
 }
 
-// Events the server emits to a review room; step 2 adds the domain events.
-export type ReviewRoomEvents = Record<never, never>;
+const ReviewRoomEventBaseSchema = z.object({
+  reviewId: z.uuid(),
+  actorId: z.uuid().nullable(),
+  at: z.iso.datetime(),
+});
+
+export const ThreadUpsertEventSchema = ReviewRoomEventBaseSchema.extend({ thread: ThreadSchema });
+export type ThreadUpsertEvent = z.infer<typeof ThreadUpsertEventSchema>;
+
+export const REVIEW_CHANGE_REASONS = [
+  'reviewers',
+  'decision',
+  'status',
+  'merged',
+  'updated',
+] as const;
+export const ReviewChangeReasonSchema = z.enum(REVIEW_CHANGE_REASONS);
+export type ReviewChangeReason = z.infer<typeof ReviewChangeReasonSchema>;
+
+export const ReviewChangedEventSchema = ReviewRoomEventBaseSchema.extend({
+  reason: ReviewChangeReasonSchema,
+});
+export type ReviewChangedEvent = z.infer<typeof ReviewChangedEventSchema>;
+
+export const ReviewDeletedEventSchema = ReviewRoomEventBaseSchema;
+export type ReviewDeletedEvent = z.infer<typeof ReviewDeletedEventSchema>;
+
+export const ReviewRoomEventSchemas = {
+  'thread:upsert': ThreadUpsertEventSchema,
+  'review:changed': ReviewChangedEventSchema,
+  'review:deleted': ReviewDeletedEventSchema,
+} as const;
+
+export type ReviewRoomEvents = {
+  [E in keyof typeof ReviewRoomEventSchemas]: z.infer<(typeof ReviewRoomEventSchemas)[E]>;
+};
 
 export type ServerToClientEvents = {
   [E in keyof ReviewRoomEvents]: (payload: ReviewRoomEvents[E]) => void;

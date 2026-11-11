@@ -16,6 +16,7 @@ import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastif
 import type { z } from 'zod';
 import { ForbiddenError, ValidationError } from '../../errors.js';
 import { authUser } from '../auth/require-auth.js';
+import { publishThread } from '../realtime/publish.js';
 import { loadReview } from '../reviews/load-review.js';
 import { getReviewFileDiff } from '../reviews/service.js';
 import {
@@ -92,12 +93,15 @@ export const commentRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const review = await loadReview(app, request);
       const input = parseBody(CreateThreadRequestSchema, request.body);
+      const workspaceId = requestWorkspace(request).id;
+      const actorId = authUser(request).id;
       const thread = await createThread(app.db, {
-        workspaceId: requestWorkspace(request).id,
+        workspaceId,
         reviewId: review.id,
-        authorId: authUser(request).id,
+        authorId: actorId,
         input,
       });
+      await publishThread(app, { workspaceId, reviewId: review.id, threadId: thread.id, actorId });
       return reply.code(201).send(thread);
     },
   );
@@ -122,6 +126,12 @@ export const commentRoutes: FastifyPluginAsync = async (app) => {
         status,
       });
       if (!updated) throw new ThreadNotFoundError();
+      await publishThread(app, {
+        workspaceId,
+        reviewId: review.id,
+        threadId: thread.id,
+        actorId: userId,
+      });
       return updated;
     },
   );
@@ -132,14 +142,17 @@ export const commentRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { review, thread } = await loadThread(app, request);
       const { body } = parseBody(ReplyRequestSchema, request.body);
+      const workspaceId = requestWorkspace(request).id;
+      const actorId = authUser(request).id;
       const comment = await addReply(app.db, {
-        workspaceId: requestWorkspace(request).id,
+        workspaceId,
         reviewId: review.id,
         threadId: thread.id,
-        authorId: authUser(request).id,
+        authorId: actorId,
         body,
       });
       if (!comment) throw new ThreadNotFoundError();
+      await publishThread(app, { workspaceId, reviewId: review.id, threadId: thread.id, actorId });
       return reply.code(201).send(comment);
     },
   );
@@ -148,19 +161,16 @@ export const commentRoutes: FastifyPluginAsync = async (app) => {
     '/:threadId/comments/:commentId',
     { preHandler: requireWorkspaceRole('viewer') },
     async (request) => {
-      const { review, comment } = await loadComment(app, request);
-      if (!canEditComment(authUser(request).id, comment)) throw new ForbiddenError();
+      const { review, thread, comment } = await loadComment(app, request);
+      const actorId = authUser(request).id;
+      if (!canEditComment(actorId, comment)) throw new ForbiddenError();
       const { body } = parseBody(EditCommentRequestSchema, request.body);
 
-      const edited = await editComment(
-        app.db,
-        requestWorkspace(request).id,
-        review.id,
-        comment.id,
-        body,
-      );
+      const workspaceId = requestWorkspace(request).id;
+      const edited = await editComment(app.db, workspaceId, review.id, comment.id, body);
       // Deleted between the lookup and the update.
       if (!edited) throw new CommentNotFoundError();
+      await publishThread(app, { workspaceId, reviewId: review.id, threadId: thread.id, actorId });
       return edited;
     },
   );
@@ -169,12 +179,14 @@ export const commentRoutes: FastifyPluginAsync = async (app) => {
     '/:threadId/comments/:commentId',
     { preHandler: requireWorkspaceRole('viewer') },
     async (request) => {
-      const { review, comment } = await loadComment(app, request);
+      const { review, thread, comment } = await loadComment(app, request);
       const { id: workspaceId, role } = requestWorkspace(request);
-      if (!canDeleteComment(role, authUser(request).id, comment)) throw new ForbiddenError();
+      const actorId = authUser(request).id;
+      if (!canDeleteComment(role, actorId, comment)) throw new ForbiddenError();
 
       const deleted = await deleteComment(app.db, workspaceId, review.id, comment.id);
       if (!deleted) throw new CommentNotFoundError();
+      await publishThread(app, { workspaceId, reviewId: review.id, threadId: thread.id, actorId });
       return deleted;
     },
   );
