@@ -9,8 +9,10 @@ vi.mock('@/lib/comment-actions', () => ({
   editComment: vi.fn(),
   deleteComment: vi.fn(),
   setThreadStatus: vi.fn(),
+  loadThreads: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 const { CommentsProvider } = await import('./comments-provider.js');
 const { CommentThread } = await import('./comment-thread.js');
@@ -63,6 +65,7 @@ function render(node: React.ReactNode, threads: Thread[], userId: string, role: 
       viewer={{ userId, role }}
       reviewAuthorId={REVIEW_AUTHOR}
       initialThreads={threads}
+      loadedAt="2026-11-05T10:00:00.000Z"
     >
       {node}
     </CommentsProvider>,

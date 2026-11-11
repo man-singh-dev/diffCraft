@@ -8,6 +8,7 @@ import { PageCard } from '@/components/page-card';
 import { ChangeTypeBadge, filePath, LineCounts, StatusBadge } from '@/components/review-ui';
 import { textLink } from '@/components/styles';
 import { CommentsProvider } from '@/components/comments-provider';
+import { LiveStatus, ReviewDeletedBanner } from '@/components/review-live';
 import { getReview, getReviewFiles, getThreads, getWorkspace } from '@/lib/api.server';
 import { getCurrentUser } from '@/lib/auth.server';
 import {
@@ -40,6 +41,7 @@ export default async function FilesChangedPage(
     props.searchParams,
   ]);
   const view = parseDiffView(searchParams);
+  const loadedAt = new Date().toISOString();
   const [user, workspace, review, files, threads] = await Promise.all([
     getCurrentUser(),
     getWorkspace(workspaceId),
@@ -98,6 +100,7 @@ export default async function FilesChangedPage(
       viewer={{ userId: user.id, role: workspace.data.role }}
       reviewAuthorId={r.author?.id ?? null}
       initialThreads={threads.ok ? threads.data : null}
+      loadedAt={loadedAt}
     >
       <main className="mx-auto w-full max-w-screen-2xl flex-1 space-y-6 px-4 py-8">
         <HashTarget />
@@ -115,6 +118,7 @@ export default async function FilesChangedPage(
                 {r.title}
               </span>
               <StatusBadge status={r.status} />
+              <LiveStatus />
             </h1>
             <p className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
               Files changed ({files.data.length})
@@ -141,6 +145,8 @@ export default async function FilesChangedPage(
             ))}
           </nav>
         </div>
+
+        <ReviewDeletedBanner />
 
         {files.data.length === 0 ? (
           <p className="text-sm text-slate-500">This patch changes no files.</p>

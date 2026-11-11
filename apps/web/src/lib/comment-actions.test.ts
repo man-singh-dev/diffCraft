@@ -1,6 +1,6 @@
 import type { Comment, Thread } from '@diffcraft/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ServerSendResult } from './api.server.js';
+import type { ServerApiResult, ServerSendResult } from './api.server.js';
 import { toCommentError } from './comment-errors.js';
 
 // server-only throws outside a React Server Components build.
@@ -11,10 +11,11 @@ const api = {
   patchComment: vi.fn<(...args: unknown[]) => Promise<ServerSendResult<Comment>>>(),
   deleteCommentRequest: vi.fn<(...args: unknown[]) => Promise<ServerSendResult<Comment>>>(),
   patchThreadStatus: vi.fn<(...args: unknown[]) => Promise<ServerSendResult<Thread>>>(),
+  getThreads: vi.fn<(...args: unknown[]) => Promise<ServerApiResult<Thread[]>>>(),
 };
 vi.mock('./api.server', () => api);
 
-const { createThread, deleteComment, editComment, replyToThread, setThreadStatus } =
+const { createThread, deleteComment, editComment, loadThreads, replyToThread, setThreadStatus } =
   await import('./comment-actions.js');
 
 const WS = '3f2b8c1e-5d4a-4e6b-9c7d-1a2b3c4d5e6f';
@@ -150,6 +151,31 @@ describe('calling the API', () => {
     expect(await deleteComment(WS, '3', THREAD, COMMENT)).toMatchObject({
       ok: false,
       error: { code: 'not_found', message: expect.stringContaining('deleted') },
+    });
+  });
+});
+
+describe('loadThreads', () => {
+  it('returns the threads with a load time taken before the request', async () => {
+    const before = new Date().toISOString();
+    api.getThreads.mockResolvedValueOnce({ ok: true, data: [] });
+    const result = await loadThreads(WS, '7');
+    expect(api.getThreads).toHaveBeenCalledWith(WS, '7');
+    expect(result.ok && result.data.threads).toEqual([]);
+    expect(result.ok && result.data.loadedAt >= before).toBe(true);
+  });
+
+  it('rejects bad arguments without calling the API, and maps failures', async () => {
+    api.getThreads.mockClear();
+    expect(await loadThreads('nope', '7')).toMatchObject({
+      ok: false,
+      error: { code: 'not_found' },
+    });
+    expect(api.getThreads).not.toHaveBeenCalled();
+    api.getThreads.mockResolvedValueOnce({ ok: false, status: 401 });
+    expect(await loadThreads(WS, '7')).toMatchObject({
+      ok: false,
+      error: { code: 'unauthorized' },
     });
   });
 });

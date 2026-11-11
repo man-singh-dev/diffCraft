@@ -1,16 +1,30 @@
 'use client';
 
 import type { Comment, Thread, ThreadStatus, WorkspaceRole } from '@diffcraft/shared';
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   createThread,
   deleteComment,
   editComment,
+  loadThreads,
   replyToThread,
   setThreadStatus,
 } from '@/lib/comment-actions';
 import type { CommentActionError, CommentActionResult } from '@/lib/comment-errors';
+import { debounce } from '@/lib/realtime/debounce';
+import { isNotOlder, mergeResync, upsertThread } from '@/lib/realtime/events';
+import { useReviewRoom } from '@/lib/realtime/use-review-room';
 import { groupThreadsByKey, targetKey, type LineTarget } from '@/lib/thread-anchors';
+import { ReviewLiveContext, type ReviewLiveState } from './review-live';
 
 export interface CommentsViewer {
   userId: string;
@@ -57,6 +71,13 @@ async function run<T>(
   }
 }
 
+const REFRESH_DEBOUNCE_MS = 300;
+
+const upsertComment = (comments: Comment[], comment: Comment) =>
+  comments.some((c) => c.id === comment.id)
+    ? comments.map((c) => (c.id === comment.id ? comment : c))
+    : [...comments, comment];
+
 // State is updated from the API's response, not router.refresh(), so the page's diffs aren't fetched and highlighted again.
 export function CommentsProvider({
   workspaceId,
@@ -64,6 +85,7 @@ export function CommentsProvider({
   viewer,
   reviewAuthorId,
   initialThreads,
+  loadedAt,
   children,
 }: {
   workspaceId: string;
@@ -71,10 +93,53 @@ export function CommentsProvider({
   viewer: CommentsViewer;
   reviewAuthorId: string | null;
   initialThreads: Thread[] | null;
+  /** When the page fetched initialThreads: they count as this new against live events. */
+  loadedAt: string;
   children: React.ReactNode;
 }) {
   const [threads, setThreads] = useState<Thread[]>(initialThreads ?? []);
   const [composer, setComposer] = useState<LineTarget | null>(null);
+  const [deleted, setDeleted] = useState(false);
+  const appliedAt = useRef<Map<string, string> | null>(null);
+  appliedAt.current ??= new Map((initialThreads ?? []).map((t) => [t.id, loadedAt]));
+  const resyncCount = useRef(0);
+
+  const router = useRouter();
+  const refresh = useMemo(() => debounce(() => router.refresh(), REFRESH_DEBOUNCE_MS), [router]);
+  useEffect(() => () => refresh.cancel(), [refresh]);
+
+  const status = useReviewRoom({
+    workspaceId,
+    reviewNumber,
+    onThread(event) {
+      const applied = appliedAt.current!;
+      if (!isNotOlder(event.at, applied.get(event.thread.id))) return;
+      applied.set(event.thread.id, event.at);
+      setThreads((list) => upsertThread(list, event.thread));
+    },
+    onReviewChanged: refresh,
+    onReviewDeleted() {
+      refresh.cancel();
+      setDeleted(true);
+    },
+    async onResync() {
+      const current = ++resyncCount.current;
+      const result = await loadThreads(workspaceId, reviewNumber).catch(() => null);
+      if (!result?.ok || current !== resyncCount.current) return;
+      const { threads: fetched, loadedAt: fetchedAt } = result.data;
+      // Idempotent, so React running the updater twice is harmless.
+      setThreads((list) => {
+        const merged = mergeResync(list, appliedAt.current!, fetched, fetchedAt);
+        appliedAt.current = merged.appliedAt;
+        return merged.threads;
+      });
+      refresh();
+    },
+  });
+  const live = useMemo<ReviewLiveState>(
+    () => ({ status, deleted, workspaceId }),
+    [status, deleted, workspaceId],
+  );
 
   const byKey = useMemo(() => groupThreadsByKey(threads), [threads]);
   const threadsForKeys = useCallback(
@@ -115,7 +180,10 @@ export function CommentsProvider({
           : { body };
         const result = await run(() => createThread(workspaceId, reviewNumber, input));
         if (!result.ok) return result.error;
-        setThreads((list) => [...list, result.data]);
+        // The live event for this thread may have arrived first.
+        setThreads((list) =>
+          list.some((t) => t.id === result.data.id) ? list : [...list, result.data],
+        );
         if (target)
           setComposer((open) => (open && targetKey(open) === targetKey(target) ? null : open));
         return null;
@@ -125,7 +193,7 @@ export function CommentsProvider({
           replyToThread(workspaceId, reviewNumber, threadId, { body }),
         );
         if (!result.ok) return result.error;
-        updateComments(threadId, (comments) => [...comments, result.data]);
+        updateComments(threadId, (comments) => upsertComment(comments, result.data));
         return null;
       },
       async edit(threadId, commentId, body) {
@@ -171,5 +239,9 @@ export function CommentsProvider({
     ],
   );
 
-  return <CommentsContext.Provider value={value}>{children}</CommentsContext.Provider>;
+  return (
+    <ReviewLiveContext.Provider value={live}>
+      <CommentsContext.Provider value={value}>{children}</CommentsContext.Provider>
+    </ReviewLiveContext.Provider>
+  );
 }

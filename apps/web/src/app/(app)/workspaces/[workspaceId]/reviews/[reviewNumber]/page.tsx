@@ -14,6 +14,7 @@ import {
 } from '@/components/review-ui';
 import { textLink } from '@/components/styles';
 import { CommentsProvider } from '@/components/comments-provider';
+import { LiveStatus, ReviewDeletedBanner } from '@/components/review-live';
 import {
   OpenThreadCount,
   OpenThreadsSummary,
@@ -49,6 +50,7 @@ export default async function ReviewPage(
   props: PageProps<'/workspaces/[workspaceId]/reviews/[reviewNumber]'>,
 ) {
   const { workspaceId, reviewNumber } = await props.params;
+  const loadedAt = new Date().toISOString();
   const [user, workspace, review, files, threads, state, reviewers, decisions, events, members] =
     await Promise.all([
       getCurrentUser(),
@@ -108,10 +110,13 @@ export default async function ReviewPage(
         viewer={{ userId: user.id, role: workspace.data.role }}
         reviewAuthorId={r.author?.id ?? null}
         initialThreads={threads.ok ? threads.data : null}
+        loadedAt={loadedAt}
       >
         <Link href={`/workspaces/${workspaceId}/reviews`} className={`${textLink} text-sm`}>
           ← All reviews
         </Link>
+
+        <ReviewDeletedBanner />
 
         <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-sm">
           <div className="flex items-center gap-2">
@@ -144,6 +149,12 @@ export default async function ReviewPage(
             <dd className="text-slate-200">
               {r.filesChanged} {r.filesChanged === 1 ? 'file' : 'files'}{' '}
               <LineCounts additions={r.additions} deletions={r.deletions} />
+            </dd>
+          </div>
+          <div className="ml-auto">
+            <dt className="sr-only">Updates</dt>
+            <dd>
+              <LiveStatus />
             </dd>
           </div>
         </dl>

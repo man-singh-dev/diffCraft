@@ -18,16 +18,17 @@ How the web app, API and database are deployed on Vercel, Render and Neon, and w
 
 ### Environment variables (set in each host's dashboard)
 
-| Host   | Variable       | Notes                                                                                                                                      |
-| ------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Vercel | `API_URL`      | The Render service URL. Also needed at build time: the `/api` rewrite is fixed when the app is built, so changing it means a redeploy.     |
-| Render | `NODE_ENV`     | Production mode: `Secure` cookies and trusted proxy headers.                                                                               |
-| Render | `HOST`         | All interfaces, so Render's proxy can reach the server.                                                                                    |
-| Render | `DATABASE_URL` | Neon's direct (non-pooled) connection string. Use `sslmode=verify-full`: same checks as `require` today, without pg's deprecation warning. |
-| Render | `WEB_ORIGIN`   | The Vercel URL. Must match exactly, or the API's origin check rejects logins (preview deployments have other URLs).                        |
-| Render | `LOG_LEVEL`    | Optional.                                                                                                                                  |
-| Render | `DB_POOL_MAX`  | Optional. Keep it within Neon's connection limit.                                                                                          |
-| Render | `TRUST_PROXY`  | Optional (default: private addresses). Check that `request.ip` shows real client IPs after the first deploy.                               |
+| Host   | Variable                   | Notes                                                                                                                                                      |
+| ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vercel | `API_URL`                  | The Render service URL. Also needed at build time: the `/api` rewrite is fixed when the app is built, so changing it means a redeploy.                     |
+| Vercel | `NEXT_PUBLIC_REALTIME_URL` | The Render service origin (same as `API_URL`, no path) for live updates. Inlined at build time: changing it means a redeploy. Unset: live updates are off. |
+| Render | `NODE_ENV`                 | Production mode: `Secure` cookies and trusted proxy headers.                                                                                               |
+| Render | `HOST`                     | All interfaces, so Render's proxy can reach the server.                                                                                                    |
+| Render | `DATABASE_URL`             | Neon's direct (non-pooled) connection string. Use `sslmode=verify-full`: same checks as `require` today, without pg's deprecation warning.                 |
+| Render | `WEB_ORIGIN`               | The Vercel URL. Must match exactly, or the API's origin check rejects logins (preview deployments have other URLs).                                        |
+| Render | `LOG_LEVEL`                | Optional.                                                                                                                                                  |
+| Render | `DB_POOL_MAX`              | Optional. Keep it within Neon's connection limit.                                                                                                          |
+| Render | `TRUST_PROXY`              | Optional (default: private addresses). Check that `request.ip` shows real client IPs after the first deploy.                                               |
 
 Don't set `API_PORT` on Render: the API falls back to the `PORT` Render provides. Neon needs no variables; it supplies `DATABASE_URL`.
 

@@ -10,6 +10,7 @@ import {
 } from '@diffcraft/shared';
 import {
   deleteCommentRequest,
+  getThreads,
   patchComment,
   patchThreadStatus,
   postReply,
@@ -110,4 +111,26 @@ export async function setThreadStatus(
   const parsed = SetThreadStatusRequestSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: { code: 'invalid', message: 'Unknown status.' } };
   return fromApi(await patchThreadStatus(workspaceId, reviewNumber, threadId, parsed.data.status));
+}
+
+export interface LoadedThreads {
+  threads: Thread[];
+  loadedAt: string;
+}
+
+export async function loadThreads(
+  workspaceId: unknown,
+  reviewNumber: unknown,
+): Promise<CommentActionResult<LoadedThreads>> {
+  if (!isId(workspaceId) || !isNumber(reviewNumber)) return { ok: false, error: NOT_FOUND_ERROR };
+  // Taken before the request, so the threads are at least this new.
+  const loadedAt = new Date().toISOString();
+  const result = await getThreads(workspaceId, reviewNumber);
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: toCommentError({ status: result.status, code: null, fieldErrors: {} }),
+    };
+  }
+  return { ok: true, data: { threads: result.data, loadedAt } };
 }

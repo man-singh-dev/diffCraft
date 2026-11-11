@@ -251,7 +251,7 @@ On reconnect, the client re-joins its rooms and re-fetches the review state over
 
 ## Real-time
 
-**Implemented: infrastructure and domain events** (Stage 7, steps 1–2: tickets, the Socket.IO server, review rooms, the Redis adapter, and events for comments, approvals and review changes). The web app doesn't connect yet.
+**Implemented** (Stage 7, steps 1–3: tickets, the Socket.IO server, review rooms, the Redis adapter, events for comments, approvals and review changes, and live updates in the web app).
 
 **Why tickets.** In production the web app (Vercel) and the API (Render) are on different domains. The web app reaches the API through a `/api/*` rewrite, but a rewrite can't carry a WebSocket upgrade, and the session cookie belongs to the web app's domain, so the browser can't send it to the API directly. The socket therefore connects straight to the API and proves who it is with a short-lived, single-use **ticket**:
 
@@ -285,6 +285,14 @@ sequenceDiagram
 - **Last writer wins by `at`.** `at` comes from the database clock, not an instance's clock, so it is comparable across instances. Events can still arrive out of order (two instances, two Redis publishes), so a client keeps the copy with the latest `at` and ignores an older event. `review:changed` carries no data: the client re-fetches over HTTP.
 - **Known limitation: approval rules.** Changing a workspace's rules (`PATCH …/rules`) can change whether a review can be merged, but it isn't broadcast yet: open review pages see the new state only after a re-fetch.
 - **Planned: transactional outbox.** Between the commit and the emit, a crash loses the event (at most once). An outbox table written in the same transaction as the change, drained by a relay, would make delivery at least once; until then clients resync on reconnect.
+- **Web client** (`apps/web/src/lib/realtime/`). Enabled when `NEXT_PUBLIC_REALTIME_URL` is set to the API's origin.
+  - **One socket per tab**, created on first use by `getRealtimeConnection()`, WebSocket only, connecting straight to the API (not through the `/api` rewrite).
+  - **`auth` is a function**, so Socket.IO calls it before every connection attempt and each attempt gets a fresh single-use ticket from `POST /api/v1/realtime/ticket`. A 401 means the session has ended: the client disconnects and stops (status `offline`) instead of looping. Any other ticket failure sends no ticket; the server refuses the handshake, and since Socket.IO doesn't retry a refused handshake, the client retries with Socket.IO's default backoff (1 s doubling to 5 s, ±50 % jitter). Transport failures use Socket.IO's own reconnection.
+  - **`useReviewRoom`** (used once per page, by `CommentsProvider` on the review and files pages) joins on mount and after every reconnect, since rooms are lost on disconnect, and leaves on unmount. Events are validated with the shared schemas and dropped if invalid, for another review, or received before the join is acknowledged. After a **re**-join it calls `onResync`. Status: `connecting`, `live`, `reconnecting`, `offline` (also when the join is refused), `disabled`; the header shows Live / Reconnecting… / Offline as text with a coloured dot.
+  - **Threads: last writer wins by `at`.** `CommentsProvider` keeps `threadId → at` of the version it shows. Threads from the page count as the page's load time (taken on the web server before fetching). A `thread:upsert` replaces or adds the thread only if its `at` is not older. Your own actions still apply their HTTP responses, and a created thread or reply is added only if the live event hasn't already added it, so nothing is duplicated.
+  - **Resync** refetches the threads with the `loadThreads` Server Action (same `getThreads` as the page, with a `loadedAt` taken before the request) and replaces them, keeping any thread an event updated more recently than that. It also refreshes the page, for review changes missed while offline.
+  - **`review:changed`** calls `router.refresh()`, debounced to 300 ms so a burst causes one refresh. **`review:deleted`** shows a banner with a link to the reviews list rather than redirecting, so nobody loses what they are typing.
+  - **Known gap:** changes made between the page's server render and the first join are not replayed (only re-joins resync).
 - **Shutdown.** `app.close()` closes Socket.IO first (sockets see a transport close, so clients reconnect, to another instance during a deploy), then the Redis connections.
 - **Redis client: ioredis.** Clients are created with `lazyConnect`, like the pg pool: an app that never touches Redis (most tests, which use `inject()`) never connects. ioredis also re-subscribes after a reconnect, and the Socket.IO adapter supports it directly.
 
