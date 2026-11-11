@@ -39,6 +39,7 @@ export function useReviewRoom({
       onThread: (event) => latest.current.onThread?.(event),
       onReviewChanged: (event) => latest.current.onReviewChanged?.(event),
       onReviewDeleted: (event) => latest.current.onReviewDeleted?.(event),
+      onPresence: (event) => latest.current.onPresence?.(event),
       onResync: () => latest.current.onResync?.(),
     });
   }, [workspaceId, reviewNumber]);

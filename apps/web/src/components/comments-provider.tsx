@@ -1,6 +1,12 @@
 'use client';
 
-import type { Comment, Thread, ThreadStatus, WorkspaceRole } from '@diffcraft/shared';
+import type {
+  Comment,
+  PresenceEvent,
+  Thread,
+  ThreadStatus,
+  WorkspaceRole,
+} from '@diffcraft/shared';
 import { useRouter } from 'next/navigation';
 import {
   createContext,
@@ -100,6 +106,7 @@ export function CommentsProvider({
   const [threads, setThreads] = useState<Thread[]>(initialThreads ?? []);
   const [composer, setComposer] = useState<LineTarget | null>(null);
   const [deleted, setDeleted] = useState(false);
+  const [presence, setPresence] = useState<PresenceEvent | null>(null);
   const appliedAt = useRef<Map<string, string> | null>(null);
   appliedAt.current ??= new Map((initialThreads ?? []).map((t) => [t.id, loadedAt]));
   const resyncCount = useRef(0);
@@ -118,6 +125,7 @@ export function CommentsProvider({
       setThreads((list) => upsertThread(list, event.thread));
     },
     onReviewChanged: refresh,
+    onPresence: setPresence,
     onReviewDeleted() {
       refresh.cancel();
       setDeleted(true);
@@ -137,8 +145,8 @@ export function CommentsProvider({
     },
   });
   const live = useMemo<ReviewLiveState>(
-    () => ({ status, deleted, workspaceId }),
-    [status, deleted, workspaceId],
+    () => ({ status, deleted, workspaceId, presence, viewerId: viewer.userId }),
+    [status, deleted, workspaceId, presence, viewer.userId],
   );
 
   const byKey = useMemo(() => groupThreadsByKey(threads), [threads]);

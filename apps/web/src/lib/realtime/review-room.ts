@@ -1,4 +1,5 @@
 import type {
+  PresenceEvent,
   ReviewChangedEvent,
   ReviewDeletedEvent,
   ReviewJoinAck,
@@ -13,6 +14,7 @@ export interface ReviewRoomHandlers {
   onThread?: (event: ThreadUpsertEvent) => void;
   onReviewChanged?: (event: ReviewChangedEvent) => void;
   onReviewDeleted?: (event: ReviewDeletedEvent) => void;
+  onPresence?: (event: PresenceEvent) => void;
   onResync?: () => void;
 }
 
@@ -84,6 +86,10 @@ export function subscribeToReviewRoom(
     'review:deleted': (payload) => {
       const event = joined && parseRoomEvent('review:deleted', payload, reviewId);
       if (event) handlers.onReviewDeleted?.(event);
+    },
+    presence: (payload) => {
+      const event = joined && parseRoomEvent('presence', payload, reviewId);
+      if (event) handlers.onPresence?.(event);
     },
   };
 

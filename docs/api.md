@@ -267,6 +267,8 @@ The server emits these to the room `review:<reviewId>` after the change has comm
 
 Delivery is at most once: after reconnecting, re-join and re-fetch over HTTP.
 
+**`presence`** is not a domain event and has no `actorId` or `at`: `{ reviewId, viewers: { id, displayName }[], total }`. `viewers` holds the distinct users connected to the room, sorted by display name and capped at 50; `total` is the real distinct count. A socket gets it right after its join is acknowledged, and the room gets it (at most once per 500 ms) after joins, leaves and disconnects.
+
 ### AI analysis and findings
 
 | Method  | Path                                  | Purpose                                                                                              | Auth                              |

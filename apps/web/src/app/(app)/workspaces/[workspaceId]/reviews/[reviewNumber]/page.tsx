@@ -13,7 +13,7 @@ import {
 } from '@/components/review-ui';
 import { textLink } from '@/components/styles';
 import { CommentsProvider } from '@/components/comments-provider';
-import { LiveStatus, ReviewDeletedBanner } from '@/components/review-live';
+import { LiveStatus, ReviewDeletedBanner, ViewingNow } from '@/components/review-live';
 import {
   OpenThreadCount,
   OpenThreadsSummary,
@@ -153,8 +153,9 @@ export default async function ReviewPage(
           </div>
           <div className="ml-auto">
             <dt className="sr-only">Updates</dt>
-            <dd>
+            <dd className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <LiveStatus />
+              <ViewingNow />
             </dd>
           </div>
         </dl>

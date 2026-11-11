@@ -95,7 +95,7 @@ describeWithDbAndRedis('realtime domain events', () => {
     await action();
     await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
     for (const recorder of recorders) recorder.stop();
-    return recorders.map((recorder) => recorder.events);
+    return recorders.map((recorder) => recorder.events.filter((e) => e.event !== 'presence'));
   }
 
   describe('comments', () => {

@@ -8,7 +8,7 @@ import { PageCard } from '@/components/page-card';
 import { ChangeTypeBadge, filePath, LineCounts, StatusBadge } from '@/components/review-ui';
 import { textLink } from '@/components/styles';
 import { CommentsProvider } from '@/components/comments-provider';
-import { LiveStatus, ReviewDeletedBanner } from '@/components/review-live';
+import { LiveStatus, ReviewDeletedBanner, ViewingNow } from '@/components/review-live';
 import { getReview, getReviewFiles, getThreads, getWorkspace } from '@/lib/api.server';
 import { getCurrentUser } from '@/lib/auth.server';
 import {
@@ -123,6 +123,7 @@ export default async function FilesChangedPage(
             <p className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
               Files changed ({files.data.length})
               <LineCounts additions={r.additions} deletions={r.deletions} />
+              <ViewingNow />
             </p>
             {!threads.ok && (
               <p className="text-sm text-amber-300">

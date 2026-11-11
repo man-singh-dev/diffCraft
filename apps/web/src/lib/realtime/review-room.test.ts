@@ -35,6 +35,7 @@ function setup({ connected = true } = {}) {
     onThread: vi.fn(),
     onReviewChanged: vi.fn(),
     onReviewDeleted: vi.fn(),
+    onPresence: vi.fn(),
     onResync: vi.fn(),
   };
   const unsubscribe = subscribeToReviewRoom(connection, {
@@ -127,6 +128,20 @@ describe('subscribeToReviewRoom', () => {
     expect(handlers.onThread.mock.calls).toEqual([[{ ...base, thread }]]);
     expect(handlers.onReviewChanged.mock.calls).toEqual([[{ ...base, reason: 'merged' }]]);
     expect(handlers.onReviewDeleted.mock.calls).toEqual([[base]]);
+  });
+
+  it('validates presence events and passes on those for this review', () => {
+    const { socket, handlers } = setup();
+    const presence = { reviewId: REVIEW, viewers: [{ id: ACTOR, displayName: 'Ada' }], total: 1 };
+    socket.receive('presence', presence);
+    expect(handlers.onPresence).not.toHaveBeenCalled();
+
+    socket.ack('review:join', 0, joinAck);
+    socket.receive('presence', { ...presence, reviewId: OTHER_REVIEW });
+    socket.receive('presence', { ...presence, total: -1 });
+    socket.receive('presence', { ...presence, viewers: [{ id: 'nope', displayName: 'X' }] });
+    socket.receive('presence', presence);
+    expect(handlers.onPresence.mock.calls).toEqual([[presence]]);
   });
 
   it('ignores events while disconnected, until the room is joined again', () => {

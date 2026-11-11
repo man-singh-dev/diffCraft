@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PresenceEventSchema,
   ReviewChangedEventSchema,
   ReviewDeletedEventSchema,
   ReviewRoomEventSchemas,
@@ -27,6 +28,7 @@ const thread = {
 describe('review room event schemas', () => {
   it('has one schema per event', () => {
     expect(Object.keys(ReviewRoomEventSchemas).sort()).toEqual([
+      'presence',
       'review:changed',
       'review:deleted',
       'thread:upsert',
@@ -51,6 +53,20 @@ describe('review room event schemas', () => {
     expect(ReviewChangedEventSchema.safeParse({ ...base, reason: 'rules' }).success).toBe(false);
     expect(
       ThreadUpsertEventSchema.safeParse({ ...base, thread: { ...thread, status: 'gone' } }).success,
+    ).toBe(false);
+  });
+
+  it('accepts a presence list and rejects a malformed or oversized one', () => {
+    const viewer = { id: ACTOR, displayName: 'Asha' };
+    const presence = { reviewId: REVIEW, viewers: [viewer], total: 1 };
+    expect(PresenceEventSchema.safeParse(presence).success).toBe(true);
+    expect(PresenceEventSchema.safeParse({ ...presence, total: -1 }).success).toBe(false);
+    expect(PresenceEventSchema.safeParse({ ...presence, viewers: [{ id: 'x' }] }).success).toBe(
+      false,
+    );
+    expect(
+      PresenceEventSchema.safeParse({ ...presence, viewers: Array(51).fill(viewer), total: 51 })
+        .success,
     ).toBe(false);
   });
 });

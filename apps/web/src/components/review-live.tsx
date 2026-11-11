@@ -1,7 +1,9 @@
 'use client';
 
+import type { PresenceEvent } from '@diffcraft/shared';
 import Link from 'next/link';
 import { createContext, useContext } from 'react';
+import { describeViewers } from '@/lib/realtime/presence';
 import type { ReviewRoomStatus } from '@/lib/realtime/review-room';
 import { textLink } from './styles';
 
@@ -9,6 +11,8 @@ export interface ReviewLiveState {
   status: ReviewRoomStatus;
   deleted: boolean;
   workspaceId: string;
+  presence: PresenceEvent | null;
+  viewerId: string;
 }
 
 export const ReviewLiveContext = createContext<ReviewLiveState | null>(null);
@@ -32,6 +36,18 @@ export function LiveStatus() {
       <span aria-hidden="true" className={`h-2 w-2 rounded-full ${indicator.dot}`} />
       <span className="sr-only">Live updates: </span>
       {indicator.label}
+    </span>
+  );
+}
+
+export function ViewingNow() {
+  const live = useContext(ReviewLiveContext);
+  if (live?.status !== 'live' || !live.presence) return null;
+  const { label, description } = describeViewers(live.presence, live.viewerId);
+  return (
+    <span className="text-xs text-slate-400" title={description}>
+      <span aria-hidden="true">{label}</span>
+      <span className="sr-only">{description}</span>
     </span>
   );
 }

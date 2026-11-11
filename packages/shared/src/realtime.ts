@@ -55,10 +55,23 @@ export type ReviewChangedEvent = z.infer<typeof ReviewChangedEventSchema>;
 export const ReviewDeletedEventSchema = ReviewRoomEventBaseSchema;
 export type ReviewDeletedEvent = z.infer<typeof ReviewDeletedEventSchema>;
 
+export const PRESENCE_MAX_VIEWERS = 50;
+
+export const PresenceViewerSchema = z.object({ id: z.uuid(), displayName: z.string() });
+export type PresenceViewer = z.infer<typeof PresenceViewerSchema>;
+
+export const PresenceEventSchema = z.object({
+  reviewId: z.uuid(),
+  viewers: z.array(PresenceViewerSchema).max(PRESENCE_MAX_VIEWERS),
+  total: z.number().int().min(0),
+});
+export type PresenceEvent = z.infer<typeof PresenceEventSchema>;
+
 export const ReviewRoomEventSchemas = {
   'thread:upsert': ThreadUpsertEventSchema,
   'review:changed': ReviewChangedEventSchema,
   'review:deleted': ReviewDeletedEventSchema,
+  presence: PresenceEventSchema,
 } as const;
 
 export type ReviewRoomEvents = {

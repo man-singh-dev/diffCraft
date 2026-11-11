@@ -19,10 +19,12 @@ import { users } from '../../db/schema/index.js';
 import { closeRedisClient, createRedisClient } from '../../plugins/redis.js';
 import { getReviewByNumber } from '../reviews/service.js';
 import { getMembership } from '../workspaces/service.js';
+import { createPresence, DEFAULT_PRESENCE_OPTIONS, type Presence } from './presence.js';
 import { consumeTicket } from './ticket.js';
 
 export interface SocketData {
   userId: string;
+  displayName: string;
   joinTimes: number[];
 }
 
@@ -32,7 +34,7 @@ export type RealtimeServer = Server<
   Record<string, never>,
   SocketData
 >;
-type RealtimeSocket = Socket<
+export type RealtimeSocket = Socket<
   ClientToServerEvents,
   ServerToClientEvents,
   Record<string, never>,
@@ -97,11 +99,13 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
         const ticket =
           typeof auth === 'object' && auth !== null && 'ticket' in auth ? auth.ticket : null;
         const userId = await consumeTicket(app.redis, ticket);
-        if (!userId || !(await userExists(app, userId))) {
+        const user = userId ? await findUser(app, userId) : undefined;
+        if (!user) {
           next(new Error('unauthorized'));
           return;
         }
-        socket.data.userId = userId;
+        socket.data.userId = user.id;
+        socket.data.displayName = user.displayName;
         socket.data.joinTimes = [];
         next();
       } catch (err) {
@@ -110,7 +114,8 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
       }
     });
 
-    io.on('connection', (socket) => registerReviewRooms(app, socket, limits));
+    const presence = createPresence(io, app.log, DEFAULT_PRESENCE_OPTIONS);
+    io.on('connection', (socket) => registerReviewRooms(app, socket, limits, presence));
 
     let pub: Redis | undefined;
     let sub: Redis | undefined;
@@ -125,6 +130,7 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
     });
 
     app.addHook('preClose', async () => {
+      presence.close();
       await io.close();
     });
 
@@ -145,18 +151,32 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
   { name: 'realtime', dependencies: ['db', 'redis'] },
 );
 
-async function userExists(app: FastifyInstance, userId: string): Promise<boolean> {
-  const [row] = await app.db.select({ id: users.id }).from(users).where(eq(users.id, userId));
-  return row !== undefined;
+async function findUser(app: FastifyInstance, userId: string) {
+  const [row] = await app.db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, userId));
+  return row;
 }
 
-function registerReviewRooms(app: FastifyInstance, socket: RealtimeSocket, limits: RealtimeLimits) {
+function registerReviewRooms(
+  app: FastifyInstance,
+  socket: RealtimeSocket,
+  limits: RealtimeLimits,
+  presence: Presence,
+) {
   const log = app.log.child({ userId: socket.data.userId });
 
   socket.on('review:join', async (request, ack) => {
     if (typeof ack !== 'function') return;
     try {
-      ack(await joinReview(app, socket, limits, request));
+      const result = await joinReview(app, socket, limits, request);
+      ack(result);
+      if (result.ok) {
+        presence.changed(result.reviewId);
+        // After the ack, so the client already knows the review id when this arrives.
+        await presence.sendTo(socket, result.reviewId);
+      }
     } catch (err) {
       log.error({ err: safeError(err) }, 'review:join failed');
       ack({ ok: false, error: 'internal_error' });
@@ -170,8 +190,19 @@ function registerReviewRooms(app: FastifyInstance, socket: RealtimeSocket, limit
       ack({ ok: false, error: 'invalid_request' });
       return;
     }
-    await socket.leave(reviewRoom(parsed.data.reviewId));
+    const room = reviewRoom(parsed.data.reviewId);
+    // Only a member of the room may trigger a recompute for it.
+    const wasInRoom = socket.rooms.has(room);
+    await socket.leave(room);
     ack({ ok: true });
+    if (wasInRoom) presence.changed(parsed.data.reviewId);
+  });
+
+  socket.on('disconnecting', () => {
+    for (const room of socket.rooms) {
+      if (room.startsWith(REVIEW_ROOM_PREFIX))
+        presence.changed(room.slice(REVIEW_ROOM_PREFIX.length));
+    }
   });
 }
 
@@ -210,5 +241,7 @@ async function joinReview(
   return { ok: true, reviewId: review.id };
 }
 
+const REVIEW_ROOM_PREFIX = reviewRoom('');
+
 const reviewRoomCount = (socket: RealtimeSocket) =>
-  [...socket.rooms].filter((room) => room.startsWith(reviewRoom(''))).length;
+  [...socket.rooms].filter((room) => room.startsWith(REVIEW_ROOM_PREFIX)).length;

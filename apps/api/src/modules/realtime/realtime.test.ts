@@ -1,8 +1,14 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { ErrorResponseSchema, RealtimeTicketResponseSchema } from '@diffcraft/shared';
+import {
+  ErrorResponseSchema,
+  PresenceEventSchema,
+  RealtimeTicketResponseSchema,
+  type PresenceEvent,
+} from '@diffcraft/shared';
 import type { RedisAdapter } from '@socket.io/redis-adapter';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import type { Socket as ClientSocket } from 'socket.io-client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { users } from '../../db/schema/index.js';
 import { addMember, createUserWithSession, type TestUser } from '../../test/fixtures.js';
@@ -17,6 +23,7 @@ import {
   leave,
   nextEvent,
   receivedWithin,
+  recordEvents,
   startApp,
   TICKET_URL,
 } from '../../test/realtime.js';
@@ -24,6 +31,31 @@ import { describeWithDbAndRedis } from '../../test/redis.js';
 import { ticketKey } from './ticket.js';
 
 const TEST_EVENT = 'test:event' as never;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function presenceMatching(
+  socket: ClientSocket,
+  predicate: (event: PresenceEvent) => boolean,
+  timeoutMs = 5_000,
+): Promise<PresenceEvent> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off('presence', listener);
+      reject(new Error(`no matching presence within ${timeoutMs} ms`));
+    }, timeoutMs);
+    function listener(payload: unknown) {
+      const event = PresenceEventSchema.parse(payload);
+      if (!predicate(event)) return;
+      clearTimeout(timer);
+      socket.off('presence', listener);
+      resolve(event);
+    }
+    socket.on('presence', listener);
+  });
+}
+
+const names = (event: PresenceEvent) => event.viewers.map((v) => v.displayName);
 
 closeRealtimeResourcesAfterTests();
 
@@ -267,6 +299,140 @@ describeWithDbAndRedis('realtime', () => {
       } finally {
         clearInterval(timer);
       }
+    });
+  });
+
+  describe('presence', () => {
+    async function member(displayName: string) {
+      const user = await createUserWithSession(app.db);
+      await app.db.update(users).set({ displayName }).where(eq(users.id, user.id));
+      await addMember(app.db, workspaceId, user.id, 'viewer');
+      return user;
+    }
+
+    const freshReview = () => createReview(app, owner, workspaceId);
+
+    it('lists everyone in the room, sorted, for every viewer', async () => {
+      const review = await freshReview();
+      const ravi = await connect(url, { ticket: await getTicket(app, await member('Ravi')) });
+      const asha = await connect(url, { ticket: await getTicket(app, await member('Asha')) });
+
+      const raviAlone = presenceMatching(ravi, () => true);
+      await join(ravi, { workspaceId, reviewNumber: review.number });
+      expect(await raviAlone).toMatchObject({ reviewId: review.id, total: 1 });
+
+      const bothForRavi = presenceMatching(ravi, (e) => e.total === 2);
+      const bothForAsha = presenceMatching(asha, (e) => e.total === 2);
+      await join(asha, { workspaceId, reviewNumber: review.number });
+      expect(names(await bothForRavi)).toEqual(['Asha', 'Ravi']);
+      expect(names(await bothForAsha)).toEqual(['Asha', 'Ravi']);
+    });
+
+    it('counts a user with two tabs once', async () => {
+      const review = await freshReview();
+      const user = await member('Mira');
+      const first = await connect(url, { ticket: await getTicket(app, user) });
+      const second = await connect(url, { ticket: await getTicket(app, user) });
+      await join(first, { workspaceId, reviewNumber: review.number });
+
+      const sentToSecond = presenceMatching(second, () => true);
+      await join(second, { workspaceId, reviewNumber: review.number });
+      expect(await sentToSecond).toEqual({
+        reviewId: review.id,
+        viewers: [{ id: user.id, displayName: 'Mira' }],
+        total: 1,
+      });
+    });
+
+    it('updates the list after a leave and after a disconnect', async () => {
+      const review = await freshReview();
+      const ada = await connect(url, { ticket: await getTicket(app, await member('Ada')) });
+      const ben = await connect(url, { ticket: await getTicket(app, await member('Ben')) });
+      const cy = await connect(url, { ticket: await getTicket(app, await member('Cy')) });
+      const all = presenceMatching(ada, (e) => e.total === 3);
+      for (const socket of [ada, ben, cy]) {
+        await join(socket, { workspaceId, reviewNumber: review.number });
+      }
+      await all;
+
+      const afterLeave = presenceMatching(ada, (e) => e.total === 2);
+      await leave(ben, review.id);
+      expect(names(await afterLeave)).toEqual(['Ada', 'Cy']);
+
+      const afterDisconnect = presenceMatching(ada, (e) => e.total === 1);
+      cy.disconnect();
+      expect(names(await afterDisconnect)).toEqual(['Ada']);
+    });
+
+    it('coalesces a burst of joins into one emit with the final state', async () => {
+      const review = await freshReview();
+      const observer = await connect(url, { ticket: await getTicket(app, await member('Obs')) });
+      await join(observer, { workspaceId, reviewNumber: review.number });
+      await sleep(800);
+
+      const tickets = await Promise.all(
+        ['B1', 'B2', 'B3', 'B4', 'B5'].map(async (name) => getTicket(app, await member(name))),
+      );
+      const sockets = await Promise.all(tickets.map((ticket) => connect(url, { ticket })));
+      const recording = recordEvents(observer);
+      await Promise.all(
+        sockets.map((socket) => join(socket, { workspaceId, reviewNumber: review.number })),
+      );
+      await sleep(1_500);
+      recording.stop();
+
+      const presence = recording.events.filter((e) => e.event === 'presence');
+      expect(presence).toHaveLength(1);
+      expect(PresenceEventSchema.parse(presence[0]!.payload).total).toBe(6);
+    });
+
+    it('includes users connected to another instance', async () => {
+      const a = await startApp();
+      const b = await startApp();
+      const review = await freshReview();
+      const warmup = await freshReview();
+      const onA = await connect(a.url, { ticket: await getTicket(a.app, await member('OnA')) });
+      const onB = await connect(b.url, { ticket: await getTicket(b.app, await member('OnB')) });
+      await join(onA, { workspaceId, reviewNumber: warmup.number });
+      await join(onB, { workspaceId, reviewNumber: warmup.number });
+
+      // Each instance's Redis subscription may still be starting: wait until both directions work.
+      for (const [from, to] of [
+        [b.app, onA],
+        [a.app, onB],
+      ] as const) {
+        const received = nextEvent(to, 'test:event', 5_000);
+        const timer = setInterval(
+          () => from.realtime.emitToReview(warmup.id, TEST_EVENT, {} as never),
+          100,
+        );
+        try {
+          await received;
+        } finally {
+          clearInterval(timer);
+        }
+      }
+
+      const bothOnA = presenceMatching(onA, (e) => e.reviewId === review.id && e.total === 2);
+      const bothOnB = presenceMatching(onB, (e) => e.reviewId === review.id && e.total === 2);
+      await join(onA, { workspaceId, reviewNumber: review.number });
+      await join(onB, { workspaceId, reviewNumber: review.number });
+      expect(names(await bothOnA)).toEqual(['OnA', 'OnB']);
+      expect(names(await bothOnB)).toEqual(['OnA', 'OnB']);
+    });
+
+    it('never sends presence to a socket that is not in the room', async () => {
+      const review = await freshReview();
+      const stranger = await connect(url, { ticket: await getTicket(app, outsider) });
+      expect(await join(stranger, { workspaceId, reviewNumber: review.number })).toMatchObject({
+        ok: false,
+      });
+      expect(await leave(stranger, review.id)).toEqual({ ok: true });
+
+      const quiet = receivedWithin(stranger, 'presence', 1_500);
+      const insider = await connect(url, { ticket: await getTicket(app, await member('In')) });
+      await join(insider, { workspaceId, reviewNumber: review.number });
+      expect(await quiet).toBe(false);
     });
   });
 

@@ -251,7 +251,7 @@ On reconnect, the client re-joins its rooms and re-fetches the review state over
 
 ## Real-time
 
-**Implemented** (Stage 7, steps 1–3: tickets, the Socket.IO server, review rooms, the Redis adapter, events for comments, approvals and review changes, and live updates in the web app).
+**Implemented** (Stage 7, steps 1–4: tickets, the Socket.IO server, review rooms, the Redis adapter, events for comments, approvals and review changes, live updates in the web app, and presence).
 
 **Why tickets.** In production the web app (Vercel) and the API (Render) are on different domains. The web app reaches the API through a `/api/*` rewrite, but a rewrite can't carry a WebSocket upgrade, and the session cookie belongs to the web app's domain, so the browser can't send it to the API directly. The socket therefore connects straight to the API and proves who it is with a short-lived, single-use **ticket**:
 
@@ -293,6 +293,14 @@ sequenceDiagram
   - **Resync** refetches the threads with the `loadThreads` Server Action (same `getThreads` as the page, with a `loadedAt` taken before the request) and replaces them, keeping any thread an event updated more recently than that. It also refreshes the page, for review changes missed while offline.
   - **`review:changed`** calls `router.refresh()`, debounced to 300 ms so a burst causes one refresh. **`review:deleted`** shows a banner with a link to the reviews list rather than redirecting, so nobody loses what they are typing.
   - **Known gap:** changes made between the page's server render and the first join are not replayed (only re-joins resync).
+- **Presence** ("who's viewing this review", `modules/realtime/presence.ts`).
+  - **Derived from connections, not stored.** The handshake loads the user's `displayName` together with the existence check and keeps it on `socket.data`. The viewer list is computed from the sockets in the room with `io.in(room).fetchSockets()`, which, through the Redis adapter, asks every instance for its local sockets and merges the answers. Distinct by `userId` (two tabs count once), sorted by display name, capped at 50 names; `total` is the real distinct count. Nothing to expire or clean up: when a socket goes, it stops being counted.
+  - **Coalesced.** A successful join, a leave of a room the socket was in, and a disconnect (`disconnecting`, while `socket.rooms` is still filled, for every review room) schedule a recompute for that room. A room has at most one pending timer (500 ms); changes within it are absorbed, so a burst produces one `presence` emit with the final state. The timer firing after the change also means a disconnecting socket is already gone when the room is counted.
+  - **Newcomers** get the current list straight away, to their socket only, sent after the join acknowledgement so the client already knows the review id.
+  - **Best effort.** `fetchSockets` waits for every instance, and while Redis is down the adapter's server count never answers, so each recompute has its own 3 s timeout. A failure or timeout is logged (error name and message only) and skipped. On shutdown pending timers are cleared before Socket.IO closes.
+  - **Cost.** A recompute is one request/response round on Redis per room change (coalesced), and the responses carry each socket's handshake and `data`. Fine for review rooms of a few dozen people.
+  - **Web.** `CommentsProvider` keeps the latest `presence` event (validated like every room event) and the header shows "You, Asha, Ravi viewing" (you first, three names at most, then "+N more"), with a full sentence for screen readers, only while the status is `live`.
+  - **Alternative (not used): Redis heartbeats.** Each client (or instance) would write `presence:<reviewId>` entries with a TTL and refresh them every few seconds; readers would list the unexpired entries. It survives instance crashes without relying on the adapter and is cheap to read, but it needs a heartbeat loop, shows departed users until the TTL runs out, and duplicates what the socket connections already know.
 - **Shutdown.** `app.close()` closes Socket.IO first (sockets see a transport close, so clients reconnect, to another instance during a deploy), then the Redis connections.
 - **Redis client: ioredis.** Clients are created with `lazyConnect`, like the pg pool: an app that never touches Redis (most tests, which use `inject()`) never connects. ioredis also re-subscribes after a reconnect, and the Socket.IO adapter supports it directly.
 
