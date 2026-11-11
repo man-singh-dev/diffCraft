@@ -28,6 +28,7 @@ import {
 import type { CommentActionError, CommentActionResult } from '@/lib/comment-errors';
 import { debounce } from '@/lib/realtime/debounce';
 import { isNotOlder, mergeResync, upsertThread } from '@/lib/realtime/events';
+import { newerPresence } from '@/lib/realtime/presence';
 import { useReviewRoom } from '@/lib/realtime/use-review-room';
 import { groupThreadsByKey, targetKey, type LineTarget } from '@/lib/thread-anchors';
 import { ReviewLiveContext, type ReviewLiveState } from './review-live';
@@ -125,12 +126,14 @@ export function CommentsProvider({
       setThreads((list) => upsertThread(list, event.thread));
     },
     onReviewChanged: refresh,
-    onPresence: setPresence,
+    onPresence: (event) => setPresence((current) => newerPresence(current, event)),
     onReviewDeleted() {
       refresh.cancel();
       setDeleted(true);
     },
     async onResync() {
+      // Another instance may answer after a reconnect, and its clock may be behind the last one's.
+      setPresence(null);
       const current = ++resyncCount.current;
       const result = await loadThreads(workspaceId, reviewNumber).catch(() => null);
       if (!result?.ok || current !== resyncCount.current) return;

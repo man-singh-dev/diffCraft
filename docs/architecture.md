@@ -251,7 +251,7 @@ On reconnect, the client re-joins its rooms and re-fetches the review state over
 
 ## Real-time
 
-**Implemented** (Stage 7, steps 1–4: tickets, the Socket.IO server, review rooms, the Redis adapter, events for comments, approvals and review changes, live updates in the web app, and presence).
+**Implemented** (Stage 7, steps 1–5a: tickets, the Socket.IO server, review rooms, the Redis adapter, events for comments, approvals and review changes, live updates in the web app, presence, and the backend of in-app notifications with a transactional outbox).
 
 **Why tickets.** In production the web app (Vercel) and the API (Render) are on different domains. The web app reaches the API through a `/api/*` rewrite, but a rewrite can't carry a WebSocket upgrade, and the session cookie belongs to the web app's domain, so the browser can't send it to the API directly. The socket therefore connects straight to the API and proves who it is with a short-lived, single-use **ticket**:
 
@@ -284,7 +284,7 @@ sequenceDiagram
 - **Best effort.** A publish failure (the read or the emit) is caught and logged with the error name and message only, never a payload or comment body, and the HTTP response is unaffected. The route awaits the publish, so events from one client's sequential requests leave in order.
 - **Last writer wins by `at`.** `at` comes from the database clock, not an instance's clock, so it is comparable across instances. Events can still arrive out of order (two instances, two Redis publishes), so a client keeps the copy with the latest `at` and ignores an older event. `review:changed` carries no data: the client re-fetches over HTTP.
 - **Known limitation: approval rules.** Changing a workspace's rules (`PATCH …/rules`) can change whether a review can be merged, but it isn't broadcast yet: open review pages see the new state only after a re-fetch.
-- **Planned: transactional outbox.** Between the commit and the emit, a crash loses the event (at most once). An outbox table written in the same transaction as the change, drained by a relay, would make delivery at least once; until then clients resync on reconnect.
+- **Room events stay at most once, on purpose.** Between the commit and the emit, a crash loses a room event. That's acceptable for hints: a client that misses one is at most a little stale, and it re-fetches on every reconnect anyway. Notifications are different (a missed one is never seen), so they go through the [outbox](#notifications-and-the-transactional-outbox) instead.
 - **Web client** (`apps/web/src/lib/realtime/`). Enabled when `NEXT_PUBLIC_REALTIME_URL` is set to the API's origin.
   - **One socket per tab**, created on first use by `getRealtimeConnection()`, WebSocket only, connecting straight to the API (not through the `/api` rewrite).
   - **`auth` is a function**, so Socket.IO calls it before every connection attempt and each attempt gets a fresh single-use ticket from `POST /api/v1/realtime/ticket`. A 401 means the session has ended: the client disconnects and stops (status `offline`) instead of looping. Any other ticket failure sends no ticket; the server refuses the handshake, and since Socket.IO doesn't retry a refused handshake, the client retries with Socket.IO's default backoff (1 s doubling to 5 s, ±50 % jitter). Transport failures use Socket.IO's own reconnection.
@@ -300,9 +300,42 @@ sequenceDiagram
   - **Best effort.** `fetchSockets` waits for every instance, and while Redis is down the adapter's server count never answers, so each recompute has its own 3 s timeout. A failure or timeout is logged (error name and message only) and skipped. On shutdown pending timers are cleared before Socket.IO closes.
   - **Cost.** A recompute is one request/response round on Redis per room change (coalesced), and the responses carry each socket's handshake and `data`. Fine for review rooms of a few dozen people.
   - **Web.** `CommentsProvider` keeps the latest `presence` event (validated like every room event) and the header shows "You, Asha, Ravi viewing" (you first, three names at most, then "+N more"), with a full sentence for screen readers, only while the status is `live`.
+  - **Ordering.** Each `presence` carries `at`, the instance's clock taken before `fetchSockets`. The web keeps the newest and ignores an older one (two recomputes can arrive out of order), and forgets the list on a re-join, since the instance it reconnected to may have a clock slightly behind.
   - **Alternative (not used): Redis heartbeats.** Each client (or instance) would write `presence:<reviewId>` entries with a TTL and refresh them every few seconds; readers would list the unexpired entries. It survives instance crashes without relying on the adapter and is cheap to read, but it needs a heartbeat loop, shows departed users until the TTL runs out, and duplicates what the socket connections already know.
 - **Shutdown.** `app.close()` closes Socket.IO first (sockets see a transport close, so clients reconnect, to another instance during a deploy), then the Redis connections.
 - **Redis client: ioredis.** Clients are created with `lazyConnect`, like the pg pool: an app that never touches Redis (most tests, which use `inject()`) never connects. ioredis also re-subscribes after a reconnect, and the Socket.IO adapter supports it directly.
+
+## Notifications and the transactional outbox
+
+**Implemented** (backend, Stage 7 step 5a; the web inbox follows). Routes and payloads: [api.md](api.md#notifications).
+
+**The dual-write problem.** A notification has to end up in two places: the database (so the inbox and unread count survive) and a socket emit (so it appears live). Doing both from the request can't be made atomic. Emitting before the commit can announce something that then rolls back; emitting after it loses the emit if the process dies in between, or if Redis is down at that moment.
+
+**Outbox.** The action's own transaction writes the change, the `notifications` rows and one `outbox_events` row per notification (`topic: 'notification'`, `payload: { userId, notificationId }`). They commit or roll back together, so a notification exists exactly when the action happened. Delivery is then somebody else's job:
+
+```mermaid
+sequenceDiagram
+    participant R as Route / service
+    participant DB as Postgres
+    participant L as Relay (every API instance)
+    participant S as Socket.IO (+ Redis adapter)
+    R->>DB: BEGIN; change; INSERT notifications; INSERT outbox_events; COMMIT
+    loop every ~1 s
+        L->>DB: BEGIN; SELECT … WHERE published_at IS NULL ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED
+        L->>DB: load the notifications (one query)
+        L->>S: emit notification:new to user:<userId>
+        L->>DB: UPDATE published_at = now(); COMMIT
+    end
+```
+
+- **Recipients** (`modules/notifications/service.ts`, `notify()`): never the actor, only users who are workspace members at that moment, de-duplicated so each person gets one notification per action. Who gets what is listed in [api.md](api.md#notifications). The rows hold ids and a type only, never comment text: what a notification says is rendered from current data, and deleting a review or thread cascades to its notifications.
+- **Relay** (`modules/notifications/relay.ts`) runs in every API process once it listens. Each tick is one transaction: lock up to 100 unpublished rows, load their notifications in one query, emit each to `user:<userId>`, mark them published, commit. A notification whose recipient has left the workspace (or that was deleted) is marked published without an emit.
+- **SKIP LOCKED.** Several instances run the relay at once. `FOR UPDATE SKIP LOCKED` makes each take rows the others haven't locked instead of waiting, so a row is handled by one relay per pass and the instances share the backlog.
+- **At least once.** The emit happens before the commit. If the process dies (or the commit fails) after emitting, the rows stay unpublished and are emitted again by the next tick, anywhere. The client must therefore be idempotent: it dedupes `notification:new` by notification id. Emitting after the commit instead would be at most once, which is what the outbox exists to avoid.
+- **Failures.** If emitting a row throws, its `attempts` is incremented and it is retried on the next tick; after 10 attempts it is marked published and an error is logged (outbox id and error name/message only). While this instance can't reach Redis, the relay skips its ticks rather than mark rows published that only this instance's sockets would get.
+- **Running it.** Ticks are chained with `setTimeout` after each run, so a slow tick never overlaps the next. On shutdown the relay stops before Socket.IO closes (its plugin is registered first; `preClose` hooks run in registration order) and waits for a running tick. Rows published more than 7 days ago are deleted about once an hour, in batches of 1,000. Interval and limits are options; tests start apps with the relay disabled (test files share one database) and drive `tick()` themselves.
+- **Delivered is not read.** `published_at` only means "handed to Socket.IO". A user who was offline sees the notification through the list and unread count over HTTP; `read_at` is set by the read routes.
+- **Indexes.** `(user_id, created_at DESC, id DESC)` serves the list, a partial index on `user_id WHERE read_at IS NULL` the unread count, and a partial index on `id WHERE published_at IS NULL` the relay's scan, so published rows cost nothing until cleanup.
 
 ## Diff Parsing
 

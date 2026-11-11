@@ -132,7 +132,12 @@ describe('subscribeToReviewRoom', () => {
 
   it('validates presence events and passes on those for this review', () => {
     const { socket, handlers } = setup();
-    const presence = { reviewId: REVIEW, viewers: [{ id: ACTOR, displayName: 'Ada' }], total: 1 };
+    const presence = {
+      reviewId: REVIEW,
+      at: AT,
+      viewers: [{ id: ACTOR, displayName: 'Ada' }],
+      total: 1,
+    };
     socket.receive('presence', presence);
     expect(handlers.onPresence).not.toHaveBeenCalled();
 

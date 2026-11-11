@@ -4,10 +4,12 @@ import {
   ReviewJoinRequestSchema,
   ReviewLeaveRequestSchema,
   reviewRoom,
+  userRoom,
   type ClientToServerEvents,
   type ReviewJoinAck,
   type ReviewRoomEvents,
   type ServerToClientEvents,
+  type UserEvents,
 } from '@diffcraft/shared';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { eq } from 'drizzle-orm';
@@ -60,6 +62,8 @@ export interface Realtime {
     event: E,
     payload: ReviewRoomEvents[E],
   ): void;
+  emitToUser<E extends keyof UserEvents>(userId: string, event: E, payload: UserEvents[E]): void;
+  canReachAllInstances(): boolean;
 }
 
 declare module 'fastify' {
@@ -115,7 +119,10 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
     });
 
     const presence = createPresence(io, app.log, DEFAULT_PRESENCE_OPTIONS);
-    io.on('connection', (socket) => registerReviewRooms(app, socket, limits, presence));
+    io.on('connection', (socket) => {
+      void socket.join(userRoom(socket.data.userId));
+      registerReviewRooms(app, socket, limits, presence);
+    });
 
     let pub: Redis | undefined;
     let sub: Redis | undefined;
@@ -146,6 +153,13 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
         const target = pub && pub.status !== 'ready' ? io.local.to(room) : io.to(room);
         (target.emit as (event: string, payload: unknown) => boolean)(event, payload);
       },
+      emitToUser(userId, event, payload) {
+        (io.to(userRoom(userId)).emit as (event: string, payload: unknown) => boolean)(
+          event,
+          payload,
+        );
+      },
+      canReachAllInstances: () => !pub || pub.status === 'ready',
     } satisfies Realtime);
   },
   { name: 'realtime', dependencies: ['db', 'redis'] },

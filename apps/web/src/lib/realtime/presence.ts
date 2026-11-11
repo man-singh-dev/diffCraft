@@ -1,6 +1,12 @@
 import type { PresenceEvent } from '@diffcraft/shared';
+import { isNotOlder } from './events';
 
 const NAMED = 3;
+
+// Two recomputes can arrive out of order (another instance, the newcomer's own copy): keep the newest.
+export function newerPresence(current: PresenceEvent | null, next: PresenceEvent): PresenceEvent {
+  return current && !isNotOlder(next.at, current.at) ? current : next;
+}
 
 export function describeViewers(
   { viewers, total }: Pick<PresenceEvent, 'viewers' | 'total'>,

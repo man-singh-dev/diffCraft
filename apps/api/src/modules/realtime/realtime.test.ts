@@ -339,6 +339,7 @@ describeWithDbAndRedis('realtime', () => {
       await join(second, { workspaceId, reviewNumber: review.number });
       expect(await sentToSecond).toEqual({
         reviewId: review.id,
+        at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
         viewers: [{ id: user.id, displayName: 'Mira' }],
         total: 1,
       });

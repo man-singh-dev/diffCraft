@@ -21,6 +21,7 @@ import {
   workspaces,
 } from '../../db/schema/index.js';
 import type { Database } from '../../plugins/db.js';
+import { authorAndReviewers, notify } from '../notifications/service.js';
 import { ReviewMergedError, ReviewNotFoundError } from '../reviews/errors.js';
 import { getReview, lockReview, type Tx } from '../reviews/service.js';
 import {
@@ -228,6 +229,13 @@ export async function assignReviewers(
           data: { userId },
         })),
       );
+      await notify(tx, {
+        workspaceId,
+        reviewId: review.id,
+        actorId,
+        type: 'reviewer_assigned',
+        recipients: added.map(({ userId }) => userId),
+      });
     }
     return listReviewers(tx, workspaceId, review.id);
   });
@@ -303,6 +311,13 @@ export async function submitDecision(
       actorId: reviewerId,
       type: 'decision',
       data: { decisionId: row.id, decision },
+    });
+    await notify(tx, {
+      workspaceId,
+      reviewId: review.id,
+      actorId: reviewerId,
+      type: decision === 'approve' ? 'review_approved' : 'changes_requested',
+      recipients: [review.authorId],
     });
 
     return {
@@ -393,6 +408,13 @@ export async function mergeReview(
       .set({ status: 'merged', mergedBy: actorId, mergedAt: sql`now()` })
       .where(eq(reviews.id, review.id));
     await tx.insert(reviewEvents).values({ reviewId: review.id, actorId, type: 'merged' });
+    await notify(tx, {
+      workspaceId,
+      reviewId: review.id,
+      actorId,
+      type: 'review_merged',
+      recipients: await authorAndReviewers(tx, review.id),
+    });
 
     const merged = await getReview(tx, workspaceId, review.id);
     if (!merged) throw new Error('review not found after merge');

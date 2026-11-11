@@ -19,6 +19,7 @@ import {
   type ReviewRow,
 } from '../../db/schema/index.js';
 import type { Database } from '../../plugins/db.js';
+import { authorAndReviewers, notify } from '../notifications/service.js';
 import { WorkspaceNotFoundError } from '../workspaces/require-workspace-role.js';
 import { encodeCursor, type ReviewCursor } from './cursor.js';
 import { InvalidStatusTransitionError, ReviewMergedError } from './errors.js';
@@ -261,6 +262,15 @@ export async function updateReview(
         reviewId: current.id,
         actorId,
         type: nextStatus === 'closed' ? 'closed' : 'reopened',
+      });
+    }
+    if (nextStatus === 'closed') {
+      await notify(tx, {
+        workspaceId,
+        reviewId: current.id,
+        actorId,
+        type: 'review_closed',
+        recipients: await authorAndReviewers(tx, current.id),
       });
     }
     return getReview(tx, workspaceId, current.id);

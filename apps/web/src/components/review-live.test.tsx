@@ -13,6 +13,7 @@ const presence: PresenceEvent = {
     { id: ME, displayName: 'Me' },
   ],
   total: 2,
+  at: '2026-11-12T10:00:00.000Z',
 };
 
 function render(status: ReviewRoomStatus, current: PresenceEvent | null = presence) {

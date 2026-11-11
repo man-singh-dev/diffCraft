@@ -198,7 +198,7 @@ erDiagram
 | `ai_analysis_jobs`  | Lifecycle and audit record for each analysis request: status, attempts, error code, model and prompt version.                                                                                                                                                                                                                                                                                                                                                                                 |
 | `ai_findings`       | Structured findings from a job, linked to the review and — when applicable — a specific file, side and line range.                                                                                                                                                                                                                                                                                                                                                                            |
 
-`workspaces.required_approvals` and `workspaces.require_resolved_threads` hold the workspace's merge rules. `reviews.status` gained `merged` (final), with `merged_by` / `merged_at`. Notifications will need another table (`notifications`), which is in the roadmap.
+`workspaces.required_approvals` and `workspaces.require_resolved_threads` hold the workspace's merge rules. `reviews.status` gained `merged` (final), with `merged_by` / `merged_at`. In-app notifications use `notifications` and `outbox_events` (migration `0006_notifications`); see [architecture.md](architecture.md#notifications-and-the-transactional-outbox).
 
 ### Foreign keys and referential integrity
 

@@ -41,8 +41,21 @@ export async function addMember(
   await db.insert(workspaceMembers).values({ workspaceId, userId, role });
 }
 
-// Earlier statements in the transaction really run, so a test can check they were rolled back.
 export function failInsertInTransaction(db: Database, table: Table, message: string): Database {
+  return failInTransaction(db, 'insert', table, message);
+}
+
+export function failUpdateInTransaction(db: Database, table: Table, message: string): Database {
+  return failInTransaction(db, 'update', table, message);
+}
+
+// Earlier statements in the transaction really run, so a test can check they were rolled back.
+function failInTransaction(
+  db: Database,
+  method: 'insert' | 'update',
+  table: Table,
+  message: string,
+): Database {
   const passThrough = <T extends object>(target: T, prop: string | symbol): unknown => {
     const value: unknown = Reflect.get(target, prop);
     return typeof value === 'function' ? value.bind(target) : value;
@@ -56,10 +69,10 @@ export function failInsertInTransaction(db: Database, table: Table, message: str
             run(
               new Proxy(tx, {
                 get(txTarget, txProp) {
-                  if (txProp !== 'insert') return passThrough(txTarget, txProp);
-                  return (insertTable: Table) => {
-                    if (insertTable === table) throw new Error(message);
-                    return txTarget.insert(insertTable);
+                  if (txProp !== method) return passThrough(txTarget, txProp);
+                  return (target: Table) => {
+                    if (target === table) throw new Error(message);
+                    return txTarget[method](target);
                   };
                 },
               }),

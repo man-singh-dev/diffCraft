@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { describeViewers } from './presence';
+import type { PresenceEvent } from '@diffcraft/shared';
+import { describeViewers, newerPresence } from './presence';
 
 const ME = '01a17e5e-aa56-7985-be46-bf5f1c7e7f01';
 const id = (n: number) => `01a17e5e-aa56-7985-be46-${String(n).padStart(12, '0')}`;
@@ -45,5 +46,26 @@ describe('describeViewers', () => {
       label: 'You, Asha, Ben +7 more viewing',
       description: 'Viewing this review: you, Asha, Ben and 7 more.',
     });
+  });
+});
+
+describe('newerPresence', () => {
+  const at = (second: number) => `2026-11-12T10:00:${String(second).padStart(2, '0')}.000Z`;
+  const event = (second: number, total: number): PresenceEvent => ({
+    reviewId: '01a17e5e-aa56-7985-be46-bf5f1c7e7f10',
+    at: at(second),
+    viewers: [],
+    total,
+  });
+
+  it('takes the first event and any newer or equally recent one', () => {
+    expect(newerPresence(null, event(5, 1))).toEqual(event(5, 1));
+    expect(newerPresence(event(5, 1), event(6, 2))).toEqual(event(6, 2));
+    expect(newerPresence(event(5, 1), event(5, 3))).toEqual(event(5, 3));
+  });
+
+  it('ignores an event older than the one shown', () => {
+    const shown = event(6, 2);
+    expect(newerPresence(shown, event(5, 1))).toBe(shown);
   });
 });

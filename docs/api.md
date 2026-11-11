@@ -267,7 +267,34 @@ The server emits these to the room `review:<reviewId>` after the change has comm
 
 Delivery is at most once: after reconnecting, re-join and re-fetch over HTTP.
 
-**`presence`** is not a domain event and has no `actorId` or `at`: `{ reviewId, viewers: { id, displayName }[], total }`. `viewers` holds the distinct users connected to the room, sorted by display name and capped at 50; `total` is the real distinct count. A socket gets it right after its join is acknowledged, and the room gets it (at most once per 500 ms) after joins, leaves and disconnects.
+**`presence`** is not a domain event and has no `actorId`: `{ reviewId, at, viewers: { id, displayName }[], total }`. `at` is the API instance's clock when the list was computed (same format as other events); clients ignore a presence older than the one they show. `viewers` holds the distinct users connected to the room, sorted by display name and capped at 50; `total` is the real distinct count. A socket gets it right after its join is acknowledged, and the room gets it (at most once per 500 ms) after joins, leaves and disconnects.
+
+### Notifications
+
+**Implemented** (backend, Stage 7 step 5a). Every route needs a session and only ever touches the caller's own notifications. Notifications from a workspace the user is no longer a member of are hidden everywhere (list, count, read).
+
+| Method | Path                                 | Purpose                                                                                 |
+| ------ | ------------------------------------ | --------------------------------------------------------------------------------------- |
+| `GET`  | `/api/v1/notifications`              | `?limit` (1–50, default 20) and `?cursor`. `200 { items: Notification[], nextCursor }`. |
+| `GET`  | `/api/v1/notifications/unread-count` | `200 { count }`.                                                                        |
+| `POST` | `/api/v1/notifications/:id/read`     | `204`. Idempotent: reading again keeps the first `readAt`.                              |
+| `POST` | `/api/v1/notifications/read-all`     | `204`. Marks every visible unread notification read; idempotent.                        |
+
+`Notification` (`NotificationSchema` in `packages/shared/src/notifications.ts`): `{ id, type, createdAt, readAt, actor: { id, displayName } | null, review: { workspaceId, number, title }, threadId }`. `actor` is `null` once that account is deleted. It never contains comment text: clients link to the review (and thread) and show the current content there.
+
+| `type`              | Sent to                                                                        | When                                      |
+| ------------------- | ------------------------------------------------------------------------------ | ----------------------------------------- |
+| `thread_created`    | the review author                                                              | `POST …/threads`                          |
+| `thread_reply`      | the thread's author, everyone who has written in the thread, the review author | `POST …/threads/:threadId/comments`       |
+| `reviewer_assigned` | each newly assigned reviewer                                                   | `POST …/reviewers`                        |
+| `review_approved`   | the review author                                                              | `POST …/decisions` with `approve`         |
+| `changes_requested` | the review author                                                              | `POST …/decisions` with `request_changes` |
+| `review_merged`     | the review author and assigned reviewers                                       | `POST …/merge`                            |
+| `review_closed`     | the review author and assigned reviewers                                       | `PATCH …` changing the status to `closed` |
+
+Never the person who acted, only current workspace members, and one notification per person per action. Paging works like the review list ([Pagination](#pagination)): `created_at DESC, id DESC`, the same opaque cursor, `400 invalid_cursor` for one the API didn't produce, `422 validation_error` for a bad `limit`. `POST …/:id/read` for a missing id, a malformed one or someone else's is `404 notification_not_found`, so ids can't be probed.
+
+**Live delivery.** Every socket joins the room `user:<userId>` when it connects (no client event). The outbox relay emits `notification:new` with the `Notification` to that room, so every tab of that user gets it. Delivery is **at least once**: the same notification can arrive twice (for example after an API restart), so clients dedupe by `id`. A client that was offline fetches the list or the unread count over HTTP.
 
 ### AI analysis and findings
 

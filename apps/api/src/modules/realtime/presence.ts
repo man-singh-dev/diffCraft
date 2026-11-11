@@ -17,7 +17,11 @@ export interface Presence {
 
 type ViewerData = { userId?: string; displayName?: string };
 
-export function summarizeViewers(reviewId: string, sockets: { data: ViewerData }[]): PresenceEvent {
+export function summarizeViewers(
+  reviewId: string,
+  at: string,
+  sockets: { data: ViewerData }[],
+): PresenceEvent {
   const byId = new Map<string, string>();
   for (const { data } of sockets) {
     if (data.userId && !byId.has(data.userId)) byId.set(data.userId, data.displayName ?? '');
@@ -25,7 +29,7 @@ export function summarizeViewers(reviewId: string, sockets: { data: ViewerData }
   const viewers = [...byId]
     .map(([id, displayName]) => ({ id, displayName }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName) || (a.id < b.id ? -1 : 1));
-  return { reviewId, viewers: viewers.slice(0, PRESENCE_MAX_VIEWERS), total: viewers.length };
+  return { reviewId, at, viewers: viewers.slice(0, PRESENCE_MAX_VIEWERS), total: viewers.length };
 }
 
 export function createPresence(
@@ -38,13 +42,15 @@ export function createPresence(
 
   async function compute(reviewId: string): Promise<PresenceEvent | null> {
     let timer: NodeJS.Timeout | undefined;
+    // Taken before the fetch: the list reflects at least the state at this time.
+    const at = new Date().toISOString();
     try {
       // The adapter ignores timeout flags here, and its server count waits forever while Redis is down.
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error('fetchSockets timed out')), fetchTimeoutMs);
       });
       const sockets = await Promise.race([io.in(reviewRoom(reviewId)).fetchSockets(), timeout]);
-      return summarizeViewers(reviewId, sockets);
+      return summarizeViewers(reviewId, at, sockets);
     } catch (err) {
       log.error({ err: safeError(err), reviewId }, 'presence recompute failed');
       return null;

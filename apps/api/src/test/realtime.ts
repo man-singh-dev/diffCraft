@@ -49,7 +49,12 @@ export async function startApp(realtimeLimits?: Partial<RealtimeLimits>) {
       REDIS_URL: testRedisUrl ?? undefined,
       WEB_ORIGIN,
     }),
-    { mailer: new FakeMailer(), ...(realtimeLimits && { realtimeLimits }) },
+    {
+      mailer: new FakeMailer(),
+      // Test files share one database: a running relay would publish other files' outbox rows.
+      relay: { enabled: false },
+      ...(realtimeLimits && { realtimeLimits }),
+    },
   );
   openApps.add(app);
   await app.listen({ host: '127.0.0.1', port: 0 });

@@ -6,6 +6,11 @@ import { createMailer, type Mailer } from './mail/mailer.js';
 import { mailerPlugin } from './mail/plugin.js';
 import { requestUserPlugin } from './modules/auth/require-auth.js';
 import { authRoutes } from './modules/auth/routes.js';
+import {
+  notificationsPlugin,
+  type NotificationsPluginOptions,
+} from './modules/notifications/plugin.js';
+import { notificationRoutes } from './modules/notifications/routes.js';
 import { realtimeRoutes } from './modules/realtime/routes.js';
 import { realtimePlugin, type RealtimeLimits } from './modules/realtime/socket-server.js';
 import { requestWorkspacePlugin } from './modules/workspaces/require-workspace-role.js';
@@ -19,7 +24,11 @@ import { readyRoutes } from './routes/ready.js';
 
 export async function buildApp(
   config: Config,
-  deps: { mailer?: Mailer; realtimeLimits?: Partial<RealtimeLimits> } = {},
+  deps: {
+    mailer?: Mailer;
+    realtimeLimits?: Partial<RealtimeLimits>;
+    relay?: NotificationsPluginOptions['relay'];
+  } = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: loggerOptions(config.LOG_LEVEL),
@@ -36,6 +45,8 @@ export async function buildApp(
   await app.register(mailerPlugin, { mailer: deps.mailer ?? createMailer(config, app.log) });
   await app.register(requestUserPlugin);
   await app.register(requestWorkspacePlugin);
+  // Before realtime: preClose hooks run in registration order, so the relay stops before Socket.IO closes.
+  await app.register(notificationsPlugin, { ...(deps.relay && { relay: deps.relay }) });
   await app.register(realtimePlugin, {
     webOrigin: config.WEB_ORIGIN,
     redisUrl: config.REDIS_URL,
@@ -51,6 +62,7 @@ export async function buildApp(
   });
   await app.register(workspaceRoutes, { prefix: '/api/v1/workspaces' });
   await app.register(realtimeRoutes, { prefix: '/api/v1/realtime' });
+  await app.register(notificationRoutes, { prefix: '/api/v1/notifications' });
 
   return app;
 }

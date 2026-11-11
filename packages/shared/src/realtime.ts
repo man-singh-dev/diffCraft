@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ThreadSchema } from './comments.ts';
+import { NotificationSchema } from './notifications.ts';
 
 export const REALTIME_PATH = '/socket.io';
 
@@ -62,6 +63,7 @@ export type PresenceViewer = z.infer<typeof PresenceViewerSchema>;
 
 export const PresenceEventSchema = z.object({
   reviewId: z.uuid(),
+  at: z.iso.datetime(),
   viewers: z.array(PresenceViewerSchema).max(PRESENCE_MAX_VIEWERS),
   total: z.number().int().min(0),
 });
@@ -78,8 +80,19 @@ export type ReviewRoomEvents = {
   [E in keyof typeof ReviewRoomEventSchemas]: z.infer<(typeof ReviewRoomEventSchemas)[E]>;
 };
 
+export const UserEventSchemas = {
+  'notification:new': NotificationSchema,
+} as const;
+
+export type UserEvents = {
+  [E in keyof typeof UserEventSchemas]: z.infer<(typeof UserEventSchemas)[E]>;
+};
+
 export type ServerToClientEvents = {
   [E in keyof ReviewRoomEvents]: (payload: ReviewRoomEvents[E]) => void;
+} & {
+  [E in keyof UserEvents]: (payload: UserEvents[E]) => void;
 };
 
 export const reviewRoom = (reviewId: string) => `review:${reviewId}`;
+export const userRoom = (userId: string) => `user:${userId}`;

@@ -17,6 +17,7 @@ import {
   type CommentThreadRow,
 } from '../../db/schema/index.js';
 import type { Database } from '../../plugins/db.js';
+import { notify, reviewAuthor, threadParticipants } from '../notifications/service.js';
 import { ReviewFileNotFoundError, ReviewNotFoundError } from '../reviews/errors.js';
 import { CommentAnchorInvalidError } from './errors.js';
 
@@ -262,6 +263,14 @@ export async function createThread(
     if (!thread) throw new Error('INSERT ... RETURNING returned no row');
 
     await tx.insert(comments).values({ threadId: thread.id, authorId, body: input.body });
+    await notify(tx, {
+      workspaceId,
+      reviewId,
+      threadId: thread.id,
+      actorId: authorId,
+      type: 'thread_created',
+      recipients: [await reviewAuthor(tx, reviewId)],
+    });
 
     const created = await getThread(tx, workspaceId, reviewId, thread.id);
     if (!created) throw new Error('thread not found after insert');
@@ -279,17 +288,29 @@ export async function addReply(
     body,
   }: { workspaceId: string; reviewId: string; threadId: string; authorId: string; body: string },
 ): Promise<Comment | null> {
-  const [thread] = await db
-    .select({ id: commentThreads.id })
-    .from(commentThreads)
-    .where(and(eq(commentThreads.id, threadId), threadInReview(workspaceId, reviewId)));
-  if (!thread) return null;
+  return db.transaction(async (tx) => {
+    const [thread] = await tx
+      .select({ id: commentThreads.id })
+      .from(commentThreads)
+      .where(and(eq(commentThreads.id, threadId), threadInReview(workspaceId, reviewId)));
+    if (!thread) return null;
 
-  const [row] = await db
-    .insert(comments)
-    .values({ threadId: thread.id, authorId, body })
-    .returning({ id: comments.id });
-  return row ? getComment(db, workspaceId, reviewId, row.id) : null;
+    const recipients = await threadParticipants(tx, reviewId, thread.id);
+    const [row] = await tx
+      .insert(comments)
+      .values({ threadId: thread.id, authorId, body })
+      .returning({ id: comments.id });
+    if (!row) throw new Error('INSERT ... RETURNING returned no row');
+    await notify(tx, {
+      workspaceId,
+      reviewId,
+      threadId: thread.id,
+      actorId: authorId,
+      type: 'thread_reply',
+      recipients,
+    });
+    return getComment(tx, workspaceId, reviewId, row.id);
+  });
 }
 
 export async function editComment(

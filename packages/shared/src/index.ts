@@ -3,6 +3,7 @@ export * from './auth.ts';
 export * from './comments.ts';
 export * from './diff/index.ts';
 export * from './health.ts';
+export * from './notifications.ts';
 export * from './ready.ts';
 export * from './realtime.ts';
 export * from './reviews.ts';
