@@ -49,3 +49,25 @@ Health check path: `/health`. The build bundles `src/server.ts` and `src/migrate
 On Vercel, set the project's Root Directory to `apps/web` and the Install Command to `npx --yes pnpm@12.15.0 install --frozen-lockfile` (otherwise Vercel picks pnpm 9 or 10 from the lockfile version, which refuses this repo's `packageManager`). The default `next build` is fine.
 
 Migrations run on start because the API is a single free instance. With several instances they would race on every deploy, so the [future architecture](architecture.md#future-architecture-planned) runs them as a separate release step. See also the [current deployment diagram](architecture.md#current-deployment-implemented).
+
+## AI analysis
+
+> Status: **Implemented in the API, not enabled on the live demo** (it needs Redis, which isn't deployed yet). Design: [design/ai-analysis.md](design/ai-analysis.md).
+
+The worker runs inside the API process, so no extra service is needed: each API instance works up to `AI_WORKER_CONCURRENCY` jobs and runs the sweeper.
+
+| Host   | Variable                            | Notes                                                                                              |
+| ------ | ----------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Render | `AI_PROVIDER`                       | **Required in production**: `openai_compatible`, `disabled` or (for a demo only) `fake`.           |
+| Render | `AI_BASE_URL`                       | For `openai_compatible`, e.g. `https://api.groq.com/openai/v1`. Provider table: the design doc.    |
+| Render | `AI_API_KEY`                        | For `openai_compatible`. A secret: set it in the dashboard only. The API never logs it.            |
+| Render | `AI_MODEL`                          | For `openai_compatible`, e.g. `openai/gpt-oss-120b` on Groq.                                       |
+| Render | `AI_MAX_OUTPUT_TOKENS`              | Optional (8000). Keep it generous for reasoning models: a cut-off answer counts as invalid output. |
+| Render | `AI_MAX_JOBS_PER_WORKSPACE_PER_DAY` | Optional (20). Caps provider usage per workspace per rolling 24 hours.                             |
+| Render | `AI_WORKER_CONCURRENCY`             | Optional (1). Free provider tiers allow only a few requests per minute.                            |
+| Render | `AI_TIMEOUT_MS`                     | Optional (60000).                                                                                  |
+| Render | `REDIS_URL`                         | Already required in production; BullMQ uses it with its own connections.                           |
+
+**Redis must not evict keys.** BullMQ keeps jobs and locks in Redis, and an eviction policy can silently drop queued jobs. Set `maxmemory-policy noeviction` (many hosted Redis plans default to `volatile-lru` or `allkeys-lru`: change it in the provider's settings). The local Docker Redis has no memory limit, so nothing is evicted there. If a job is lost anyway, the sweeper re-enqueues it from Postgres within a few minutes.
+
+**Free provider tiers.** Groq, Cerebras, OpenRouter (`:free` models) and Gemini have free tiers with low per-minute and per-day limits. DiffCraft makes one call per analysis (two if the answer needs a repair) and retries `429` responses after the provider's `Retry-After`; a wait over 5 minutes fails the job instead. **Free tiers may use prompts for training: don't send private code to them.** Secrets are masked before sending, but the code itself is sent as-is.

@@ -15,7 +15,7 @@ An index of the detailed docs. Start with the [main README](../README.md) for an
 | [development.md](development.md)               | Local setup, environment variables, Docker, project structure, testing, contributing. | **Implemented**              |
 | [deployment.md](deployment.md)                 | Vercel, Render and Neon setup, and the variables each host needs.                     | **Implemented**              |
 | [design/realtime.md](design/realtime.md)       | Socket.IO rooms, events and broadcast rules.                                          | Planned (Stage 7)            |
-| [design/ai-analysis.md](design/ai-analysis.md) | AI analysis pipeline, background jobs and failure handling.                           | Planned (Stage 8)            |
+| [design/ai-analysis.md](design/ai-analysis.md) | AI analysis pipeline, background jobs and failure handling.                           | Implemented (8A, backend)    |
 | [roadmap.md](roadmap.md)                       | Detailed current status, the full roadmap and future enhancements.                    | —                            |
 
 Status labels used throughout: **Implemented** · **In progress** · **Planned**.

@@ -1,4 +1,6 @@
 import type {
+  AnalysisCompletedEvent,
+  AnalysisStatusEvent,
   PresenceEvent,
   ReviewChangedEvent,
   ReviewDeletedEvent,
@@ -15,6 +17,8 @@ export interface ReviewRoomHandlers {
   onReviewChanged?: (event: ReviewChangedEvent) => void;
   onReviewDeleted?: (event: ReviewDeletedEvent) => void;
   onPresence?: (event: PresenceEvent) => void;
+  onAnalysisStatus?: (event: AnalysisStatusEvent) => void;
+  onAnalysisCompleted?: (event: AnalysisCompletedEvent) => void;
   onResync?: () => void;
 }
 
@@ -90,6 +94,14 @@ export function subscribeToReviewRoom(
     presence: (payload) => {
       const event = joined && parseRoomEvent('presence', payload, reviewId);
       if (event) handlers.onPresence?.(event);
+    },
+    'analysis:status': (payload) => {
+      const event = joined && parseRoomEvent('analysis:status', payload, reviewId);
+      if (event) handlers.onAnalysisStatus?.(event);
+    },
+    'analysis:completed': (payload) => {
+      const event = joined && parseRoomEvent('analysis:completed', payload, reviewId);
+      if (event) handlers.onAnalysisCompleted?.(event);
     },
   };
 

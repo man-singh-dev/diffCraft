@@ -17,6 +17,7 @@ import {
   requireWorkspaceRole,
   UUID_PATTERN,
 } from '../workspaces/require-workspace-role.js';
+import { analysisRoutes } from '../ai/routes.js';
 import { approvalRoutes } from '../approvals/routes.js';
 import { commentRoutes } from '../comments/routes.js';
 import { publishReviewChanged, publishReviewDeleted } from '../realtime/publish.js';
@@ -113,6 +114,7 @@ const singleReviewRoutes: FastifyPluginAsync = async (app) => {
 
   await app.register(commentRoutes, { prefix: '/threads' });
   await app.register(approvalRoutes);
+  await app.register(analysisRoutes);
 };
 
 export const reviewRoutes: FastifyPluginAsync = async (app) => {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AiJobSchema } from './ai.ts';
 import { ThreadSchema } from './comments.ts';
 import { NotificationSchema } from './notifications.ts';
 
@@ -56,6 +57,15 @@ export type ReviewChangedEvent = z.infer<typeof ReviewChangedEventSchema>;
 export const ReviewDeletedEventSchema = ReviewRoomEventBaseSchema;
 export type ReviewDeletedEvent = z.infer<typeof ReviewDeletedEventSchema>;
 
+export const AnalysisStatusEventSchema = ReviewRoomEventBaseSchema.extend({ job: AiJobSchema });
+export type AnalysisStatusEvent = z.infer<typeof AnalysisStatusEventSchema>;
+
+export const AnalysisCompletedEventSchema = ReviewRoomEventBaseSchema.extend({
+  jobId: z.uuid(),
+  findings: z.number().int().min(0),
+});
+export type AnalysisCompletedEvent = z.infer<typeof AnalysisCompletedEventSchema>;
+
 export const PRESENCE_MAX_VIEWERS = 50;
 
 export const PresenceViewerSchema = z.object({ id: z.uuid(), displayName: z.string() });
@@ -74,6 +84,8 @@ export const ReviewRoomEventSchemas = {
   'review:changed': ReviewChangedEventSchema,
   'review:deleted': ReviewDeletedEventSchema,
   presence: PresenceEventSchema,
+  'analysis:status': AnalysisStatusEventSchema,
+  'analysis:completed': AnalysisCompletedEventSchema,
 } as const;
 
 export type ReviewRoomEvents = {

@@ -50,6 +50,13 @@
       "when": 1794425762375,
       "tag": "0006_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794478706627,
+      "tag": "0007_ai_analysis",
+      "breakpoints": true
     }
   ]
 }

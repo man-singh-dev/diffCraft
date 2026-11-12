@@ -11,7 +11,7 @@ The database design: implemented and proposed tables, constraints, indexes, tran
 > [!NOTE]
 > **Implemented:** the `users`, `sessions`, `workspaces`, `workspace_members`, `reviews`, `review_files`, `comment_threads`, `comments`, `review_reviewers`, `review_decisions` and `review_events` tables (Drizzle schema in `apps/api/src/db/schema`, migrations in `apps/api/drizzle`). The workspace tables are served by `/api/v1/workspaces` (see [api.md](api.md#workspaces-and-membership)). The review tables are served by the review routes (see [api.md](api.md#reviews)). The comment tables are served by the thread routes (see [api.md](api.md#comment-threads)). The approval tables have a data layer (`apps/api/src/modules/approvals/service.ts`) but no routes yet. Every other table below is a **proposal**. It will change during implementation and will not be considered final until it exists as Drizzle schema and migrations.
 
-### Entity-relationship diagram (`ai_analysis_jobs` and `ai_findings` proposed; the rest implemented)
+### Entity-relationship diagram (all implemented)
 
 ```mermaid
 erDiagram
@@ -34,6 +34,7 @@ erDiagram
     users |o--o{ review_decisions : "submits"
     reviews ||--o{ review_events : "logs"
     users |o--o{ review_events : "acts in"
+    workspaces ||--o{ ai_analysis_jobs : "has"
     reviews ||--o{ ai_analysis_jobs : "has"
     users ||--o{ ai_analysis_jobs : "requests"
     ai_analysis_jobs ||--o{ ai_findings : "produces"
@@ -148,18 +149,22 @@ erDiagram
     }
     ai_analysis_jobs {
         uuid id PK
+        uuid workspace_id FK
         uuid review_id FK
-        uuid requested_by FK
-        int revision
-        text analysis_type
-        text idempotency_key UK
-        text status "queued | running | succeeded | failed | cancelled"
-        int attempts
-        text error_code
-        text model
+        uuid requested_by FK "nullable"
+        text status "CHECK: queued | running | succeeded | failed"
+        text idempotency_key "unique while queued or running"
         text prompt_version
+        text model
+        int attempts
+        text error_code "nullable"
+        text summary "nullable"
+        int input_tokens "nullable"
+        int output_tokens "nullable"
+        int dropped_findings
         timestamptz created_at
-        timestamptz finished_at
+        timestamptz started_at "nullable"
+        timestamptz finished_at "nullable"
     }
     ai_findings {
         uuid id PK
@@ -169,13 +174,13 @@ erDiagram
         text side "old | new, nullable"
         int line_start "nullable"
         int line_end "nullable"
-        text severity "info | low | medium | high | critical"
-        text category "bug | security | performance | quality"
+        text category "CHECK: bug | security | performance"
+        text severity "CHECK: info | low | medium | high | critical"
         text title
         text explanation
-        text suggestion
-        real confidence
-        text status "open | dismissed | converted_to_comment"
+        text suggestion "nullable"
+        real confidence "CHECK: 0..1"
+        timestamptz dismissed_at "nullable"
         timestamptz created_at
     }
 ```

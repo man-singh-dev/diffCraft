@@ -3,6 +3,8 @@ import { loadConfig } from './config.js';
 
 const DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
 const REDIS_URL = 'rediss://default:r3dis-secret@redis.example.com:6380';
+const PRODUCTION = { DATABASE_URL, NODE_ENV: 'production', AI_PROVIDER: 'disabled' } as const;
+const PROD_BASE = { ...PRODUCTION, REDIS_URL, MAIL_TRANSPORT: 'log' } as const;
 
 describe('loadConfig', () => {
   it('applies defaults when only required vars are set', () => {
@@ -19,6 +21,11 @@ describe('loadConfig', () => {
       MAIL_SMTP_URL: 'smtp://localhost:1025',
       MAIL_FROM: 'DiffCraft <noreply@localhost>',
       REDIS_URL: 'redis://localhost:6379',
+      AI_PROVIDER: 'fake',
+      AI_MAX_OUTPUT_TOKENS: 8000,
+      AI_MAX_JOBS_PER_WORKSPACE_PER_DAY: 20,
+      AI_WORKER_CONCURRENCY: 1,
+      AI_TIMEOUT_MS: 60000,
     });
   });
 
@@ -27,10 +34,9 @@ describe('loadConfig', () => {
       expect(() =>
         loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_TRANSPORT: 'log' }),
       ).toThrow(/REDIS_URL/);
-      expect(
-        loadConfig({ DATABASE_URL, NODE_ENV: 'production', MAIL_TRANSPORT: 'log', REDIS_URL })
-          .REDIS_URL,
-      ).toBe(REDIS_URL);
+      expect(loadConfig({ ...PRODUCTION, MAIL_TRANSPORT: 'log', REDIS_URL }).REDIS_URL).toBe(
+        REDIS_URL,
+      );
     });
 
     it.each(['http://localhost:6379', 'not a url', 'rediss://default:r3dis-secret@'])(
@@ -62,8 +68,7 @@ describe('loadConfig', () => {
       }
       expect(
         loadConfig({
-          DATABASE_URL,
-          NODE_ENV: 'production',
+          ...PRODUCTION,
           REDIS_URL,
           MAIL_SMTP_URL: smtpUrl,
           MAIL_FROM: 'DiffCraft <noreply@example.com>',
@@ -72,10 +77,9 @@ describe('loadConfig', () => {
     });
 
     it('accepts MAIL_TRANSPORT=log in production without SMTP settings', () => {
-      expect(
-        loadConfig({ DATABASE_URL, NODE_ENV: 'production', REDIS_URL, MAIL_TRANSPORT: 'log' })
-          .MAIL_TRANSPORT,
-      ).toBe('log');
+      expect(loadConfig({ ...PRODUCTION, REDIS_URL, MAIL_TRANSPORT: 'log' }).MAIL_TRANSPORT).toBe(
+        'log',
+      );
     });
 
     it.each([
@@ -148,5 +152,65 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ DATABASE_URL: 'secret-value' })).toThrow(
       expect.objectContaining({ message: expect.not.stringContaining('secret-value') }),
     );
+  });
+
+  describe('ai', () => {
+    const OPENAI = {
+      AI_PROVIDER: 'openai_compatible',
+      AI_BASE_URL: 'https://api.groq.com/openai/v1',
+      AI_API_KEY: 'gsk_super-secret-key',
+      AI_MODEL: 'openai/gpt-oss-120b',
+    } as const;
+
+    it('defaults to the fake provider outside production', () => {
+      expect(loadConfig({ DATABASE_URL, NODE_ENV: 'test' }).AI_PROVIDER).toBe('fake');
+    });
+
+    it('requires AI_PROVIDER in production', () => {
+      expect(() => loadConfig({ ...PROD_BASE, AI_PROVIDER: undefined })).toThrow(/AI_PROVIDER/);
+      expect(loadConfig(PROD_BASE).AI_PROVIDER).toBe('disabled');
+    });
+
+    it('requires the base URL, key and model for openai_compatible, never printing the key', () => {
+      expect(() => loadConfig({ DATABASE_URL, AI_PROVIDER: 'openai_compatible' })).toThrow(
+        /AI_BASE_URL[\s\S]*AI_API_KEY[\s\S]*AI_MODEL/,
+      );
+      try {
+        loadConfig({ DATABASE_URL, ...OPENAI, AI_MODEL: '' });
+      } catch (error) {
+        expect(String(error)).toMatch(/AI_MODEL/);
+        expect(String(error)).not.toContain('super-secret');
+      }
+      expect(loadConfig({ ...PROD_BASE, ...OPENAI })).toMatchObject({
+        AI_PROVIDER: 'openai_compatible',
+        AI_MODEL: 'openai/gpt-oss-120b',
+      });
+    });
+
+    it('reads the numeric limits', () => {
+      expect(
+        loadConfig({
+          DATABASE_URL,
+          AI_MAX_OUTPUT_TOKENS: '16000',
+          AI_MAX_JOBS_PER_WORKSPACE_PER_DAY: '5',
+          AI_WORKER_CONCURRENCY: '2',
+          AI_TIMEOUT_MS: '30000',
+        }),
+      ).toMatchObject({
+        AI_MAX_OUTPUT_TOKENS: 16000,
+        AI_MAX_JOBS_PER_WORKSPACE_PER_DAY: 5,
+        AI_WORKER_CONCURRENCY: 2,
+        AI_TIMEOUT_MS: 30000,
+      });
+    });
+
+    it.each([
+      { AI_PROVIDER: 'anthropic' },
+      { AI_BASE_URL: 'ftp://example.com' },
+      { AI_WORKER_CONCURRENCY: '0' },
+      { AI_TIMEOUT_MS: 'soon' },
+    ])('rejects %j', (env) => {
+      expect(() => loadConfig({ DATABASE_URL, ...env })).toThrow(/AI_/);
+    });
   });
 });

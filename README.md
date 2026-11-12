@@ -133,7 +133,7 @@ pnpm dev                             # web http://localhost:3000, API http://loc
 | [docs/development.md](docs/development.md)               | Local setup, environment variables, Docker, project structure, testing, contributing. |
 | [docs/deployment.md](docs/deployment.md)                 | Vercel, Render and Neon setup, and the variables each host needs.                     |
 | [docs/design/realtime.md](docs/design/realtime.md)       | Planned Socket.IO rooms, events and broadcast rules.                                  |
-| [docs/design/ai-analysis.md](docs/design/ai-analysis.md) | Planned AI analysis pipeline, background jobs and failure handling.                   |
+| [docs/design/ai-analysis.md](docs/design/ai-analysis.md) | AI analysis pipeline, background jobs and failure handling.                           |
 | [docs/roadmap.md](docs/roadmap.md)                       | Detailed current status, the full roadmap and future enhancements.                    |
 
 ---
@@ -150,7 +150,7 @@ pnpm dev                             # web http://localhost:3000, API http://loc
 | 5. Comments and threads          | **In progress** |
 | 6. Approvals and lifecycle       | **Implemented** |
 | 7. Real-time                     | Planned         |
-| 8. AI analysis                   | Planned         |
+| 8. AI analysis                   | **In progress** |
 | 9. Hardening and deployment      | Planned         |
 | 10. GitHub integration and OAuth | Planned         |
 | 11. Email and search             | Planned         |

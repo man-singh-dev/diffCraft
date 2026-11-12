@@ -4,6 +4,7 @@ import type { Config } from './config.js';
 import { loggerOptions } from './logger.js';
 import { createMailer, type Mailer } from './mail/mailer.js';
 import { mailerPlugin } from './mail/plugin.js';
+import { aiPlugin, type AiPluginOptions } from './modules/ai/plugin.js';
 import { requestUserPlugin } from './modules/auth/require-auth.js';
 import { authRoutes } from './modules/auth/routes.js';
 import {
@@ -28,6 +29,7 @@ export async function buildApp(
     mailer?: Mailer;
     realtimeLimits?: Partial<RealtimeLimits>;
     relay?: NotificationsPluginOptions['relay'];
+    ai?: Omit<AiPluginOptions, 'config'>;
   } = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
@@ -47,6 +49,8 @@ export async function buildApp(
   await app.register(requestWorkspacePlugin);
   // Before realtime: preClose hooks run in registration order, so the relay stops before Socket.IO closes.
   await app.register(notificationsPlugin, { ...(deps.relay && { relay: deps.relay }) });
+  // Also before realtime: the worker finishes in-flight jobs, and publishes their results, before Socket.IO closes.
+  await app.register(aiPlugin, { config, ...deps.ai });
   await app.register(realtimePlugin, {
     webOrigin: config.WEB_ORIGIN,
     redisUrl: config.REDIS_URL,

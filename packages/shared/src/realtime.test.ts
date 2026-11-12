@@ -28,6 +28,8 @@ const thread = {
 describe('review room event schemas', () => {
   it('has one schema per event', () => {
     expect(Object.keys(ReviewRoomEventSchemas).sort()).toEqual([
+      'analysis:completed',
+      'analysis:status',
       'presence',
       'review:changed',
       'review:deleted',

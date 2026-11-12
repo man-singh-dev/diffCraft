@@ -9,7 +9,7 @@ The REST API design: conventions, every implemented and proposed endpoint, and w
 ## API Design
 
 > [!NOTE]
-> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, the five member endpoints, the seven review endpoints, the seven comment endpoints, the ten approval endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
+> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, the five member endpoints, the seven review endpoints, the seven comment endpoints, the ten approval endpoints, the three AI analysis endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
 
 Conventions (the base path, error shape, `400`, `401`, `403`, `404`, `413`, `422` and cursor pagination are **Implemented**; the rest are proposed):
 
@@ -257,11 +257,13 @@ The server emits these to the room `review:<reviewId>` after the change has comm
 - `actorId`: the user who made the change (uuid), or `null`.
 - `at`: an ISO 8601 timestamp read from the database clock when the event was built.
 
-| Event            | Extra fields                                                       | Emitted by                                                                                                                                                                                                                                           |
-| ---------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `thread:upsert`  | `thread`: the full thread with all its comments (`ThreadSchema`)   | `POST …/threads`, `PATCH …/threads/:threadId`, `POST …/threads/:threadId/comments`, `PATCH …/threads/:threadId/comments/:commentId`, `DELETE …/threads/:threadId/comments/:commentId`                                                                |
-| `review:changed` | `reason`: `reviewers`, `decision`, `status`, `merged` or `updated` | `POST …/reviewers` and `DELETE …/reviewers/:userId` (`reviewers`), `POST …/decisions` (`decision`), `POST …/merge` (`merged`), `PATCH /api/v1/workspaces/:workspaceId/reviews/:reviewNumber` (`status` when the status changed, otherwise `updated`) |
-| `review:deleted` | none                                                               | `DELETE /api/v1/workspaces/:workspaceId/reviews/:reviewNumber`                                                                                                                                                                                       |
+| Event                | Extra fields                                                       | Emitted by                                                                                                                                                                                                                                           |
+| -------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `thread:upsert`      | `thread`: the full thread with all its comments (`ThreadSchema`)   | `POST …/threads`, `PATCH …/threads/:threadId`, `POST …/threads/:threadId/comments`, `PATCH …/threads/:threadId/comments/:commentId`, `DELETE …/threads/:threadId/comments/:commentId`                                                                |
+| `review:changed`     | `reason`: `reviewers`, `decision`, `status`, `merged` or `updated` | `POST …/reviewers` and `DELETE …/reviewers/:userId` (`reviewers`), `POST …/decisions` (`decision`), `POST …/merge` (`merged`), `PATCH /api/v1/workspaces/:workspaceId/reviews/:reviewNumber` (`status` when the status changed, otherwise `updated`) |
+| `review:deleted`     | none                                                               | `DELETE /api/v1/workspaces/:workspaceId/reviews/:reviewNumber`                                                                                                                                                                                       |
+| `analysis:status`    | `job`: the full `AiJob`                                            | `POST …/analyses` (`queued`, `actorId` = requester) and the AI worker on every status change (`running`, `queued` again before a retry, `succeeded`, `failed`; `actorId: null`)                                                                      |
+| `analysis:completed` | `jobId`, `findings`: how many findings were stored                 | The AI worker after a job succeeds (`actorId: null`). Fetch them with `GET …/analyses/latest`.                                                                                                                                                       |
 
 `…` is `/api/v1/workspaces/:workspaceId/reviews/:reviewNumber`. A request that fails emits nothing. `review:changed` says only what kind of change happened: re-fetch the review (and its state, reviewers or decisions) over HTTP. `thread:upsert` replaces the client's copy of that thread when its `at` is not older than the copy's. Approval rule changes (`PATCH /api/v1/workspaces/:workspaceId/rules`) are not broadcast yet.
 
@@ -296,17 +298,23 @@ Never the person who acted, only current workspace members, and one notification
 
 **Live delivery.** Every socket joins the room `user:<userId>` when it connects (no client event). The outbox relay emits `notification:new` with the `Notification` to that room, so every tab of that user gets it. Delivery is **at least once**: the same notification can arrive twice (for example after an API restart), so clients dedupe by `id`. A client that was offline fetches the list or the unread count over HTTP.
 
-### AI analysis and findings
+### AI analysis
 
-| Method  | Path                                  | Purpose                                                                                              | Auth                              |
-| ------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `POST`  | `/api/v1/reviews/:reviewId/analyses`  | Request an analysis; returns `202` with a job ID, or the existing job if an identical one is active. | Member (not viewer), rate-limited |
-| `GET`   | `/api/v1/reviews/:reviewId/analyses`  | List analysis jobs and their statuses.                                                               | Member                            |
-| `GET`   | `/api/v1/analyses/:jobId`             | Get one job's status, attempts and error code.                                                       | Member                            |
-| `POST`  | `/api/v1/analyses/:jobId/cancel`      | Cancel a queued job.                                                                                 | Requester or Admin                |
-| `GET`   | `/api/v1/reviews/:reviewId/findings`  | List findings (filters: `severity`, `category`, `fileId`, `status`).                                 | Member                            |
-| `PATCH` | `/api/v1/findings/:findingId`         | Dismiss or reopen a finding.                                                                         | Participant                       |
-| `POST`  | `/api/v1/findings/:findingId/comment` | Convert a finding into a discussion thread on the same lines.                                        | Participant                       |
+**Implemented** (backend, Stage 8A). How it works: [design/ai-analysis.md](design/ai-analysis.md). `…` is `/api/v1/workspaces/:workspaceId/reviews/:reviewNumber`; non-members and unknown workspaces, reviews and findings get the same `404` as every other review route.
+
+| Method | Path                            | Purpose                                                                                                                                                                                                                                           | Auth                |
+| ------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `POST` | `…/analyses`                    | Start an analysis. `202` with the new `AiJob`, or `200` with the active job for the same review, prompt version and model. `409 review_not_open` (closed or merged), `429 analysis_limit_reached` with `Retry-After`, `503 ai_disabled`. No body. | Member (not viewer) |
+| `GET`  | `…/analyses/latest`             | `200 { job: AiJob \| null, findings: AiFinding[] }`: the newest job, and the non-dismissed findings of the newest **succeeded** job (so findings stay visible while a new run is queued).                                                         | Viewer              |
+| `POST` | `…/findings/:findingId/dismiss` | `200 AiFinding`. Idempotent: dismissing again keeps the first `dismissedAt`. `404 finding_not_found` for a finding of another review.                                                                                                             | Member (not viewer) |
+
+`AiJob` (`AiJobSchema` in `packages/shared/src/ai.ts`): `{ id, reviewId, status: 'queued' | 'running' | 'succeeded' | 'failed', requestedBy, model, promptVersion, attempts, errorCode, summary, inputTokens, outputTokens, droppedFindings, createdAt, startedAt, finishedAt }`. `errorCode` is set on failure (`provider_timeout`, `provider_rate_limited`, `provider_auth`, `invalid_output`, `timed_out`, …) and, while a job waits for a retry, holds the last error.
+
+`AiFinding` (`AiFindingDtoSchema`): `{ id, jobId, reviewFileId, filePath, side: 'old' | 'new', lineStart, lineEnd, category: 'bug' | 'security' | 'performance', severity: 'info' | 'low' | 'medium' | 'high' | 'critical', title, explanation, suggestion, confidence, dismissedAt, createdAt }`. Line numbers use the same old/new numbering as comment anchors.
+
+The daily limit (`AI_MAX_JOBS_PER_WORKSPACE_PER_DAY`, default 20) counts every job the workspace created in the last 24 hours.
+
+Planned: listing past jobs, cancelling, converting a finding into a thread.
 
 ### Operational
 

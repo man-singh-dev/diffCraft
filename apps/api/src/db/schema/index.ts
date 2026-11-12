@@ -1,3 +1,4 @@
+export * from './ai.js';
 export * from './approvals.js';
 export * from './comments.js';
 export * from './email-verification.js';

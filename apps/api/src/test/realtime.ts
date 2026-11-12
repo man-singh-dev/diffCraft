@@ -53,6 +53,7 @@ export async function startApp(realtimeLimits?: Partial<RealtimeLimits>) {
       mailer: new FakeMailer(),
       // Test files share one database: a running relay would publish other files' outbox rows.
       relay: { enabled: false },
+      ai: { worker: false },
       ...(realtimeLimits && { realtimeLimits }),
     },
   );

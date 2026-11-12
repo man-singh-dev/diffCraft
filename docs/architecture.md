@@ -207,7 +207,9 @@ flowchart LR
 
 **In use now:** Next.js, TypeScript, Tailwind CSS, Node.js, Fastify (with `@fastify/cookie`), Zod, PostgreSQL with Drizzle ORM (schema, migrations and the `pg` driver), Argon2id (`@node-rs/argon2`), Redis (`ioredis`), Socket.IO with `@socket.io/redis-adapter`, esbuild (API production bundle), Vitest, Docker (local PostgreSQL, Redis and Mailpit), GitHub Actions CI, and Vercel, Render and Neon for deployment.
 
-**Planned:** BullMQ, the LLM provider integration and OpenAPI generation.
+BullMQ (AI analysis jobs) and the official `openai` SDK, pointed at any OpenAI-compatible provider, are in use for AI analysis (Stage 8A).
+
+**Planned:** OpenAPI generation.
 
 | Layer            | Technology                                    | Rationale                                                                                                            |
 | ---------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -237,11 +239,13 @@ flowchart LR
 
 ### Asynchronous path — AI analysis
 
-1. A client requests analysis; the API validates input and permissions.
-2. The API inserts an `ai_analysis_jobs` row (status `queued`) and enqueues a BullMQ job whose ID is derived from the job's idempotency key.
-3. The API returns `202 Accepted` with the job ID.
-4. The worker loads the relevant diff hunks, calls the LLM provider, validates the response, and writes findings and the job's final status in one transaction.
-5. The worker publishes a completion event; the API's Socket.IO adapter delivers it to authorized clients, which then fetch findings over HTTP.
+**Implemented** (backend, Stage 8A). Details: [design/ai-analysis.md](design/ai-analysis.md).
+
+1. A client requests analysis; the API checks membership, that AI is enabled and that the review is open.
+2. In one transaction the API returns the active job with the same idempotency key if there is one, checks the workspace's daily limit and inserts an `ai_analysis_jobs` row (status `queued`).
+3. After the commit it enqueues a BullMQ job whose ID is the job's ID and returns `202 Accepted` with the job.
+4. The worker (inside the API process) claims the job with a conditional update, loads the diff hunks, builds bounded and redacted context, makes one model call, validates and maps the output, and writes findings and the final status in one transaction.
+5. The worker publishes `analysis:status` / `analysis:completed` to the review room; clients fetch findings over HTTP.
 
 ### Recovery path
 
@@ -495,7 +499,7 @@ flowchart LR
 - The browser only ever talks to the Vercel origin. Next.js rewrites `/api/:path*` to the Render API (`API_URL`), so the session cookie belongs to the web app's origin and no CORS is needed.
 - The API is a single free Render instance. It sleeps after inactivity (cold starts of about a minute) and applies pending migrations on start (`start:prod`).
 - Neon hosts PostgreSQL 18; the API uses its direct (non-pooled) connection string.
-- No Redis and no worker are deployed yet.
+- No Redis is deployed yet, so realtime and AI analysis are off in production until one is added. The AI worker runs inside the API process (no separate service); see [deployment.md](deployment.md#ai-analysis).
 
 ### Future architecture (Planned)
 
@@ -538,7 +542,7 @@ flowchart TB
 
 Notes:
 
-- Only the worker needs outbound access to the LLM provider and holds its API key.
+- Only the worker needs outbound access to the LLM provider and holds its API key. Today the worker runs inside each API process; it can move to its own entrypoint without code changes to the job logic.
 - Socket.IO across multiple API instances requires the Redis adapter and either sticky sessions or WebSocket-only transport.
 - Migrations run as a separate release step, not on application start (unlike the current single-instance setup).
 - Transactional email (Stage 11) is sent by a background job on the same queue, not inline in API requests.

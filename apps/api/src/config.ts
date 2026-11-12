@@ -2,6 +2,10 @@ import { formatZodIssues } from '@diffcraft/shared';
 import { z } from 'zod';
 
 const port = z.coerce.number().int().min(1).max(65535);
+const blankAsUnset = (value: unknown) => (value === '' ? undefined : value);
+
+export const AI_PROVIDERS = ['openai_compatible', 'fake', 'disabled'] as const;
+export type AiProviderName = (typeof AI_PROVIDERS)[number];
 
 const ConfigSchema = z
   .object({
@@ -24,10 +28,33 @@ const ConfigSchema = z
     MAIL_SMTP_URL: z.url({ protocol: /^smtps?$/ }).optional(),
     MAIL_FROM: z.string().trim().min(1).optional(),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }).optional(),
+    AI_PROVIDER: z.enum(AI_PROVIDERS).optional(),
+    AI_BASE_URL: z.preprocess(blankAsUnset, z.url({ protocol: /^https?$/ }).optional()),
+    AI_API_KEY: z.preprocess(blankAsUnset, z.string().trim().min(1).optional()),
+    AI_MODEL: z.preprocess(blankAsUnset, z.string().trim().min(1).optional()),
+    AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).max(200_000).default(8000),
+    AI_MAX_JOBS_PER_WORKSPACE_PER_DAY: z.coerce.number().int().min(1).max(10_000).default(20),
+    AI_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(1),
+    AI_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(60_000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.REDIS_URL) {
       ctx.addIssue({ code: 'custom', path: ['REDIS_URL'], message: 'Required in production' });
+    }
+    // Production must choose on purpose: the fake provider would silently produce made-up findings.
+    if (env.NODE_ENV === 'production' && !env.AI_PROVIDER) {
+      ctx.addIssue({ code: 'custom', path: ['AI_PROVIDER'], message: 'Required in production' });
+    }
+    if (env.AI_PROVIDER === 'openai_compatible') {
+      for (const key of ['AI_BASE_URL', 'AI_API_KEY', 'AI_MODEL'] as const) {
+        if (!env[key]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: 'Required when AI_PROVIDER=openai_compatible',
+          });
+        }
+      }
     }
     // Outside production, smtp falls back to the local Mailpit; production must name its provider.
     if (env.NODE_ENV !== 'production' || env.MAIL_TRANSPORT !== 'smtp') return;
@@ -37,8 +64,9 @@ const ConfigSchema = z
       }
     }
   })
-  .transform(({ API_PORT, PORT, MAIL_SMTP_URL, MAIL_FROM, REDIS_URL, ...rest }) => ({
+  .transform(({ API_PORT, PORT, MAIL_SMTP_URL, MAIL_FROM, REDIS_URL, AI_PROVIDER, ...rest }) => ({
     ...rest,
+    AI_PROVIDER: AI_PROVIDER ?? 'fake',
     API_PORT: API_PORT ?? PORT ?? 4000,
     MAIL_SMTP_URL: MAIL_SMTP_URL ?? 'smtp://localhost:1025',
     MAIL_FROM: MAIL_FROM ?? 'DiffCraft <noreply@localhost>',

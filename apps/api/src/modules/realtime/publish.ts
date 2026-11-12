@@ -7,7 +7,7 @@ import { safeError } from './socket-server.js';
 
 type Executor = Pick<Database, 'execute'>;
 
-async function databaseTime(db: Executor): Promise<string> {
+export async function databaseTime(db: Executor): Promise<string> {
   // Formatted in SQL because raw execute() returns timestamptz as a driver-formatted string, not a Date.
   const { rows } = await db.execute<{ at: string }>(
     sql`select to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at`,
