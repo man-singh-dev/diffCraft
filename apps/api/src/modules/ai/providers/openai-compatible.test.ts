@@ -12,7 +12,7 @@ import {
 
 const OPTIONS = {
   baseURL: 'https://api.groq.com/openai/v1',
-  apiKey: 'gsk_test',
+  apiKey: 'test-api-key',
   model: 'openai/gpt-oss-120b',
   maxOutputTokens: 8000,
   timeoutMs: 60_000,

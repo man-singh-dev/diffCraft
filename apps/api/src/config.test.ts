@@ -158,7 +158,7 @@ describe('loadConfig', () => {
     const OPENAI = {
       AI_PROVIDER: 'openai_compatible',
       AI_BASE_URL: 'https://api.groq.com/openai/v1',
-      AI_API_KEY: 'gsk_super-secret-key',
+      AI_API_KEY: 'test-super-secret-key',
       AI_MODEL: 'openai/gpt-oss-120b',
     } as const;
 
