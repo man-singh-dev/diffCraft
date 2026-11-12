@@ -40,6 +40,8 @@ erDiagram
     ai_analysis_jobs ||--o{ ai_findings : "produces"
     reviews ||--o{ ai_findings : "has"
     review_files |o--o{ ai_findings : "located in"
+    ai_findings ||--o{ finding_feedback : "rated by"
+    users ||--o{ finding_feedback : "gives"
 
     users {
         uuid id PK "uuidv7()"
@@ -183,6 +185,13 @@ erDiagram
         timestamptz dismissed_at "nullable"
         timestamptz created_at
     }
+    finding_feedback {
+        uuid finding_id PK, FK
+        uuid user_id PK, FK
+        boolean helpful
+        timestamptz created_at
+        timestamptz updated_at
+    }
 ```
 
 ### Table responsibilities
@@ -202,6 +211,7 @@ erDiagram
 | `review_events`     | The review's history: reviewer assigned/removed, decisions, closed, reopened, merged, with the actor and a small `jsonb` payload (e.g. `{ "userId": … }`). Written in the same transaction as the change it records. **Implemented.**                                                                                                                                                                                                                                                         |
 | `ai_analysis_jobs`  | Lifecycle and audit record for each analysis request: status, attempts, error code, model and prompt version.                                                                                                                                                                                                                                                                                                                                                                                 |
 | `ai_findings`       | Structured findings from a job, linked to the review and — when applicable — a specific file, side and line range.                                                                                                                                                                                                                                                                                                                                                                            |
+| `finding_feedback`  | One helpful / not-helpful answer per (finding, user); answering again updates the row. Deleted with its finding or its user (cascade). Index on `user_id` for the user cascade. **Implemented** (migration `0008_finding_feedback`).                                                                                                                                                                                                                                                          |
 
 `workspaces.required_approvals` and `workspaces.require_resolved_threads` hold the workspace's merge rules. `reviews.status` gained `merged` (final), with `merged_by` / `merged_at`. In-app notifications use `notifications` and `outbox_events` (migration `0006_notifications`); see [architecture.md](architecture.md#notifications-and-the-transactional-outbox).
 

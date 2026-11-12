@@ -2,6 +2,8 @@
 
 import { canComment } from '@diffcraft/shared';
 import { targetKey, type LineTarget } from '@/lib/thread-anchors';
+import { useLineFindings } from './ai-analysis-provider';
+import { FindingItem } from './ai-finding';
 import { CommentComposer } from './comment-composer';
 import { CommentThread } from './comment-thread';
 import { useComments } from './comments-provider';
@@ -33,15 +35,19 @@ function LineConversation({
   lineContent: string;
 }) {
   const comments = useComments();
+  const findings = useLineFindings(keys);
   if (!comments) return null;
   const threads = comments.threadsForKeys(keys);
   const { composer } = comments;
   const composing =
     target !== null && composer !== null && targetKey(composer) === targetKey(target);
-  if (threads.length === 0 && !composing) return null;
+  if (threads.length === 0 && !composing && findings.length === 0) return null;
 
   return (
     <div className="space-y-2 whitespace-normal p-2">
+      {findings.map((finding) => (
+        <FindingItem key={finding.id} finding={finding} compact />
+      ))}
       {threads.map((thread) => (
         <CommentThread key={thread.id} thread={thread} />
       ))}
@@ -66,11 +72,12 @@ function hasConversation(
   comments: NonNullable<ReturnType<typeof useComments>>,
   keys: string[],
   target: LineTarget | null,
+  findingCount: number,
 ): boolean {
   const { composer } = comments;
   const composing =
     target !== null && composer !== null && targetKey(composer) === targetKey(target);
-  return composing || comments.threadsForKeys(keys).length > 0;
+  return composing || findingCount > 0 || comments.threadsForKeys(keys).length > 0;
 }
 
 export function UnifiedThreadsRow({
@@ -85,7 +92,8 @@ export function UnifiedThreadsRow({
   colSpan: number;
 }) {
   const comments = useComments();
-  if (!comments || !hasConversation(comments, keys, target)) return null;
+  const findings = useLineFindings(keys);
+  if (!comments || !hasConversation(comments, keys, target, findings.length)) return null;
   return (
     <tr>
       <td colSpan={colSpan} className="border-y border-slate-800 bg-slate-950/60">
@@ -111,9 +119,13 @@ export function SplitThreadsRow({
   halfSpan: number;
 }) {
   const comments = useComments();
+  const leftFindings = useLineFindings(left?.keys ?? []);
+  const rightFindings = useLineFindings(right?.keys ?? []);
   if (!comments) return null;
-  const leftShown = left !== null && hasConversation(comments, left.keys, left.target);
-  const rightShown = right !== null && hasConversation(comments, right.keys, right.target);
+  const leftShown =
+    left !== null && hasConversation(comments, left.keys, left.target, leftFindings.length);
+  const rightShown =
+    right !== null && hasConversation(comments, right.keys, right.target, rightFindings.length);
   if (!leftShown && !rightShown) return null;
   return (
     <tr>

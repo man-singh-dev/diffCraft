@@ -239,13 +239,14 @@ BullMQ (AI analysis jobs) and the official `openai` SDK, pointed at any OpenAI-c
 
 ### Asynchronous path — AI analysis
 
-**Implemented** (backend, Stage 8A). Details: [design/ai-analysis.md](design/ai-analysis.md).
+**Implemented** (backend Stage 8A; web UI and feedback Stage 8B). Details: [design/ai-analysis.md](design/ai-analysis.md).
 
 1. A client requests analysis; the API checks membership, that AI is enabled and that the review is open.
 2. In one transaction the API returns the active job with the same idempotency key if there is one, checks the workspace's daily limit and inserts an `ai_analysis_jobs` row (status `queued`).
 3. After the commit it enqueues a BullMQ job whose ID is the job's ID and returns `202 Accepted` with the job.
 4. The worker (inside the API process) claims the job with a conditional update, loads the diff hunks, builds bounded and redacted context, makes one model call, validates and maps the output, and writes findings and the final status in one transaction.
 5. The worker publishes `analysis:status` / `analysis:completed` to the review room; clients fetch findings over HTTP.
+6. Reviewers see the findings on the review page and inline in the diff, rate them helpful or not, dismiss them, or start a comment thread from one.
 
 ### Recovery path
 

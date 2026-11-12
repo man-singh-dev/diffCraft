@@ -36,6 +36,8 @@ function setup({ connected = true } = {}) {
     onReviewChanged: vi.fn(),
     onReviewDeleted: vi.fn(),
     onPresence: vi.fn(),
+    onAnalysisStatus: vi.fn(),
+    onAnalysisCompleted: vi.fn(),
     onResync: vi.fn(),
   };
   const unsubscribe = subscribeToReviewRoom(connection, {
@@ -147,6 +149,37 @@ describe('subscribeToReviewRoom', () => {
     socket.receive('presence', { ...presence, viewers: [{ id: 'nope', displayName: 'X' }] });
     socket.receive('presence', presence);
     expect(handlers.onPresence.mock.calls).toEqual([[presence]]);
+  });
+
+  it('validates analysis events and passes on those for this review', () => {
+    const { socket, handlers } = setup();
+    socket.ack('review:join', 0, joinAck);
+    const job = {
+      id: '01a17e5e-aa56-7985-be46-bf5f1c7e7f30',
+      reviewId: REVIEW,
+      status: 'running',
+      requestedBy: ACTOR,
+      model: 'm',
+      promptVersion: 'review-v1',
+      attempts: 1,
+      errorCode: null,
+      summary: null,
+      inputTokens: null,
+      outputTokens: null,
+      droppedFindings: 0,
+      createdAt: AT,
+      startedAt: AT,
+      finishedAt: null,
+    };
+    const status = { reviewId: REVIEW, actorId: null, at: AT, job };
+    const completed = { reviewId: REVIEW, actorId: null, at: AT, jobId: job.id, findings: 2 };
+    socket.receive('analysis:status', { ...status, job: { ...job, status: 'done' } });
+    socket.receive('analysis:status', { ...status, reviewId: OTHER_REVIEW });
+    socket.receive('analysis:status', status);
+    socket.receive('analysis:completed', { ...completed, findings: -1 });
+    socket.receive('analysis:completed', completed);
+    expect(handlers.onAnalysisStatus.mock.calls).toEqual([[status]]);
+    expect(handlers.onAnalysisCompleted.mock.calls).toEqual([[completed]]);
   });
 
   it('ignores events while disconnected, until the room is joined again', () => {

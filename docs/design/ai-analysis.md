@@ -1,6 +1,6 @@
 # AI Analysis
 
-How AI review works: the request, the job queue, the worker, the model call and how its output is checked before anyone sees it. **Implemented (Stage 8A, backend).** The review UI for findings is Stage 8B.
+How AI review works: the request, the job queue, the worker, the model call and how its output is checked before anyone sees it. **Implemented:** the backend (Stage 8A) and the web UI with feedback (Stage 8B).
 
 [← Back to README](../../README.md)
 
@@ -168,9 +168,18 @@ Logged: job id, review id, attempt, durations, file and finding counts, token co
 
 - `ai_analysis_jobs`: `id` (uuidv7), `workspace_id`, `review_id` (cascade), `requested_by` (set null), `status` (`queued` | `running` | `succeeded` | `failed`), `idempotency_key`, `prompt_version`, `model`, `attempts`, `error_code`, `summary`, `input_tokens`, `output_tokens` (summed over every call, including failed attempts and repairs), `dropped_findings`, `created_at`, `started_at` (last start), `finished_at`. Indexes: the partial unique key, `(review_id, created_at desc)`, `(workspace_id, created_at)` for the daily limit, and a partial index on active statuses for the sweeper.
 - `ai_findings`: `id`, `job_id` / `review_id` / `review_file_id` (cascade), `side`, `line_start`, `line_end`, `category`, `severity`, `title`, `explanation`, `suggestion`, `confidence` (0–1 check), `dismissed_at`, `created_at`. Indexes on `review_id`, `job_id`, `review_file_id`.
+- `finding_feedback`: primary key `(finding_id, user_id)`, `helpful`, `created_at`, `updated_at`; cascades from the finding and the user. `PUT …/feedback` upserts, `DELETE` removes the caller's row. `GET …/analyses/latest` returns each finding's `myFeedback` and `feedback` counts from one grouped query (left join, `count(*) filter (…)`), not one query per finding.
+
+## Web UI
+
+- **Review page:** an "AI review" card above the conversation, labeled "AI" and "AI-generated and may be wrong". "Run AI review" is hidden when `enabled` is false and for viewers, and disabled while a job is queued or running and for a review that isn't open. The card shows _Waiting…_ (queued), _Analyzing…_ with a spinner (running), the summary, counts by severity, model and finish time (succeeded), or a message per `errorCode` with "Try again" (failed). A `429` says when the workspace can run again, from `Retry-After`. A visually hidden `role="status"` region announces status changes.
+- **Findings:** grouped critical → info, each with its category, title, a `file:line` link to the line on the files page, explanation, suggestion as a code block and confidence. Members get 👍 / 👎 (toggles with `aria-pressed`), Dismiss, and Start thread. Feedback and dismiss are optimistic and roll back with an error message if the call fails.
+- **Start thread** creates a normal line thread through the existing comment action, with the finding's title and explanation, plus a ` ```suggestion ` block when there is a suggestion, the finding is on the new side **and covers one line** (a suggestion block replaces exactly the line its thread is on). The finding is then dismissed.
+- **Files page:** findings appear compact under their first line, on their side, in the same row as that line's threads, in both unified and split view. A "Show AI findings" checkbox hides them; the choice is kept in `localStorage` and falls back to memory when storage is unavailable.
+- **Live:** the page's single review-room subscription (in `CommentsProvider`) passes `analysis:status` and `analysis:completed`, already validated with the shared schemas, to the AI state through a small listener bus (a second subscription would send its own `review:leave`). A status event updates the card unless it is older than what is shown; `analysis:completed` and a reconnect refetch `…/analyses/latest`. Every viewer of the review gets the updates, not only the person who clicked.
+- **Server Actions** (`apps/web/src/lib/ai-actions.ts`) check every argument (ids, review number, feedback body) before calling the API and map API errors to messages (`ai-errors.ts`).
 
 ## Not built yet
 
-- The findings UI (Stage 8B): showing findings on lines, labeled as AI-generated, dismissing and converting a finding into a thread.
 - Cancelling a job, analyzing a subset of files, and splitting very large reviews over several calls.
 - A separate worker process; today every API instance runs a worker.

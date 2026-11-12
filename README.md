@@ -30,13 +30,13 @@ More in [docs/architecture.md](docs/architecture.md).
 ## Screenshots
 
 > [!NOTE]
-> So far the UI has the home, sign-up, login, email verification, profile, workspace and review pages (review list, new review, review details with its file list, the "Files changed" diff viewer, and line and review comments). The AI screens below don't exist yet; their placeholders will be replaced with real screenshots once they are implemented.
+> So far the UI has the home, sign-up, login, email verification, profile, workspace and review pages (review list, new review, review details with its file list, the "Files changed" diff viewer, line and review comments, and the AI review card with inline findings). Screenshots will replace the placeholders below.
 
 | Screen                                                             | Status                         |
 | ------------------------------------------------------------------ | ------------------------------ |
 | _Placeholder:_ Review list with status filters                     | Implemented, no screenshot yet |
 | _Placeholder:_ Side-by-side diff with inline comment thread        | Implemented, no screenshot yet |
-| _Placeholder:_ AI findings panel with severity and line references | Planned                        |
+| _Placeholder:_ AI findings panel with severity and line references | Implemented, no screenshot yet |
 | _Placeholder:_ Review approval / change-request panel              | Planned                        |
 
 <!-- Example once available:
@@ -55,6 +55,7 @@ More in [docs/architecture.md](docs/architecture.md).
 - Reviews from a pasted or uploaded unified diff (UTF-8 or UTF-16, up to 1 MiB) with a live parse preview; a review list with status and "only mine" filters; review pages with the changed files; edit, close, reopen and delete for the author or an admin ([API](docs/api.md#reviews)).
 - Comment threads on any line of the diff or on the review as a whole: replies, edit, soft delete and resolve/reopen, with the same permission rules in the API and the UI ([security](docs/security.md#comments-implemented)).
 - A "Files changed" diff viewer: unified and side-by-side views, server-side syntax highlighting, word-level changes, linkable line numbers, and large files loaded on demand ([architecture](docs/architecture.md#diff-viewer)).
+- AI review: a background worker asks an OpenAI-compatible model for bugs, security and performance issues, with redaction and validated, line-mapped findings. Findings show on the review page and inline in the diff, update live, and can be rated helpful or not, dismissed, or turned into a comment thread ([design](docs/design/ai-analysis.md)).
 - Server-side sessions in HttpOnly cookies, with Argon2id password hashing and a CSRF Origin check ([security](docs/security.md)).
 - PostgreSQL schema and migrations for users, sessions, workspaces, memberships, reviews and review files ([database](docs/database.md)).
 - `GET /health` and `GET /ready` probes, and a home page showing API health.
@@ -66,7 +67,7 @@ More in [docs/architecture.md](docs/architecture.md).
 - Unified and side-by-side diff views, and review revisions.
 - Line-anchored comments, threads, resolution, and approve / request-changes decisions.
 - Real-time updates and presence over Socket.IO ([design](docs/design/realtime.md)).
-- AI analysis in a background worker, producing structured, line-referenced findings ([design](docs/design/ai-analysis.md)).
+- An evaluation set for AI prompt and model changes, and per-workspace AI settings.
 
 ---
 

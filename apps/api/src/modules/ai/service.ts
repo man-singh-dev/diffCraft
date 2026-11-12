@@ -4,6 +4,7 @@ import { and, asc, count, desc, eq, gt, inArray, isNull, lt, sql } from 'drizzle
 import {
   aiAnalysisJobs,
   aiFindings,
+  findingFeedback,
   reviewFiles,
   type AiAnalysisJobRow,
   type AiFindingRow,
@@ -38,7 +39,17 @@ export function toJobDto(row: AiAnalysisJobRow): AiJob {
   };
 }
 
-function toFindingDto(row: AiFindingRow, filePath: string | null): AiFinding {
+interface FeedbackSummary {
+  mine: boolean | null;
+  helpful: number;
+  notHelpful: number;
+}
+
+function toFindingDto(
+  row: AiFindingRow,
+  filePath: string | null,
+  feedback: FeedbackSummary,
+): AiFinding {
   return {
     id: row.id,
     jobId: row.jobId,
@@ -55,6 +66,8 @@ function toFindingDto(row: AiFindingRow, filePath: string | null): AiFinding {
     confidence: row.confidence,
     dismissedAt: row.dismissedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
+    myFeedback: feedback.mine,
+    feedback: { helpful: feedback.helpful, notHelpful: feedback.notHelpful },
   };
 }
 
@@ -131,23 +144,45 @@ export async function requestAnalysis(
   });
 }
 
-async function findingsWithPaths(
+// One query for findings, paths and feedback: grouping by the primary keys keeps the other columns selectable.
+async function loadFindings(
   db: Executor,
   where: ReturnType<typeof and>,
+  viewerId: string,
 ): Promise<AiFinding[]> {
   const rows = await db
-    .select({ finding: aiFindings, newPath: reviewFiles.newPath, oldPath: reviewFiles.oldPath })
+    .select({
+      finding: aiFindings,
+      newPath: reviewFiles.newPath,
+      oldPath: reviewFiles.oldPath,
+      helpful: sql<number>`count(*) filter (where ${findingFeedback.helpful})`.mapWith(Number),
+      notHelpful: sql<number>`count(*) filter (where not ${findingFeedback.helpful})`.mapWith(
+        Number,
+      ),
+      mine: sql<
+        boolean | null
+      >`bool_or(${findingFeedback.helpful}) filter (where ${findingFeedback.userId} = ${viewerId})`,
+    })
     .from(aiFindings)
     .leftJoin(reviewFiles, eq(reviewFiles.id, aiFindings.reviewFileId))
+    .leftJoin(findingFeedback, eq(findingFeedback.findingId, aiFindings.id))
     .where(where)
+    .groupBy(aiFindings.id, reviewFiles.id)
     .orderBy(asc(reviewFiles.position), asc(aiFindings.lineStart), asc(aiFindings.id));
-  return rows.map((row) => toFindingDto(row.finding, row.newPath ?? row.oldPath ?? null));
+  return rows.map((row) =>
+    toFindingDto(row.finding, row.newPath ?? row.oldPath ?? null, {
+      mine: row.mine,
+      helpful: row.helpful,
+      notHelpful: row.notHelpful,
+    }),
+  );
 }
 
 export async function getLatestAnalysis(
   db: Database,
   reviewId: string,
-): Promise<LatestAnalysisResponse> {
+  viewerId: string,
+): Promise<Omit<LatestAnalysisResponse, 'enabled'>> {
   const newest = (status?: 'succeeded') =>
     db
       .select()
@@ -162,24 +197,29 @@ export async function getLatestAnalysis(
       .limit(1);
   const [[job], [succeeded]] = await Promise.all([newest(), newest('succeeded')]);
   const findings = succeeded
-    ? await findingsWithPaths(
+    ? await loadFindings(
         db,
         and(
           eq(aiFindings.jobId, succeeded.id),
           eq(aiFindings.reviewId, reviewId),
           isNull(aiFindings.dismissedAt),
         ),
+        viewerId,
       )
     : [];
   return { job: job ? toJobDto(job) : null, findings };
 }
 
+const findingInReview = (reviewId: string, findingId: string) =>
+  and(eq(aiFindings.id, findingId), eq(aiFindings.reviewId, reviewId));
+
 export async function dismissFinding(
   db: Database,
   reviewId: string,
   findingId: string,
+  viewerId: string,
 ): Promise<AiFinding | null> {
-  const where = and(eq(aiFindings.id, findingId), eq(aiFindings.reviewId, reviewId));
+  const where = findingInReview(reviewId, findingId);
   // coalesce: dismissing again keeps the first time, so the call is idempotent.
   const updated = await db
     .update(aiFindings)
@@ -187,7 +227,34 @@ export async function dismissFinding(
     .where(where)
     .returning({ id: aiFindings.id });
   if (updated.length === 0) return null;
-  const [finding] = await findingsWithPaths(db, where);
+  const [finding] = await loadFindings(db, where, viewerId);
+  return finding ?? null;
+}
+
+export async function setFindingFeedback(
+  db: Database,
+  reviewId: string,
+  findingId: string,
+  userId: string,
+  helpful: boolean | null,
+): Promise<AiFinding | null> {
+  const where = findingInReview(reviewId, findingId);
+  const [exists] = await db.select({ id: aiFindings.id }).from(aiFindings).where(where);
+  if (!exists) return null;
+  if (helpful === null) {
+    await db
+      .delete(findingFeedback)
+      .where(and(eq(findingFeedback.findingId, findingId), eq(findingFeedback.userId, userId)));
+  } else {
+    await db
+      .insert(findingFeedback)
+      .values({ findingId, userId, helpful })
+      .onConflictDoUpdate({
+        target: [findingFeedback.findingId, findingFeedback.userId],
+        set: { helpful, updatedAt: sql`now()` },
+      });
+  }
+  const [finding] = await loadFindings(db, where, userId);
   return finding ?? null;
 }
 

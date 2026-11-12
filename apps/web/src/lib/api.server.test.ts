@@ -303,6 +303,24 @@ describe('sendApi error details', () => {
     ).toEqual({ ok: false, status: 409, code: 'merge_blocked', fieldErrors: {}, details });
   });
 
+  it('reads Retry-After as whole seconds', async () => {
+    const body = { error: { code: 'analysis_limit_reached', message: 'limit' } };
+    const withHeader = (value: string) =>
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          new Response(JSON.stringify(body), { status: 429, headers: { 'retry-after': value } }),
+        );
+    expect(
+      await sendApi(API_URL, 'POST', '/x', TOKEN, undefined, WorkspaceSchema, withHeader('120')),
+    ).toMatchObject({ status: 429, retryAfterSeconds: 120 });
+    for (const value of ['soon', '-5', '1.5']) {
+      expect(
+        await sendApi(API_URL, 'POST', '/x', TOKEN, undefined, WorkspaceSchema, withHeader(value)),
+      ).not.toHaveProperty('retryAfterSeconds');
+    }
+  });
+
   it('accepts an empty 204 for a schema that expects nothing', async () => {
     const { z } = await import('zod');
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));

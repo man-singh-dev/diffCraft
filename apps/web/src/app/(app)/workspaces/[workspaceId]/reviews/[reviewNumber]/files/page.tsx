@@ -9,7 +9,15 @@ import { ChangeTypeBadge, filePath, LineCounts, StatusBadge } from '@/components
 import { textLink } from '@/components/styles';
 import { CommentsProvider } from '@/components/comments-provider';
 import { LiveStatus, ReviewDeletedBanner, ViewingNow } from '@/components/review-live';
-import { getReview, getReviewFiles, getThreads, getWorkspace } from '@/lib/api.server';
+import { AiAnalysisProvider } from '@/components/ai-analysis-provider';
+import { AiFindingsToggle } from '@/components/ai-review-card';
+import {
+  getLatestAnalysis,
+  getReview,
+  getReviewFiles,
+  getThreads,
+  getWorkspace,
+} from '@/lib/api.server';
 import { getCurrentUser } from '@/lib/auth.server';
 import {
   DIFF_VIEWS,
@@ -42,12 +50,13 @@ export default async function FilesChangedPage(
   ]);
   const view = parseDiffView(searchParams);
   const loadedAt = new Date().toISOString();
-  const [user, workspace, review, files, threads] = await Promise.all([
+  const [user, workspace, review, files, threads, analysis] = await Promise.all([
     getCurrentUser(),
     getWorkspace(workspaceId),
     getReview(workspaceId, reviewNumber),
     getReviewFiles(workspaceId, reviewNumber),
     getThreads(workspaceId, reviewNumber),
+    getLatestAnalysis(workspaceId, reviewNumber),
   ]);
 
   const results = [workspace, review, files, threads];
@@ -102,89 +111,103 @@ export default async function FilesChangedPage(
       initialThreads={threads.ok ? threads.data : null}
       loadedAt={loadedAt}
     >
-      <main className="mx-auto w-full max-w-screen-2xl flex-1 space-y-6 px-4 py-8">
-        <HashTarget />
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="min-w-0 space-y-2">
-            <Link
-              href={`/workspaces/${workspaceId}/reviews/${r.number}`}
-              className={`${textLink} text-sm`}
-            >
-              ← Back to the review
-            </Link>
-            <h1 className="flex flex-wrap items-center gap-3 break-words text-2xl font-bold tracking-tight text-slate-100">
-              <span>
-                <span className="mr-2 font-mono text-slate-500">#{r.number}</span>
-                {r.title}
-              </span>
-              <StatusBadge status={r.status} />
-              <LiveStatus />
-            </h1>
-            <p className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
-              Files changed ({files.data.length})
-              <LineCounts additions={r.additions} deletions={r.deletions} />
-              <ViewingNow />
-            </p>
-            {!threads.ok && (
-              <p className="text-sm text-amber-300">
-                Comments couldn&apos;t be loaded, so commenting is off. Reload the page to try
-                again.
-              </p>
-            )}
-          </div>
-          <nav aria-label="Diff view" className="flex gap-1 rounded-lg border border-slate-800 p-1">
-            {DIFF_VIEWS.map((v) => (
+      <AiAnalysisProvider
+        workspaceId={workspaceId}
+        reviewNumber={reviewNumber}
+        initial={analysis.ok ? analysis.data : null}
+        loadedAt={loadedAt}
+        reviewOpen={r.status === 'open'}
+      >
+        <main className="mx-auto w-full max-w-screen-2xl flex-1 space-y-6 px-4 py-8">
+          <HashTarget />
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0 space-y-2">
               <Link
-                key={v}
-                href={filesPageHref(workspaceId, r.number, searchParams, v)}
-                aria-current={v === view ? 'page' : undefined}
-                className={toggleClass}
-                scroll={false}
+                href={`/workspaces/${workspaceId}/reviews/${r.number}`}
+                className={`${textLink} text-sm`}
               >
-                {VIEW_LABELS[v]}
+                ← Back to the review
               </Link>
-            ))}
-          </nav>
-        </div>
-
-        <ReviewDeletedBanner />
-
-        {files.data.length === 0 ? (
-          <p className="text-sm text-slate-500">This patch changes no files.</p>
-        ) : (
-          <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
-            <nav
-              aria-label="Files"
-              className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto"
-            >
-              <ul className="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900">
-                {files.data.map((file) => (
-                  <li key={file.id}>
-                    <a
-                      href={`#${fileSectionId(file.id)}`}
-                      className="flex flex-wrap items-center gap-2 px-3 py-2 hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400"
-                    >
-                      <ChangeTypeBadge changeType={file.changeType} />
-                      <span className="min-w-0 flex-1 break-all font-mono text-xs text-slate-200">
-                        {filePath(file)}
-                      </span>
-                      <LineCounts additions={file.additions} deletions={file.deletions} />
-                    </a>
-                  </li>
+              <h1 className="flex flex-wrap items-center gap-3 break-words text-2xl font-bold tracking-tight text-slate-100">
+                <span>
+                  <span className="mr-2 font-mono text-slate-500">#{r.number}</span>
+                  {r.title}
+                </span>
+                <StatusBadge status={r.status} />
+                <LiveStatus />
+              </h1>
+              <p className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
+                Files changed ({files.data.length})
+                <LineCounts additions={r.additions} deletions={r.deletions} />
+                <ViewingNow />
+              </p>
+              {!threads.ok && (
+                <p className="text-sm text-amber-300">
+                  Comments couldn&apos;t be loaded, so commenting is off. Reload the page to try
+                  again.
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <AiFindingsToggle />
+              <nav
+                aria-label="Diff view"
+                className="flex gap-1 rounded-lg border border-slate-800 p-1"
+              >
+                {DIFF_VIEWS.map((v) => (
+                  <Link
+                    key={v}
+                    href={filesPageHref(workspaceId, r.number, searchParams, v)}
+                    aria-current={v === view ? 'page' : undefined}
+                    className={toggleClass}
+                    scroll={false}
+                  >
+                    {VIEW_LABELS[v]}
+                  </Link>
                 ))}
-              </ul>
-            </nav>
-
-            <div className="min-w-0 space-y-4">
-              {files.data.map((file) => (
-                <FileSection key={file.id} file={file}>
-                  {fileBody(file)}
-                </FileSection>
-              ))}
+              </nav>
             </div>
           </div>
-        )}
-      </main>
+
+          <ReviewDeletedBanner />
+
+          {files.data.length === 0 ? (
+            <p className="text-sm text-slate-500">This patch changes no files.</p>
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
+              <nav
+                aria-label="Files"
+                className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto"
+              >
+                <ul className="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900">
+                  {files.data.map((file) => (
+                    <li key={file.id}>
+                      <a
+                        href={`#${fileSectionId(file.id)}`}
+                        className="flex flex-wrap items-center gap-2 px-3 py-2 hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400"
+                      >
+                        <ChangeTypeBadge changeType={file.changeType} />
+                        <span className="min-w-0 flex-1 break-all font-mono text-xs text-slate-200">
+                          {filePath(file)}
+                        </span>
+                        <LineCounts additions={file.additions} deletions={file.deletions} />
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+
+              <div className="min-w-0 space-y-4">
+                {files.data.map((file) => (
+                  <FileSection key={file.id} file={file}>
+                    {fileBody(file)}
+                  </FileSection>
+                ))}
+              </div>
+            </div>
+          )}
+        </main>
+      </AiAnalysisProvider>
     </CommentsProvider>
   );
 }

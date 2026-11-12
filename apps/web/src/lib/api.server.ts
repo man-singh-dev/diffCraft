@@ -1,6 +1,8 @@
 import 'server-only';
 
 import {
+  AiFindingDtoSchema,
+  AiJobSchema,
   ApprovalRulesSchema,
   CommentSchema,
   ErrorResponseSchema,
@@ -14,8 +16,11 @@ import {
   ReviewStateSchema,
   WorkspaceMemberSchema,
   WorkspaceSchema,
+  LatestAnalysisResponseSchema,
   ThreadSchema,
   UnreadCountResponseSchema,
+  type AiFinding,
+  type AiJob,
   type ApprovalRules,
   type AssignReviewersRequest,
   type Comment,
@@ -31,6 +36,7 @@ import {
   type ReviewFileDiff,
   type ReviewListResponse,
   type Thread,
+  type LatestAnalysisResponse,
   type ThreadStatus,
   type Workspace,
   type WorkspaceMember,
@@ -181,6 +187,14 @@ export const getDecisions = (workspaceId: string, reviewNumber: string) =>
 export const getReviewEvents = (workspaceId: string, reviewNumber: string) =>
   getFromReview<ReviewEvent[]>(workspaceId, reviewNumber, '/events', ReviewEventSchema.array());
 
+export const getLatestAnalysis = (workspaceId: string, reviewNumber: string) =>
+  getFromReview<LatestAnalysisResponse>(
+    workspaceId,
+    reviewNumber,
+    '/analyses/latest',
+    LatestAnalysisResponseSchema,
+  );
+
 export async function getRules(workspaceId: string): Promise<ServerApiResult<ApprovalRules>> {
   if (!isUuid(workspaceId)) return NOT_FOUND;
   return apiGet(`/api/v1/workspaces/${workspaceId}/rules`, ApprovalRulesSchema);
@@ -192,6 +206,7 @@ export interface ServerSendFailure {
   code: string | null;
   fieldErrors: FieldErrors;
   details?: unknown;
+  retryAfterSeconds?: number;
 }
 export type ServerSendResult<T> = { ok: true; data: T } | ServerSendFailure;
 
@@ -204,8 +219,10 @@ const sendFailure = (status: number, code: string | null = null): ServerSendFail
 
 const FieldIssuesSchema = z.array(z.object({ field: z.string(), message: z.string() }));
 
+type SendMethod = 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
 export async function apiSend<T>(
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: SendMethod,
   path: string,
   body: unknown,
   schema: z.ZodType<T>,
@@ -217,7 +234,7 @@ export async function apiSend<T>(
 
 export async function sendApi<T>(
   apiUrl: string,
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: SendMethod,
   path: string,
   token: string,
   body: unknown,
@@ -243,10 +260,13 @@ export async function sendApi<T>(
       const issues =
         res.status === 422 ? FieldIssuesSchema.safeParse(error.data.error.details) : null;
       const { code, details } = error.data.error;
+      const retryAfter = Number(res.headers.get('retry-after'));
       return {
         ...sendFailure(res.status, code),
         fieldErrors: issues?.success ? toFieldErrors(issues.data) : {},
         ...(details !== undefined && { details }),
+        ...(Number.isSafeInteger(retryAfter) &&
+          retryAfter > 0 && { retryAfterSeconds: retryAfter }),
       };
     }
     const parsed = schema.safeParse(json);
@@ -365,4 +385,37 @@ export async function patchRules(
 ): Promise<ServerSendResult<ApprovalRules>> {
   if (!isUuid(workspaceId)) return SEND_NOT_FOUND;
   return apiSend('PATCH', `/api/v1/workspaces/${workspaceId}/rules`, input, ApprovalRulesSchema);
+}
+
+export async function postAnalysis(
+  workspaceId: string,
+  reviewNumber: string,
+): Promise<ServerSendResult<AiJob>> {
+  const base = reviewPath(workspaceId, reviewNumber);
+  if (!base) return SEND_NOT_FOUND;
+  return apiSend('POST', `${base}/analyses`, undefined, AiJobSchema);
+}
+
+export async function postDismissFinding(
+  workspaceId: string,
+  reviewNumber: string,
+  findingId: string,
+): Promise<ServerSendResult<AiFinding>> {
+  const base = reviewPath(workspaceId, reviewNumber);
+  if (!base || !isUuid(findingId)) return SEND_NOT_FOUND;
+  return apiSend('POST', `${base}/findings/${findingId}/dismiss`, undefined, AiFindingDtoSchema);
+}
+
+export async function sendFindingFeedback(
+  workspaceId: string,
+  reviewNumber: string,
+  findingId: string,
+  helpful: boolean | null,
+): Promise<ServerSendResult<AiFinding>> {
+  const base = reviewPath(workspaceId, reviewNumber);
+  if (!base || !isUuid(findingId)) return SEND_NOT_FOUND;
+  const path = `${base}/findings/${findingId}/feedback`;
+  return helpful === null
+    ? apiSend('DELETE', path, undefined, AiFindingDtoSchema)
+    : apiSend('PUT', path, { helpful }, AiFindingDtoSchema);
 }

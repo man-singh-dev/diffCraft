@@ -74,11 +74,20 @@ export const AiFindingDtoSchema = z.object({
   confidence: z.number().min(0).max(1),
   dismissedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
+  myFeedback: z.boolean().nullable(),
+  feedback: z.object({
+    helpful: z.number().int().min(0),
+    notHelpful: z.number().int().min(0),
+  }),
 });
 export type AiFinding = z.infer<typeof AiFindingDtoSchema>;
 
+export const FindingFeedbackRequestSchema = z.object({ helpful: z.boolean() });
+export type FindingFeedbackRequest = z.infer<typeof FindingFeedbackRequestSchema>;
+
 // `job` is the newest job; `findings` come from the newest succeeded one, so they stay visible while a new run is queued.
 export const LatestAnalysisResponseSchema = z.object({
+  enabled: z.boolean(),
   job: AiJobSchema.nullable(),
   findings: z.array(AiFindingDtoSchema),
 });

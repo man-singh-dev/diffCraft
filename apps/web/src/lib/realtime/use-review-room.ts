@@ -40,6 +40,8 @@ export function useReviewRoom({
       onReviewChanged: (event) => latest.current.onReviewChanged?.(event),
       onReviewDeleted: (event) => latest.current.onReviewDeleted?.(event),
       onPresence: (event) => latest.current.onPresence?.(event),
+      onAnalysisStatus: (event) => latest.current.onAnalysisStatus?.(event),
+      onAnalysisCompleted: (event) => latest.current.onAnalysisCompleted?.(event),
       onResync: () => latest.current.onResync?.(),
     });
   }, [workspaceId, reviewNumber]);

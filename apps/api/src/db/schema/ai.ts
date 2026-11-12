@@ -6,10 +6,12 @@ import {
 } from '@diffcraft/shared';
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   index,
   integer,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -105,6 +107,28 @@ export const aiFindings = pgTable(
       'ai_findings_confidence_check',
       sql`${table.confidence} >= 0 and ${table.confidence} <= 1`,
     ),
+  ],
+);
+
+export const findingFeedback = pgTable(
+  'finding_feedback',
+  {
+    findingId: uuid('finding_id')
+      .notNull()
+      .references(() => aiFindings.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    helpful: boolean('helpful').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    primaryKey({ columns: [table.findingId, table.userId] }),
+    index('finding_feedback_user_id_idx').on(table.userId),
   ],
 );
 

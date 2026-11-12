@@ -11,7 +11,7 @@ import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { loadConfig } from '../../config.js';
-import { aiAnalysisJobs } from '../../db/schema/index.js';
+import { aiAnalysisJobs, aiFindings, findingFeedback } from '../../db/schema/index.js';
 import { describeWithDb, testDatabaseUrl } from '../../test/db.js';
 import { addMember, createUserWithSession, type TestUser } from '../../test/fixtures.js';
 import { createFakeProvider } from './providers/fake.js';
@@ -53,8 +53,19 @@ describeWithDb('analysis routes', () => {
 
   const errorOf = (res: LightMyRequestResponse) => ErrorResponseSchema.parse(res.json()).error;
 
-  const call = (method: 'GET' | 'POST', url: string, user?: TestUser, on = app) =>
-    on.inject({ method, url, ...(user && { cookies: user.cookies }) });
+  const call = (
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    url: string,
+    user?: TestUser,
+    on = app,
+    payload?: unknown,
+  ) =>
+    on.inject({
+      method,
+      url,
+      ...(user && { cookies: user.cookies }),
+      ...(payload !== undefined && { payload: payload as object }),
+    });
 
   async function memberWithRole(workspaceId: string, role: WorkspaceRole): Promise<TestUser> {
     const user = await createUserWithSession(app.db);
@@ -226,24 +237,28 @@ describeWithDb('analysis routes', () => {
     });
   });
 
-  describe('GET /analyses/latest and dismiss', () => {
-    async function analyzedReview() {
-      const { workspace, review } = await setupReview(app, owner);
-      const job = await startAnalysis(app, owner, workspace.id, review);
-      const { publisher } = recordingPublisher(app);
-      await processAnalysisJob(
-        { db: app.db, provider: createFakeProvider(), log: app.log, publisher },
-        job.id,
-      );
-      return { workspace, review, job };
-    }
+  async function analyzedReview() {
+    const { workspace, review } = await setupReview(app, owner);
+    const job = await startAnalysis(app, owner, workspace.id, review);
+    const { publisher } = recordingPublisher(app);
+    await processAnalysisJob(
+      { db: app.db, provider: createFakeProvider(), log: app.log, publisher },
+      job.id,
+    );
+    return { workspace, review, job };
+  }
 
+  describe('GET /analyses/latest and dismiss', () => {
     it('returns null and no findings before any analysis', async () => {
       const { workspace, review } = await setupReview(app, owner);
       const viewer = await memberWithRole(workspace.id, 'viewer');
       const res = await call('GET', analysesUrl(workspace.id, review, '/analyses/latest'), viewer);
       expect(res.statusCode).toBe(200);
-      expect(LatestAnalysisResponseSchema.parse(res.json())).toEqual({ job: null, findings: [] });
+      expect(LatestAnalysisResponseSchema.parse(res.json())).toEqual({
+        enabled: true,
+        job: null,
+        findings: [],
+      });
     });
 
     it('returns the newest job and the findings of the newest succeeded one', async () => {
@@ -335,6 +350,17 @@ describeWithDb('analysis routes', () => {
       ).toBe(404);
     });
 
+    it('says whether AI is enabled', async () => {
+      const { workspace, review } = await setupReview(app, owner);
+      const res = await call(
+        'GET',
+        analysesUrl(workspace.id, review, '/analyses/latest'),
+        owner,
+        disabledApp,
+      );
+      expect(LatestAnalysisResponseSchema.parse(res.json()).enabled).toBe(false);
+    });
+
     it('hides latest from non-members', async () => {
       const { workspace, review } = await analyzedReview();
       const outsider = await createUserWithSession(app.db);
@@ -344,6 +370,121 @@ describeWithDb('analysis routes', () => {
         outsider,
       );
       expect(res.statusCode).toBe(404);
+    });
+  });
+
+  describe('finding feedback', () => {
+    async function feedbackSetup() {
+      const { workspace, review } = await analyzedReview();
+      const latestUrl = analysesUrl(workspace.id, review, '/analyses/latest');
+      const [target] = LatestAnalysisResponseSchema.parse(
+        (await call('GET', latestUrl, owner)).json(),
+      ).findings;
+      const url = analysesUrl(workspace.id, review, `/findings/${target!.id}/feedback`);
+      const latestFor = async (user: TestUser) =>
+        LatestAnalysisResponseSchema.parse((await call('GET', latestUrl, user)).json())
+          .findings[0]!;
+      return { workspace, review, target: target!, url, latestFor };
+    }
+
+    const rowsFor = (findingId: string) =>
+      app.db.select().from(findingFeedback).where(eq(findingFeedback.findingId, findingId));
+
+    it('starts with no feedback', async () => {
+      const { target } = await feedbackSetup();
+      expect(target.myFeedback).toBeNull();
+      expect(target.feedback).toEqual({ helpful: 0, notHelpful: 0 });
+    });
+
+    it('upserts: answering twice keeps one row with the last answer', async () => {
+      const { target, url, latestFor } = await feedbackSetup();
+      const first = await call('PUT', url, owner, app, { helpful: true });
+      expect(first.statusCode).toBe(200);
+      expect(AiFindingDtoSchema.parse(first.json())).toMatchObject({
+        myFeedback: true,
+        feedback: { helpful: 1, notHelpful: 0 },
+      });
+      const second = await call('PUT', url, owner, app, { helpful: false });
+      expect(AiFindingDtoSchema.parse(second.json())).toMatchObject({
+        myFeedback: false,
+        feedback: { helpful: 0, notHelpful: 1 },
+      });
+      expect(await rowsFor(target.id)).toHaveLength(1);
+      expect(await latestFor(owner)).toMatchObject({ myFeedback: false });
+    });
+
+    it("keeps each user's feedback separate and counts them together", async () => {
+      const { workspace, url, latestFor } = await feedbackSetup();
+      const member = await memberWithRole(workspace.id, 'member');
+      const viewer = await memberWithRole(workspace.id, 'viewer');
+      await call('PUT', url, owner, app, { helpful: true });
+      await call('PUT', url, member, app, { helpful: false });
+
+      expect(await latestFor(owner)).toMatchObject({
+        myFeedback: true,
+        feedback: { helpful: 1, notHelpful: 1 },
+      });
+      expect(await latestFor(member)).toMatchObject({ myFeedback: false });
+      expect(await latestFor(viewer)).toMatchObject({
+        myFeedback: null,
+        feedback: { helpful: 1, notHelpful: 1 },
+      });
+    });
+
+    it("removes only the caller's feedback on DELETE", async () => {
+      const { workspace, target, url } = await feedbackSetup();
+      const member = await memberWithRole(workspace.id, 'member');
+      await call('PUT', url, owner, app, { helpful: true });
+      await call('PUT', url, member, app, { helpful: true });
+      const res = await call('DELETE', url, owner);
+      expect(res.statusCode).toBe(200);
+      expect(AiFindingDtoSchema.parse(res.json())).toMatchObject({
+        myFeedback: null,
+        feedback: { helpful: 1, notHelpful: 0 },
+      });
+      expect((await call('DELETE', url, owner)).statusCode).toBe(200);
+      expect(await rowsFor(target.id)).toHaveLength(1);
+    });
+
+    it('is deleted with its finding', async () => {
+      const { target, url } = await feedbackSetup();
+      await call('PUT', url, owner, app, { helpful: true });
+      await app.db.delete(aiFindings).where(eq(aiFindings.id, target.id));
+      expect(await rowsFor(target.id)).toHaveLength(0);
+    });
+
+    it('validates the body', async () => {
+      const { url } = await feedbackSetup();
+      for (const payload of [{}, { helpful: 'yes' }, { helpful: null }]) {
+        const res = await call('PUT', url, owner, app, payload);
+        expect(res.statusCode).toBe(422);
+      }
+    });
+
+    it('is scoped to the review, its workspace and members', async () => {
+      const { workspace, review, target } = await feedbackSetup();
+      const path = `/findings/${target.id}/feedback`;
+      const other = await setupReview(app, owner);
+      const viaOther = await call(
+        'PUT',
+        analysesUrl(other.workspace.id, other.review, path),
+        owner,
+        app,
+        { helpful: true },
+      );
+      expect(viaOther.statusCode).toBe(404);
+      expect(errorOf(viaOther).code).toBe('finding_not_found');
+
+      const url = analysesUrl(workspace.id, review, path);
+      const outsider = await createUserWithSession(app.db);
+      expect((await call('PUT', url, outsider, app, { helpful: true })).statusCode).toBe(404);
+      expect((await call('DELETE', url, outsider)).statusCode).toBe(404);
+      const viewer = await memberWithRole(workspace.id, 'viewer');
+      expect((await call('PUT', url, viewer, app, { helpful: true })).statusCode).toBe(403);
+      expect((await call('PUT', url, undefined, app, { helpful: true })).statusCode).toBe(401);
+      const unknown = analysesUrl(workspace.id, review, `/findings/${randomUUID()}/feedback`);
+      expect((await call('PUT', unknown, owner, app, { helpful: true })).statusCode).toBe(404);
+      expect(await rowsFor(target.id)).toHaveLength(0);
     });
   });
 });

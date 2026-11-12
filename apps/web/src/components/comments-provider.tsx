@@ -29,6 +29,7 @@ import type { CommentActionError, CommentActionResult } from '@/lib/comment-erro
 import { debounce } from '@/lib/realtime/debounce';
 import { isNotOlder, mergeResync, upsertThread } from '@/lib/realtime/events';
 import { newerPresence } from '@/lib/realtime/presence';
+import { createRoomEventBus, type RoomEventBus } from '@/lib/realtime/room-event-bus';
 import { useReviewRoom } from '@/lib/realtime/use-review-room';
 import { groupThreadsByKey, targetKey, type LineTarget } from '@/lib/thread-anchors';
 import { ReviewLiveContext, type ReviewLiveState } from './review-live';
@@ -56,6 +57,11 @@ interface CommentsContextValue {
 }
 
 const CommentsContext = createContext<CommentsContextValue | null>(null);
+const RoomEventsContext = createContext<RoomEventBus | null>(null);
+
+export function useRoomEvents(): RoomEventBus | null {
+  return useContext(RoomEventsContext);
+}
 
 /** Null outside a CommentsProvider (e.g. a diff rendered on its own). */
 export function useComments(): CommentsContextValue | null {
@@ -111,6 +117,7 @@ export function CommentsProvider({
   const appliedAt = useRef<Map<string, string> | null>(null);
   appliedAt.current ??= new Map((initialThreads ?? []).map((t) => [t.id, loadedAt]));
   const resyncCount = useRef(0);
+  const [bus] = useState(createRoomEventBus);
 
   const router = useRouter();
   const refresh = useMemo(() => debounce(() => router.refresh(), REFRESH_DEBOUNCE_MS), [router]);
@@ -126,6 +133,8 @@ export function CommentsProvider({
       setThreads((list) => upsertThread(list, event.thread));
     },
     onReviewChanged: refresh,
+    onAnalysisStatus: (event) => bus.emit('onAnalysisStatus', event),
+    onAnalysisCompleted: (event) => bus.emit('onAnalysisCompleted', event),
     onPresence: (event) => setPresence((current) => newerPresence(current, event)),
     onReviewDeleted() {
       refresh.cancel();
@@ -134,6 +143,7 @@ export function CommentsProvider({
     async onResync() {
       // Another instance may answer after a reconnect, and its clock may be behind the last one's.
       setPresence(null);
+      bus.emit('onResync');
       const current = ++resyncCount.current;
       const result = await loadThreads(workspaceId, reviewNumber).catch(() => null);
       if (!result?.ok || current !== resyncCount.current) return;
@@ -252,7 +262,9 @@ export function CommentsProvider({
 
   return (
     <ReviewLiveContext.Provider value={live}>
-      <CommentsContext.Provider value={value}>{children}</CommentsContext.Provider>
+      <RoomEventsContext.Provider value={bus}>
+        <CommentsContext.Provider value={value}>{children}</CommentsContext.Provider>
+      </RoomEventsContext.Provider>
     </ReviewLiveContext.Provider>
   );
 }

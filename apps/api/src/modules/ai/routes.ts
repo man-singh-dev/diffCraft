@@ -1,5 +1,11 @@
-import type { AiFinding, AiJob, LatestAnalysisResponse } from '@diffcraft/shared';
-import type { FastifyPluginAsync } from 'fastify';
+import {
+  FindingFeedbackRequestSchema,
+  type AiFinding,
+  type AiJob,
+  type LatestAnalysisResponse,
+} from '@diffcraft/shared';
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import { ValidationError } from '../../errors.js';
 import { authUser } from '../auth/require-auth.js';
 import { loadReview } from '../reviews/load-review.js';
 import {
@@ -8,7 +14,18 @@ import {
   UUID_PATTERN,
 } from '../workspaces/require-workspace-role.js';
 import { AiDisabledError, FindingNotFoundError, ReviewNotOpenError } from './errors.js';
-import { dismissFinding, getLatestAnalysis, requestAnalysis } from './service.js';
+import {
+  dismissFinding,
+  getLatestAnalysis,
+  requestAnalysis,
+  setFindingFeedback,
+} from './service.js';
+
+function findingIdParam(request: FastifyRequest): string {
+  const { findingId } = request.params as { findingId?: string };
+  if (!findingId || !UUID_PATTERN.test(findingId)) throw new FindingNotFoundError();
+  return findingId;
+}
 
 export const analysisRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Reply: AiJob }>(
@@ -42,7 +59,8 @@ export const analysisRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireWorkspaceRole('viewer') },
     async (request) => {
       const review = await loadReview(app, request);
-      return getLatestAnalysis(app.db, review.id);
+      const latest = await getLatestAnalysis(app.db, review.id, authUser(request).id);
+      return { enabled: app.ai.enabled, ...latest };
     },
   );
 
@@ -51,9 +69,46 @@ export const analysisRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireWorkspaceRole('member') },
     async (request) => {
       const review = await loadReview(app, request);
-      const { findingId } = request.params as { findingId?: string };
-      if (!findingId || !UUID_PATTERN.test(findingId)) throw new FindingNotFoundError();
-      const finding = await dismissFinding(app.db, review.id, findingId);
+      const findingId = findingIdParam(request);
+      const finding = await dismissFinding(app.db, review.id, findingId, authUser(request).id);
+      if (!finding) throw new FindingNotFoundError();
+      return finding;
+    },
+  );
+
+  app.put<{ Reply: AiFinding }>(
+    '/findings/:findingId/feedback',
+    { preHandler: requireWorkspaceRole('member') },
+    async (request) => {
+      const review = await loadReview(app, request);
+      const findingId = findingIdParam(request);
+      const parsed = FindingFeedbackRequestSchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.issues);
+      const finding = await setFindingFeedback(
+        app.db,
+        review.id,
+        findingId,
+        authUser(request).id,
+        parsed.data.helpful,
+      );
+      if (!finding) throw new FindingNotFoundError();
+      return finding;
+    },
+  );
+
+  app.delete<{ Reply: AiFinding }>(
+    '/findings/:findingId/feedback',
+    { preHandler: requireWorkspaceRole('member') },
+    async (request) => {
+      const review = await loadReview(app, request);
+      const findingId = findingIdParam(request);
+      const finding = await setFindingFeedback(
+        app.db,
+        review.id,
+        findingId,
+        authUser(request).id,
+        null,
+      );
       if (!finding) throw new FindingNotFoundError();
       return finding;
     },
