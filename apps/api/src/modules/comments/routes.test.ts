@@ -75,7 +75,12 @@ describeWithDb('comment routes', () => {
 
   beforeAll(async () => {
     app = await buildApp(
-      loadConfig({ LOG_LEVEL: 'silent', NODE_ENV: 'test', DATABASE_URL: testDatabaseUrl }),
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
+        NODE_ENV: 'test',
+        DATABASE_URL: testDatabaseUrl,
+      }),
     );
   });
 

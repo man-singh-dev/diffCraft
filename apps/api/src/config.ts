@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 const port = z.coerce.number().int().min(1).max(65535);
 const blankAsUnset = (value: unknown) => (value === '' ? undefined : value);
+const limit = (fallback: number) => z.coerce.number().int().min(1).max(100_000).default(fallback);
 
 export const AI_PROVIDERS = ['openai_compatible', 'fake', 'disabled'] as const;
 export type AiProviderName = (typeof AI_PROVIDERS)[number];
@@ -20,8 +21,24 @@ const ConfigSchema = z
     WEB_ORIGIN: z.url().default('http://localhost:3000'),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
-    // Production only: proxy addresses trusted for X-Forwarded-For (IPs, CIDRs or proxy-addr presets).
-    TRUST_PROXY: z.string().min(1).default('uniquelocal'),
+    // Production only: proxy addresses trusted for X-Forwarded-For (IPs, CIDRs, proxy-addr presets or a hop count).
+    TRUST_PROXY: z
+      .string()
+      .min(1)
+      .default('uniquelocal')
+      .transform((value) => (/^\d+$/.test(value) ? Number(value) : value)),
+    // Shared with the web server, which uses it to vouch for the client IP it forwards.
+    WEB_PROXY_SECRET: z.preprocess(blankAsUnset, z.string().min(32).optional()),
+    RATE_LIMIT_ENABLED: z.stringbool().default(true),
+    RATE_LIMIT_PREFIX: z.string().min(1).default('diffcraft:rl:'),
+    RATE_LIMIT_GLOBAL_PER_MINUTE: limit(300),
+    RATE_LIMIT_LOGIN_PER_IP_PER_MINUTE: limit(10),
+    RATE_LIMIT_LOGIN_PER_EMAIL_PER_15_MINUTES: limit(5),
+    RATE_LIMIT_REGISTER_PER_IP_PER_HOUR: limit(5),
+    RATE_LIMIT_RESEND_PER_USER_PER_HOUR: limit(5),
+    RATE_LIMIT_TICKET_PER_USER_PER_MINUTE: limit(30),
+    RATE_LIMIT_ANALYSIS_PER_USER_PER_MINUTE: limit(5),
+    RATE_LIMIT_COMMENTS_PER_USER_PER_MINUTE: limit(60),
     // Only read by the test suite; the app itself never connects to it.
     TEST_DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }).optional(),
     MAIL_TRANSPORT: z.enum(['smtp', 'log']).default('smtp'),
@@ -40,6 +57,14 @@ const ConfigSchema = z
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.REDIS_URL) {
       ctx.addIssue({ code: 'custom', path: ['REDIS_URL'], message: 'Required in production' });
+    }
+    // Without it every request arriving through the web server shares the web server's IP, and per-IP limits lock everyone out together.
+    if (env.NODE_ENV === 'production' && env.RATE_LIMIT_ENABLED && !env.WEB_PROXY_SECRET) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['WEB_PROXY_SECRET'],
+        message: 'Required in production while RATE_LIMIT_ENABLED is true',
+      });
     }
     // Production must choose on purpose: the fake provider would silently produce made-up findings.
     if (env.NODE_ENV === 'production' && !env.AI_PROVIDER) {

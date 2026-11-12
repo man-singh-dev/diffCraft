@@ -10,7 +10,13 @@ describe('global error handler', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: UNUSED_DATABASE_URL }));
+    app = await buildApp(
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
+        DATABASE_URL: UNUSED_DATABASE_URL,
+      }),
+    );
     app.get('/test/app-error', async () => {
       throw new AppError(418, 'teapot', 'I am a teapot.', { hint: 'tea' });
     });

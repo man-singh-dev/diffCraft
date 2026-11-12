@@ -45,6 +45,7 @@ export async function startApp(realtimeLimits?: Partial<RealtimeLimits>) {
   const app = await buildApp(
     loadConfig({
       LOG_LEVEL: 'silent',
+      RATE_LIMIT_ENABLED: 'false',
       DATABASE_URL: testDatabaseUrl,
       REDIS_URL: testRedisUrl ?? undefined,
       WEB_ORIGIN,

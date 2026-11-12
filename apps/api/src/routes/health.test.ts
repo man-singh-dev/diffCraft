@@ -10,7 +10,13 @@ describe('GET /health', () => {
 
   beforeAll(async () => {
     // Liveness must not depend on the database, so point it at one that doesn't exist.
-    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: UNUSED_DATABASE_URL }));
+    app = await buildApp(
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
+        DATABASE_URL: UNUSED_DATABASE_URL,
+      }),
+    );
   });
 
   afterAll(async () => {

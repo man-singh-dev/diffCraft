@@ -45,6 +45,7 @@ import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { SESSION_COOKIE_NAME } from './auth.server';
 import { env } from './env.server';
+import { forwardedClientHeaders } from './forwarding.server';
 import { toFieldErrors, type FieldErrors } from './form-errors';
 import { isReviewNumber, isUuid, reviewListQuery, type ReviewFilters } from './review-params';
 
@@ -56,7 +57,7 @@ export async function apiGet<T>(path: string, schema: z.ZodType<T>): Promise<Ser
   // Outside fetchApi's try on purpose: during prerendering cookies() throws to mark the page dynamic, which must not be swallowed.
   const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!token) return { ok: false, status: 401 };
-  return fetchApi(env.API_URL, path, token, schema);
+  return fetchApi(env.API_URL, path, token, schema, fetch, await forwardedClientHeaders());
 }
 
 export async function fetchApi<T>(
@@ -65,11 +66,12 @@ export async function fetchApi<T>(
   token: string,
   schema: z.ZodType<T>,
   fetchImpl: typeof fetch = fetch,
+  forwarded: Record<string, string> = {},
 ): Promise<ServerApiResult<T>> {
   try {
     const res = await fetchImpl(new URL(path, apiUrl), {
       // Server-to-server, so the browser's cookie isn't sent automatically: forward it.
-      headers: { cookie: `${SESSION_COOKIE_NAME}=${token}` },
+      headers: { ...forwarded, cookie: `${SESSION_COOKIE_NAME}=${token}` },
       cache: 'no-store',
       signal: AbortSignal.timeout(5_000),
     });
@@ -229,7 +231,8 @@ export async function apiSend<T>(
 ): Promise<ServerSendResult<T>> {
   const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!token) return sendFailure(401, 'unauthenticated');
-  return sendApi(env.API_URL, method, path, token, body, schema);
+  const forwarded = await forwardedClientHeaders();
+  return sendApi(env.API_URL, method, path, token, body, schema, fetch, forwarded);
 }
 
 export async function sendApi<T>(
@@ -240,11 +243,13 @@ export async function sendApi<T>(
   body: unknown,
   schema: z.ZodType<T>,
   fetchImpl: typeof fetch = fetch,
+  forwarded: Record<string, string> = {},
 ): Promise<ServerSendResult<T>> {
   try {
     const res = await fetchImpl(new URL(path, apiUrl), {
       method,
       headers: {
+        ...forwarded,
         cookie: `${SESSION_COOKIE_NAME}=${token}`,
         ...(body !== undefined && { 'content-type': 'application/json' }),
       },

@@ -14,7 +14,12 @@ describe('CSRF origin check', () => {
 
   beforeAll(async () => {
     app = await buildApp(
-      loadConfig({ LOG_LEVEL: 'silent', WEB_ORIGIN, DATABASE_URL: UNUSED_DATABASE_URL }),
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
+        WEB_ORIGIN,
+        DATABASE_URL: UNUSED_DATABASE_URL,
+      }),
     );
   });
 

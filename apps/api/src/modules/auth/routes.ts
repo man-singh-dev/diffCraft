@@ -33,20 +33,24 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
 ) => {
   const cookieOptions = sessionCookieOptions(secureCookies);
 
-  app.post<{ Reply: PublicUser }>('/register', async (request, reply) => {
-    const parsed = RegisterRequestSchema.safeParse(request.body);
-    if (!parsed.success) throw new ValidationError(parsed.error.issues);
+  app.post<{ Reply: PublicUser }>(
+    '/register',
+    { preHandler: app.limit('register-ip') },
+    async (request, reply) => {
+      const parsed = RegisterRequestSchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.issues);
 
-    const { user, verificationToken } = await registerUser(app.db, parsed.data);
-    // After the commit, so an email never points to a user that was rolled back. A failure is logged; the user can resend.
-    await sendVerificationEmail(app.mailer, request.log, {
-      webOrigin,
-      userId: user.id,
-      email: user.email,
-      token: verificationToken,
-    });
-    return reply.code(201).send(user);
-  });
+      const { user, verificationToken } = await registerUser(app.db, parsed.data);
+      // After the commit, so an email never points to a user that was rolled back. A failure is logged; the user can resend.
+      await sendVerificationEmail(app.mailer, request.log, {
+        webOrigin,
+        userId: user.id,
+        email: user.email,
+        token: verificationToken,
+      });
+      return reply.code(201).send(user);
+    },
+  );
 
   app.post<{ Reply: VerifyEmailResponse }>('/verify-email', async (request) => {
     const parsed = VerifyEmailRequestSchema.safeParse(request.body);
@@ -58,7 +62,7 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
 
   app.post<{ Reply: ResendVerificationResponse }>(
     '/resend-verification',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, app.limit('resend-user')] },
     async (request) => {
       const user = authUser(request);
       const result = await startResend(app.db, user.id);
@@ -75,20 +79,24 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
     },
   );
 
-  app.post<{ Reply: PublicUser }>('/login', async (request, reply) => {
-    const parsed = LoginRequestSchema.safeParse(request.body);
-    if (!parsed.success) throw new ValidationError(parsed.error.issues);
+  app.post<{ Reply: PublicUser }>(
+    '/login',
+    { preHandler: [app.limit('login-ip'), app.limit('login-email')] },
+    async (request, reply) => {
+      const parsed = LoginRequestSchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.issues);
 
-    const user = await verifyCredentials(app.db, parsed.data, request.log);
+      const user = await verifyCredentials(app.db, parsed.data, request.log);
 
-    // Session fixation defence: always issue a new session on login, and drop the old one if sent.
-    const previousToken = request.cookies[SESSION_COOKIE_NAME];
-    if (previousToken) await deleteSession(app.db, previousToken);
-    const { token } = await createSession(app.db, user.id);
+      // Session fixation defence: always issue a new session on login, and drop the old one if sent.
+      const previousToken = request.cookies[SESSION_COOKIE_NAME];
+      if (previousToken) await deleteSession(app.db, previousToken);
+      const { token } = await createSession(app.db, user.id);
 
-    reply.setCookie(SESSION_COOKIE_NAME, token, cookieOptions);
-    return toPublicUser(user);
-  });
+      reply.setCookie(SESSION_COOKIE_NAME, token, cookieOptions);
+      return toPublicUser(user);
+    },
+  );
 
   app.post('/logout', async (request, reply) => {
     const token = request.cookies[SESSION_COOKIE_NAME];

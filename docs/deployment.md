@@ -18,19 +18,41 @@ How the web app, API and database are deployed on Vercel, Render and Neon, and w
 
 ### Environment variables (set in each host's dashboard)
 
-| Host   | Variable                   | Notes                                                                                                                                                      |
-| ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Vercel | `API_URL`                  | The Render service URL. Also needed at build time: the `/api` rewrite is fixed when the app is built, so changing it means a redeploy.                     |
-| Vercel | `NEXT_PUBLIC_REALTIME_URL` | The Render service origin (same as `API_URL`, no path) for live updates. Inlined at build time: changing it means a redeploy. Unset: live updates are off. |
-| Render | `NODE_ENV`                 | Production mode: `Secure` cookies and trusted proxy headers.                                                                                               |
-| Render | `HOST`                     | All interfaces, so Render's proxy can reach the server.                                                                                                    |
-| Render | `DATABASE_URL`             | Neon's direct (non-pooled) connection string. Use `sslmode=verify-full`: same checks as `require` today, without pg's deprecation warning.                 |
-| Render | `WEB_ORIGIN`               | The Vercel URL. Must match exactly, or the API's origin check rejects logins (preview deployments have other URLs).                                        |
-| Render | `LOG_LEVEL`                | Optional.                                                                                                                                                  |
-| Render | `DB_POOL_MAX`              | Optional. Keep it within Neon's connection limit.                                                                                                          |
-| Render | `TRUST_PROXY`              | Optional (default: private addresses). Check that `request.ip` shows real client IPs after the first deploy.                                               |
+| Host   | Variable                   | Notes                                                                                                                                                                                  |
+| ------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vercel | `API_URL`                  | The Render service URL. Also needed at build time: the `/api` rewrite is fixed when the app is built, so changing it means a redeploy.                                                 |
+| Vercel | `NEXT_PUBLIC_REALTIME_URL` | The Render service origin (same as `API_URL`, no path) for live updates. Inlined at build time: changing it means a redeploy. Unset: live updates are off.                             |
+| Render | `NODE_ENV`                 | Production mode: `Secure` cookies and trusted proxy headers.                                                                                                                           |
+| Render | `HOST`                     | All interfaces, so Render's proxy can reach the server.                                                                                                                                |
+| Render | `DATABASE_URL`             | Neon's direct (non-pooled) connection string. Use `sslmode=verify-full`: same checks as `require` today, without pg's deprecation warning.                                             |
+| Render | `WEB_ORIGIN`               | The Vercel URL. Must match exactly, or the API's origin check rejects logins (preview deployments have other URLs).                                                                    |
+| Render | `LOG_LEVEL`                | Optional.                                                                                                                                                                              |
+| Render | `DB_POOL_MAX`              | Optional. Keep it within Neon's connection limit.                                                                                                                                      |
+| Render | `TRUST_PROXY`              | Optional (default: private addresses). IPs, CIDRs, presets or a hop count; never `true`. See [security](security.md#the-real-client-ip).                                               |
+| Both   | `WEB_PROXY_SECRET`         | **Required on Render in production** (while rate limiting is on), and set to the **same value** on Vercel. At least 32 characters; generate with `openssl rand -base64 32`. See below. |
 
 Don't set `API_PORT` on Render: the API falls back to the `PORT` Render provides. Neon needs no variables; it supplies `DATABASE_URL`.
+
+### Rate limiting
+
+Limits are shared through Redis (`REDIS_URL`), so all API instances count together. Every variable is optional on Render.
+
+| Variable                                    | Default         | Limit                                                                |
+| ------------------------------------------- | --------------- | -------------------------------------------------------------------- |
+| `RATE_LIMIT_ENABLED`                        | `true`          | `false` turns all limits off (the API logs a warning in production). |
+| `RATE_LIMIT_PREFIX`                         | `diffcraft:rl:` | Redis key prefix; give each environment sharing one Redis its own.   |
+| `RATE_LIMIT_GLOBAL_PER_MINUTE`              | 300             | Every route except `/health` and `/ready`, per client IP.            |
+| `RATE_LIMIT_LOGIN_PER_IP_PER_MINUTE`        | 10              | `POST /auth/login` per client IP.                                    |
+| `RATE_LIMIT_LOGIN_PER_EMAIL_PER_15_MINUTES` | 5               | `POST /auth/login` per normalized email, across IPs.                 |
+| `RATE_LIMIT_REGISTER_PER_IP_PER_HOUR`       | 5               | `POST /auth/register` per client IP.                                 |
+| `RATE_LIMIT_RESEND_PER_USER_PER_HOUR`       | 5               | `POST /auth/resend-verification` per user.                           |
+| `RATE_LIMIT_TICKET_PER_USER_PER_MINUTE`     | 30              | `POST /realtime/ticket` per user.                                    |
+| `RATE_LIMIT_ANALYSIS_PER_USER_PER_MINUTE`   | 5               | `POST …/analyses` per user (the daily workspace cap still applies).  |
+| `RATE_LIMIT_COMMENTS_PER_USER_PER_MINUTE`   | 60              | New threads and replies together, per user.                          |
+
+**`WEB_PROXY_SECRET`.** The API sees every request from the web app as coming from Vercel's addresses. With the secret, the web server forwards the real client IP and the API believes it. Without it, per-IP limits would count all users as one. Set the same random value in both dashboards and redeploy both. To rotate it, change both and redeploy both: until both have the new value, requests are counted against Vercel's IP. After the first deploy, log in with a wrong password from two networks. Each should get its own 10 attempts.
+
+**Security headers** need no configuration. HSTS is sent only when `NODE_ENV=production`. On a custom domain, `includeSubDomains` applies to every subdomain, so check they all serve HTTPS first.
 
 ### API build and start (Render)
 

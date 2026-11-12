@@ -35,6 +35,7 @@ describeWithDb('analysis routes', () => {
   beforeAll(async () => {
     const config = loadConfig({
       LOG_LEVEL: 'silent',
+      RATE_LIMIT_ENABLED: 'false',
       NODE_ENV: 'test',
       DATABASE_URL: testDatabaseUrl,
       AI_MAX_JOBS_PER_WORKSPACE_PER_DAY: String(DAILY_LIMIT),

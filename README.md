@@ -163,7 +163,7 @@ Scope of each stage: [docs/roadmap.md](docs/roadmap.md#development-roadmap).
 ## Known Limitations
 
 - **Cold starts.** The API runs on a free Render instance that sleeps after inactivity, so the first request after a quiet period can take about a minute.
-- **No rate limiting yet.** Login and registration are not rate-limited. Rate limiting is planned (Stage 9).
+- **Rate limits depend on `WEB_PROXY_SECRET`.** Without it, the API counts every request from the web app against the web host's IP; production refuses to start without it while limiting is on ([security](docs/security.md#the-real-client-ip)).
 - **Email enumeration on register.** `POST /api/v1/auth/register` still returns `409` when the email is already registered, which reveals whether an account exists. Email verification (below) is the groundwork; answering registration the same way for new and existing emails is planned.
 - **Email verification is only enforced for being added to a workspace.** New accounts get a verification link (24 h, resendable once a minute). Unverified users can log in and use their own workspaces; admins can't add them to theirs until they verify. Without an email provider, the deployment can run with `MAIL_TRANSPORT=log`, which writes the links to the server log.
 - **Emails are sent after the commit, without retries.** If sending fails, registration still succeeds and the user resends; an outbox with retries is planned.

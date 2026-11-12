@@ -7,6 +7,7 @@ import { useState, type FormEvent } from 'react';
 import { FormError, FormField } from '@/components/form-field';
 import { primaryButton, textLink } from '@/components/styles';
 import { login } from '@/lib/api-client';
+import { describeApiError } from '@/lib/api-errors';
 import { validateForm, type FieldErrors } from '@/lib/form-errors';
 
 export function LoginForm() {
@@ -35,7 +36,13 @@ export function LoginForm() {
     if (!result.ok) {
       setPending(false);
       setFieldErrors(result.fieldErrors);
-      setFormError(result.status === 401 ? 'Invalid email or password.' : result.message);
+      setFormError(
+        result.status === 401
+          ? 'Invalid email or password.'
+          : result.status === 429
+            ? describeApiError(result)
+            : result.message,
+      );
       return;
     }
 

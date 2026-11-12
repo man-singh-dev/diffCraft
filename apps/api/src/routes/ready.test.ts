@@ -13,6 +13,7 @@ describeWithDbAndRedis('GET /ready (database and Redis up)', () => {
     app = await buildApp(
       loadConfig({
         LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
         DATABASE_URL: testDatabaseUrl,
         REDIS_URL: testRedisUrl ?? undefined,
       }),
@@ -36,7 +37,13 @@ describe('GET /ready (database down)', () => {
 
   beforeAll(async () => {
     // Port 1 is closed, so the connection is refused.
-    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: UNUSED_DATABASE_URL }));
+    app = await buildApp(
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
+        DATABASE_URL: UNUSED_DATABASE_URL,
+      }),
+    );
   });
 
   afterAll(async () => {
@@ -58,6 +65,7 @@ describeWithDb('GET /ready (Redis down)', () => {
     app = await buildApp(
       loadConfig({
         LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
         DATABASE_URL: testDatabaseUrl,
         REDIS_URL: UNUSED_REDIS_URL,
       }),

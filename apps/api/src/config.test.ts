@@ -3,7 +3,13 @@ import { loadConfig } from './config.js';
 
 const DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
 const REDIS_URL = 'rediss://default:r3dis-secret@redis.example.com:6380';
-const PRODUCTION = { DATABASE_URL, NODE_ENV: 'production', AI_PROVIDER: 'disabled' } as const;
+const WEB_PROXY_SECRET = 'test-web-proxy-secret'.padEnd(32, '-');
+const PRODUCTION = {
+  DATABASE_URL,
+  NODE_ENV: 'production',
+  AI_PROVIDER: 'disabled',
+  WEB_PROXY_SECRET,
+} as const;
 const PROD_BASE = { ...PRODUCTION, REDIS_URL, MAIL_TRANSPORT: 'log' } as const;
 
 describe('loadConfig', () => {
@@ -17,6 +23,16 @@ describe('loadConfig', () => {
       DATABASE_URL,
       DB_POOL_MAX: 10,
       TRUST_PROXY: 'uniquelocal',
+      RATE_LIMIT_ENABLED: true,
+      RATE_LIMIT_PREFIX: 'diffcraft:rl:',
+      RATE_LIMIT_GLOBAL_PER_MINUTE: 300,
+      RATE_LIMIT_LOGIN_PER_IP_PER_MINUTE: 10,
+      RATE_LIMIT_LOGIN_PER_EMAIL_PER_15_MINUTES: 5,
+      RATE_LIMIT_REGISTER_PER_IP_PER_HOUR: 5,
+      RATE_LIMIT_RESEND_PER_USER_PER_HOUR: 5,
+      RATE_LIMIT_TICKET_PER_USER_PER_MINUTE: 30,
+      RATE_LIMIT_ANALYSIS_PER_USER_PER_MINUTE: 5,
+      RATE_LIMIT_COMMENTS_PER_USER_PER_MINUTE: 60,
       MAIL_TRANSPORT: 'smtp',
       MAIL_SMTP_URL: 'smtp://localhost:1025',
       MAIL_FROM: 'DiffCraft <noreply@localhost>',
@@ -58,11 +74,11 @@ describe('loadConfig', () => {
         /MAIL_SMTP_URL[\s\S]*MAIL_FROM/,
       );
       const smtpUrl = 'smtps://user:s3cret@smtp.example.com:465';
-      expect(() =>
-        loadConfig({ DATABASE_URL, NODE_ENV: 'production', REDIS_URL, MAIL_SMTP_URL: smtpUrl }),
-      ).toThrow(/MAIL_FROM/);
+      expect(() => loadConfig({ ...PRODUCTION, REDIS_URL, MAIL_SMTP_URL: smtpUrl })).toThrow(
+        /MAIL_FROM/,
+      );
       try {
-        loadConfig({ DATABASE_URL, NODE_ENV: 'production', REDIS_URL, MAIL_SMTP_URL: smtpUrl });
+        loadConfig({ ...PRODUCTION, REDIS_URL, MAIL_SMTP_URL: smtpUrl });
       } catch (error) {
         expect(String(error)).not.toContain('s3cret');
       }
@@ -127,6 +143,45 @@ describe('loadConfig', () => {
   it('reads TRUST_PROXY', () => {
     expect(loadConfig({ DATABASE_URL, TRUST_PROXY: '10.0.0.0/8' }).TRUST_PROXY).toBe('10.0.0.0/8');
     expect(() => loadConfig({ DATABASE_URL, TRUST_PROXY: '' })).toThrow(/TRUST_PROXY/);
+    expect(loadConfig({ DATABASE_URL, TRUST_PROXY: '2' }).TRUST_PROXY).toBe(2);
+  });
+
+  describe('rate limits', () => {
+    it('requires WEB_PROXY_SECRET in production unless rate limiting is off, never printing it', () => {
+      expect(() => loadConfig({ ...PROD_BASE, WEB_PROXY_SECRET: undefined })).toThrow(
+        /WEB_PROXY_SECRET/,
+      );
+      expect(
+        loadConfig({ ...PROD_BASE, WEB_PROXY_SECRET: undefined, RATE_LIMIT_ENABLED: 'false' })
+          .RATE_LIMIT_ENABLED,
+      ).toBe(false);
+      try {
+        loadConfig({ ...PROD_BASE, WEB_PROXY_SECRET: 'too-short-proxy-value' });
+      } catch (error) {
+        expect(String(error)).toMatch(/WEB_PROXY_SECRET/);
+        expect(String(error)).not.toContain('too-short-proxy-value');
+      }
+      expect(loadConfig(PROD_BASE).WEB_PROXY_SECRET).toBe(WEB_PROXY_SECRET);
+    });
+
+    it('reads the limits and rejects nonsense', () => {
+      expect(
+        loadConfig({
+          DATABASE_URL,
+          RATE_LIMIT_GLOBAL_PER_MINUTE: '1000',
+          RATE_LIMIT_LOGIN_PER_EMAIL_PER_15_MINUTES: '3',
+        }),
+      ).toMatchObject({
+        RATE_LIMIT_GLOBAL_PER_MINUTE: 1000,
+        RATE_LIMIT_LOGIN_PER_EMAIL_PER_15_MINUTES: 3,
+      });
+      expect(() => loadConfig({ DATABASE_URL, RATE_LIMIT_LOGIN_PER_IP_PER_MINUTE: '0' })).toThrow(
+        /RATE_LIMIT_LOGIN_PER_IP_PER_MINUTE/,
+      );
+      expect(() => loadConfig({ DATABASE_URL, RATE_LIMIT_ENABLED: 'maybe' })).toThrow(
+        /RATE_LIMIT_ENABLED/,
+      );
+    });
   });
 
   it('throws when DATABASE_URL is missing', () => {

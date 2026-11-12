@@ -89,7 +89,7 @@ export const commentRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Reply: Thread }>(
     '/',
-    { preHandler: requireWorkspaceRole('member') },
+    { preHandler: [requireWorkspaceRole('member'), app.limit('comment-user')] },
     async (request, reply) => {
       const review = await loadReview(app, request);
       const input = parseBody(CreateThreadRequestSchema, request.body);
@@ -138,7 +138,7 @@ export const commentRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Reply: Comment }>(
     '/:threadId/comments',
-    { preHandler: requireWorkspaceRole('member') },
+    { preHandler: [requireWorkspaceRole('member'), app.limit('comment-user')] },
     async (request, reply) => {
       const { review, thread } = await loadThread(app, request);
       const { body } = parseBody(ReplyRequestSchema, request.body);

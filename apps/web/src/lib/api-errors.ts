@@ -1,4 +1,5 @@
 import type { ApiFailure } from './api-client';
+import { tooManyRequestsMessage } from './rate-limit';
 
 const MESSAGES: Partial<Record<string, string>> = {
   last_owner: 'A workspace needs at least one owner. Make someone else an owner first.',
@@ -14,6 +15,7 @@ const MESSAGES: Partial<Record<string, string>> = {
 export function describeApiError(failure: ApiFailure): string {
   const known = MESSAGES[failure.code];
   if (known) return known;
+  if (failure.status === 429) return tooManyRequestsMessage(failure.retryAfterSeconds);
   if (failure.status === 403) {
     return "You don't have permission to do that. Your role may have changed; refresh the page.";
   }

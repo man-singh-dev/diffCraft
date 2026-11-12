@@ -16,7 +16,7 @@ Conventions (the base path, error shape, `400`, `401`, `403`, `404`, `413`, `422
 - Base path `/api/v1`; JSON request and response bodies.
 - Errors use a consistent shape: `{ "error": { "code": "...", "message": "...", "details": {...} } }` (`ErrorResponseSchema` in `packages/shared`; unexpected errors become a generic `500 internal_error`).
 - `401` when unauthenticated; `403` when authenticated but not permitted; `404` when the resource does not exist **or** the caller cannot see it (to avoid leaking existence across workspaces).
-- `409` for optimistic-lock conflicts and invalid state transitions; `422` for validation failures; `429` for rate limits.
+- `409` for optimistic-lock conflicts and invalid state transitions; `422` for validation failures; `429 rate_limited` for rate limits, with `Retry-After`, `RateLimit-*` headers and `details.retryAfterSeconds` (limits: [security](security.md#threats-and-controls)). Every response has `Cache-Control: no-store` unless stated otherwise.
 - List endpoints accept `?cursor=` and `?limit=` and answer `{ items, nextCursor }` (see [Pagination](#pagination)).
 - Request bodies are limited to 1 MiB (`413 payload_too_large`), except `POST /reviews` (3 MiB, see [Reviews](#reviews)).
 
@@ -26,8 +26,8 @@ Conventions (the base path, error shape, `400`, `401`, `403`, `404`, `413`, `422
 
 | Method | Path                               | Purpose                                                               | Auth                                | Status          |
 | ------ | ---------------------------------- | --------------------------------------------------------------------- | ----------------------------------- | --------------- |
-| `POST` | `/api/v1/auth/register`            | Create an account.                                                    | Public (rate limiting planned)      | **Implemented** |
-| `POST` | `/api/v1/auth/login`               | Start a session (sets an HttpOnly cookie).                            | Public (rate limiting planned)      | **Implemented** |
+| `POST` | `/api/v1/auth/register`            | Create an account.                                                    | Public (rate-limited)               | **Implemented** |
+| `POST` | `/api/v1/auth/login`               | Start a session (sets an HttpOnly cookie).                            | Public (rate-limited)               | **Implemented** |
 | `POST` | `/api/v1/auth/logout`              | End the current session.                                              | Public (clears the session, if any) | **Implemented** |
 | `GET`  | `/api/v1/auth/me`                  | Return the current user.                                              | User                                | **Implemented** |
 | `POST` | `/api/v1/auth/verify-email`        | Confirm an email address. Body `{ token }`. `200 { verified: true }`. | Public (CSRF Origin check)          | **Implemented** |

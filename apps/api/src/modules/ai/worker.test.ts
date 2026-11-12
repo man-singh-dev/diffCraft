@@ -41,7 +41,12 @@ describeWithDb('analysis worker', () => {
 
   beforeAll(async () => {
     app = await buildApp(
-      loadConfig({ LOG_LEVEL: 'silent', NODE_ENV: 'test', DATABASE_URL: testDatabaseUrl }),
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
+        NODE_ENV: 'test',
+        DATABASE_URL: testDatabaseUrl,
+      }),
       { ai: { queue, worker: false, provider: createFakeProvider() } },
     );
     owner = await createUserWithSession(app.db);
@@ -296,7 +301,8 @@ describeWithDb('analysis worker', () => {
       const stale = await newJob();
       await app.db
         .update(aiAnalysisJobs)
-        .set({ createdAt: sql`now() - interval '3 minutes'` })
+        // Far back: the sweeper takes the oldest 100, and the shared test database keeps queued jobs from other tests.
+        .set({ createdAt: sql`now() - interval '10 years'` })
         .where(eq(aiAnalysisJobs.id, stuck.id));
       await app.db
         .update(aiAnalysisJobs)

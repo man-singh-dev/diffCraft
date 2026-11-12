@@ -7,6 +7,7 @@ import { useState, type FormEvent } from 'react';
 import { FormError, FormField } from '@/components/form-field';
 import { primaryButton, textLink } from '@/components/styles';
 import { login, register } from '@/lib/api-client';
+import { describeApiError } from '@/lib/api-errors';
 import { validateForm, type FieldErrors } from '@/lib/form-errors';
 
 type FormErrorState =
@@ -40,6 +41,8 @@ export function RegisterForm() {
       setPending(false);
       setFieldErrors(registered.fieldErrors);
       if (registered.status === 409) setFormError({ kind: 'email_taken' });
+      else if (registered.status === 429)
+        setFormError({ kind: 'message', message: describeApiError(registered) });
       else if (Object.keys(registered.fieldErrors).length === 0)
         setFormError({ kind: 'message', message: registered.message });
       return;

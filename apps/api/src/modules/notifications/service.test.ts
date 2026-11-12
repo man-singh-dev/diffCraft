@@ -28,7 +28,13 @@ describeWithDb('notifications', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: testDatabaseUrl }));
+    app = await buildApp(
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
+        DATABASE_URL: testDatabaseUrl,
+      }),
+    );
   });
 
   afterAll(async () => {

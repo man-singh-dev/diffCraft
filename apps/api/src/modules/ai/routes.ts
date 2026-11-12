@@ -30,7 +30,7 @@ function findingIdParam(request: FastifyRequest): string {
 export const analysisRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Reply: AiJob }>(
     '/analyses',
-    { preHandler: requireWorkspaceRole('member') },
+    { preHandler: [requireWorkspaceRole('member'), app.limit('analysis-user')] },
     async (request, reply) => {
       if (!app.ai.enabled) throw new AiDisabledError();
       const review = await loadReview(app, request);

@@ -6,7 +6,7 @@ import { issueTicket, TICKET_TTL_SECONDS } from './ticket.js';
 export const realtimeRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Reply: RealtimeTicketResponse }>(
     '/ticket',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, app.limit('ticket-user')] },
     async (request, reply) => {
       const ticket = await issueTicket(app.redis, authUser(request).id);
       reply.header('cache-control', 'no-store');

@@ -17,7 +17,12 @@ export function createRedisClient(
   redisUrl: string,
   log: FastifyBaseLogger,
   name: string,
-  options: { maxRetriesPerRequest?: number | null; lazyConnect?: boolean } = {},
+  options: {
+    maxRetriesPerRequest?: number | null;
+    lazyConnect?: boolean;
+    enableOfflineQueue?: boolean;
+    commandTimeout?: number;
+  } = {},
 ): Redis {
   const client = new Redis(redisUrl, {
     lazyConnect: true,

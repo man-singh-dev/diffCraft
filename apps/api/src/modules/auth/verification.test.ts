@@ -78,6 +78,7 @@ describeWithDb('email verification', () => {
     app = await buildApp(
       loadConfig({
         LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
         NODE_ENV: 'test',
         DATABASE_URL: testDatabaseUrl,
         WEB_ORIGIN,

@@ -1,4 +1,5 @@
 import type { ServerSendFailure } from './api.server';
+import { tooManyRequestsMessage } from './rate-limit';
 
 export type AiErrorCode =
   | 'unauthorized'
@@ -59,6 +60,17 @@ function retryAfterFrom(failure: ServerSendFailure): number | undefined {
 export function toAiError(failure: ServerSendFailure): AiActionError {
   const { status, code } = failure;
   if (status === 401) return MESSAGES.unauthenticated!;
+  if (code === 'rate_limited') {
+    const retryAfterSeconds = retryAfterFrom(failure);
+    return {
+      code: 'rate_limited',
+      message:
+        retryAfterSeconds === undefined
+          ? tooManyRequestsMessage(undefined, "You're starting AI reviews too quickly.")
+          : "You're starting AI reviews too quickly.",
+      ...(retryAfterSeconds !== undefined && { retryAfterSeconds }),
+    };
+  }
   if (status === 429 || code === 'analysis_limit_reached') {
     const retryAfterSeconds = retryAfterFrom(failure);
     return {

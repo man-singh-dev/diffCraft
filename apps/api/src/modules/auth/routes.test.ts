@@ -23,9 +23,16 @@ describeWithDb('POST /api/v1/auth/register', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp(loadConfig({ LOG_LEVEL: 'silent', DATABASE_URL: testDatabaseUrl }), {
-      mailer: new FakeMailer(),
-    });
+    app = await buildApp(
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
+        DATABASE_URL: testDatabaseUrl,
+      }),
+      {
+        mailer: new FakeMailer(),
+      },
+    );
   });
 
   afterAll(async () => {
@@ -132,7 +139,12 @@ describeWithDb('login, /me and logout', () => {
 
   beforeAll(async () => {
     app = await buildApp(
-      loadConfig({ LOG_LEVEL: 'silent', NODE_ENV: 'test', DATABASE_URL: testDatabaseUrl }),
+      loadConfig({
+        LOG_LEVEL: 'silent',
+        RATE_LIMIT_ENABLED: 'false',
+        NODE_ENV: 'test',
+        DATABASE_URL: testDatabaseUrl,
+      }),
       { mailer: new FakeMailer() },
     );
   });

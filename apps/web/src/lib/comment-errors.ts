@@ -1,6 +1,8 @@
 import type { FieldErrors } from './form-errors';
+import { tooManyRequestsMessage } from './rate-limit';
 
-export type CommentErrorCode = 'unauthorized' | 'forbidden' | 'not_found' | 'invalid' | 'failed';
+export type CommentErrorCode =
+  'unauthorized' | 'forbidden' | 'not_found' | 'invalid' | 'rate_limited' | 'failed';
 
 export interface CommentActionError {
   code: CommentErrorCode;
@@ -29,9 +31,16 @@ export function toCommentError(failure: {
   status: number;
   code: string | null;
   fieldErrors: FieldErrors;
+  retryAfterSeconds?: number;
 }): CommentActionError {
   const { status, code, fieldErrors } = failure;
   if (status === 401) return { code: 'unauthorized', message: SESSION_ENDED };
+  if (status === 429) {
+    return {
+      code: 'rate_limited',
+      message: tooManyRequestsMessage(failure.retryAfterSeconds, "You're commenting too quickly."),
+    };
+  }
   if (status === 403) {
     return {
       code: 'forbidden',
