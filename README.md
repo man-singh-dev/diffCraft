@@ -26,7 +26,7 @@ DiffCraft is a code review app. You paste or upload a unified diff, read it in a
 - **Own diff engine:** a unified-diff parser, an LCS-based word-level diff, and Shiki syntax highlighting on the server. Large files load on demand. ([architecture](docs/architecture.md#diff-parsing))
 - **Redis rate limiting + CSP with nonces:** limits per IP, email and user are shared across instances, with the real client IP forwarded from the web tier. `@fastify/helmet` runs on the API and a per-request nonce CSP on the web app. ([security](docs/security.md#rate-limiting-and-security-headers-implemented))
 - **Session auth done carefully:** Argon2id, hashed session tokens in HttpOnly cookies, a CSRF Origin check, and email verification links that only verify when you press Confirm, so email scanners can't use them up. ([security](docs/security.md#authentication-implemented))
-- **Tested against real infrastructure:** API integration tests run on PostgreSQL and Redis, and CI runs typecheck, lint, format check, tests and both production builds. ([testing](docs/development.md#testing-strategy))
+- **Tested against real infrastructure:** API integration tests run on PostgreSQL and Redis, and Playwright end-to-end tests click through the production builds (two users at once for live updates, presence and access revocation), failing on any CSP violation. ([testing](docs/development.md#testing-strategy))
 
 ---
 
@@ -85,7 +85,6 @@ DiffCraft is a code review app. You paste or upload a unified diff, read it in a
 - Email notifications and a daily digest.
 - Search across reviews and comments.
 - An evaluation set for AI prompt and model changes, and per-workspace AI settings.
-- End-to-end browser tests with Playwright.
 - A custom domain and real email sending in production.
 
 ---
@@ -100,7 +99,7 @@ DiffCraft is a code review app. You paste or upload a unified diff, read it in a
 | Data      | PostgreSQL 18, Drizzle ORM, Redis (`ioredis`)                                                 |                             |
 | Jobs & AI | BullMQ, the official `openai` SDK against an OpenAI-compatible LLM (Groq)                     | AI evaluation set           |
 | Security  | `@fastify/rate-limit`, `@fastify/helmet`, nonce-based CSP                                     |                             |
-| Tooling   | pnpm workspaces, TypeScript 6, Vitest, ESLint, Prettier, esbuild                              | Playwright (e2e)            |
+| Tooling   | pnpm workspaces, TypeScript 6, Vitest, Playwright, ESLint, Prettier, esbuild                  |                             |
 | Infra     | Docker Compose (Postgres, Redis, Mailpit), GitHub Actions, Vercel, Render (+ Key Value), Neon | Custom domain, email sender |
 
 Rationale for each choice: [docs/architecture.md](docs/architecture.md#technology-stack).
@@ -232,6 +231,7 @@ pnpm test           # Vitest; needs Docker running (Postgres and Redis)
 pnpm typecheck
 pnpm lint
 pnpm format:check   # pnpm format fixes it
+pnpm e2e            # Playwright end-to-end tests (Docker running; builds and starts both apps)
 ```
 
 `pnpm test` migrates the test database first. Without `TEST_DATABASE_URL` the database tests are skipped, and with Redis unreachable the Redis tests are skipped. To stop the containers, run `pnpm infra:down`. Your data stays in Docker volumes.
@@ -252,24 +252,27 @@ More cases are in [docs/development.md](docs/development.md#troubleshooting).
 
 ## Screenshots
 
-> [!NOTE]
-> Screenshots are coming. Every screen listed below is implemented and can be tried on the [live demo](https://diffcraft-three.vercel.app).
+Captured from the real app by a Playwright project (`pnpm screenshots`) that seeds a demo workspace.
 
-| Screen                                            | Image path (once added)         |
-| ------------------------------------------------- | ------------------------------- |
-| Review list with status filters                   | `docs/images/review-list.png`   |
-| Diff viewer with an inline comment thread         | `docs/images/diff-viewer.png`   |
-| AI review card with findings                      | `docs/images/ai-review.png`     |
-| Approvals panel (reviewers, decisions, merge box) | `docs/images/approvals.png`     |
-| Notifications bell                                | `docs/images/notifications.png` |
+**Review list** with status filters
 
-<!-- Uncomment once the images exist:
-![Review list](docs/images/review-list.png)
-![Diff viewer with a comment thread](docs/images/diff-viewer.png)
-![AI review card](docs/images/ai-review.png)
-![Approvals panel](docs/images/approvals.png)
-![Notifications bell](docs/images/notifications.png)
--->
+![Review list with open, closed and merged reviews](docs/images/review-list.png)
+
+**Diff viewer**: side-by-side view, syntax highlighting, word-level changes, an AI finding and a comment thread on a line
+
+![Split diff view with an inline comment thread](docs/images/diff-viewer.png)
+
+**AI review** with findings from the fake provider
+
+![AI review card with three findings](docs/images/ai-review.png)
+
+**Approvals**: a change request blocks the merge
+
+![Merge box and reviewers panel](docs/images/approvals.png)
+
+**Notifications** in the header bell
+
+![Notification panel with unread notifications](docs/images/notifications.png)
 
 ---
 
@@ -290,7 +293,7 @@ More cases are in [docs/development.md](docs/development.md#troubleshooting).
 | 10. GitHub integration and OAuth | Planned         |
 | 11. Email and search             | Planned         |
 
-- Stage 9: rate limiting and security headers are done. End-to-end tests and a custom domain are next.
+- Stage 9: rate limiting, security headers and Playwright end-to-end tests are done. A custom domain is next.
 - Left over from earlier stages: invitations (Stage 2), review revisions and outdated detection (Stage 5), and the AI evaluation set and per-workspace AI settings (Stage 8).
 
 Scope of each stage: [docs/roadmap.md](docs/roadmap.md#development-roadmap).

@@ -1,0 +1,16 @@
+diff --git a/src/billing/tax.ts b/src/billing/tax.ts
+index 2a4c9e1..7b3d0f8 100644
+--- a/src/billing/tax.ts
++++ b/src/billing/tax.ts
+@@ -1,7 +1,9 @@
+ export function taxFor(subtotal: number, rate: number): number {
+-  return subtotal * rate;
++  // Round per line in cents, like the payment provider does.
++  const cents = Math.round(subtotal * 100 * rate);
++  return cents / 100;
+ }
+ 
+ export function totalWithTax(subtotal: number, rate: number): number {
+-  return subtotal + subtotal * rate;
++  return subtotal + taxFor(subtotal, rate);
+ }

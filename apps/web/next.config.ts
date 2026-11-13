@@ -9,6 +9,7 @@ loadEnvConfig(repoRoot, process.env.NODE_ENV !== 'production', undefined, true);
 const apiUrl = (process.env.API_URL ?? 'http://localhost:4000').replace(/\/+$/, '');
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   transpilePackages: ['@diffcraft/shared'],
   // Inlined at build time like the browser bundle's copy: the proxy (CSP connect-src) runs without the root .env loaded above.
   env: { NEXT_PUBLIC_REALTIME_URL: process.env.NEXT_PUBLIC_REALTIME_URL ?? '' },

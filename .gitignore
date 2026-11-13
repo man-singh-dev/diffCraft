@@ -4,12 +4,15 @@ node_modules/
 # Build output
 dist/
 .next/
+.next-e2e/
 out/
 *.tsbuildinfo
 next-env.d.ts
 
 # Test output
 coverage/
+e2e/test-results/
+e2e/playwright-report/
 
 # Environment files: never commit real values
 .env

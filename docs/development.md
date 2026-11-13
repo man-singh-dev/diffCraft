@@ -79,6 +79,7 @@ pnpm lint                            # ESLint
 pnpm format:check                    # Prettier (use `pnpm format` to fix)
 pnpm --filter @diffcraft/api build   # API production bundle (esbuild → apps/api/dist)
 pnpm --filter @diffcraft/web build   # Next.js production build
+pnpm e2e                             # Playwright end-to-end tests (separate CI job)
 ```
 
 `pnpm test` reads `TEST_DATABASE_URL` and `TEST_REDIS_URL` from `.env`. With `TEST_DATABASE_URL` set but Postgres down, the run fails while migrating the test database. Without `TEST_DATABASE_URL` the database tests are skipped, and with Redis unreachable the Redis tests (realtime, `/ready`, rate limits) are skipped with a warning.
@@ -400,6 +401,14 @@ diffCraft/
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── vitest.config.ts
+├── e2e/                              # Playwright end-to-end tests (@diffcraft/e2e)
+│   ├── playwright.config.ts          # Projects e2e and screenshots; webServer builds and starts API and web
+│   ├── env.ts                        # Ports, URLs and the environment of both servers
+│   ├── scripts/prepare-db.ts         # Drops and recreates diffcraft_e2e before the API starts
+│   ├── support/                      # Fixtures (users, API calls, CSP watcher), Mailpit client, scenarios
+│   ├── fixtures/                     # Patches used by the tests and the screenshots
+│   ├── tests/                        # *.spec.ts, one file per area
+│   └── screenshots/                  # Seeds a demo workspace and writes docs/images/*.png
 ├── infra/
 │   └── postgres/
 │       └── init/
@@ -439,29 +448,83 @@ Each API feature has its own `modules/<feature>/` folder. The AI worker and the 
 
 ## Testing Strategy
 
-> Status: **Implemented** for the levels below, except end-to-end tests (**Planned**). No coverage figures are claimed.
+> Status: **Implemented** for the levels below, end-to-end tests included. No coverage figures are claimed.
 
 All tests use Vitest, sit next to the file they test (`*.test.ts` / `*.test.tsx`), and run with `pnpm test` from the root (each app and package is a Vitest project). The API's Vitest global setup migrates the separate `diffcraft_test` database and checks Redis first. Database tests are skipped when `TEST_DATABASE_URL` is unset, and Redis tests when Redis is unreachable. No test calls a real LLM: AI tests use the fake provider or a stubbed client.
 
 ### Exists now
 
-| Level             | What is covered                                                                                                                                                                                                                                                                                                                                               |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit              | API config validation, logger, password hashing, error handler, CSRF Origin check, security headers; AI context building, redaction, prompt building and finding-to-line mapping.                                                                                                                                                                             |
-| API integration   | Every route group (auth, workspaces and members, reviews, comments, approvals, notifications, AI, `/health`, `/ready`) through Fastify's `inject` against a real PostgreSQL test database: authorization and cross-workspace `404`s, constraints, transaction atomicity (a failing insert writes nothing), and a merge vs. request-changes race run 25 times. |
-| Real-time         | Ticket handshake, room authorization and limits, emit-after-commit (no event on failed writes), presence, and delivery across two app instances through the Redis adapter, with real `socket.io-client` connections.                                                                                                                                          |
-| Jobs and outbox   | The AI queue and worker (claiming, retries and backoff, timeouts, invalid output and repair, idempotent completion, the sweeper) and the outbox relay (`SKIP LOCKED`, retries, give-up, cleanup).                                                                                                                                                             |
-| Rate limiting     | Limits per IP, email and user against Redis, the real client IP through `WEB_PROXY_SECRET`, and behaviour with Redis unreachable (general limits fail open, login limits still answer `429`).                                                                                                                                                                 |
-| Schema / contract | Shared Zod schemas and pure functions in `packages/shared`: the diff parser (with patch fixtures), word diff and row building, permission and approval-rule functions, suggestion patches, realtime and notification payloads.                                                                                                                                |
-| Web               | `apps/web/src/lib` helpers (API client, Server Action validation and error mapping, real-time client with a fake socket, notifications store, highlighting, CSP and client IP), and components (`DiffTable`, comment threads, approval panels, AI review card, notification bell, live indicator, verify-email pages) rendered to static markup with mocks.   |
-| CI                | GitHub Actions runs typecheck, lint, format check, the full test suite against PostgreSQL 18 and Redis 8 service containers, and the API and web builds on every PR and push to `main`.                                                                                                                                                                       |
+| Level             | What is covered                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit              | API config validation, logger, password hashing, error handler, CSRF Origin check, security headers; AI context building, redaction, prompt building and finding-to-line mapping.                                                                                                                                                                                                                                                                       |
+| API integration   | Every route group (auth, workspaces and members, reviews, comments, approvals, notifications, AI, `/health`, `/ready`) through Fastify's `inject` against a real PostgreSQL test database: authorization and cross-workspace `404`s, constraints, transaction atomicity (a failing insert writes nothing), and a merge vs. request-changes race run 25 times.                                                                                           |
+| Real-time         | Ticket handshake, room authorization and limits, emit-after-commit (no event on failed writes), presence, and delivery across two app instances through the Redis adapter, with real `socket.io-client` connections.                                                                                                                                                                                                                                    |
+| Jobs and outbox   | The AI queue and worker (claiming, retries and backoff, timeouts, invalid output and repair, idempotent completion, the sweeper) and the outbox relay (`SKIP LOCKED`, retries, give-up, cleanup).                                                                                                                                                                                                                                                       |
+| Rate limiting     | Limits per IP, email and user against Redis, the real client IP through `WEB_PROXY_SECRET`, and behaviour with Redis unreachable (general limits fail open, login limits still answer `429`).                                                                                                                                                                                                                                                           |
+| Schema / contract | Shared Zod schemas and pure functions in `packages/shared`: the diff parser (with patch fixtures), word diff and row building, permission and approval-rule functions, suggestion patches, realtime and notification payloads.                                                                                                                                                                                                                          |
+| Web               | `apps/web/src/lib` helpers (API client, Server Action validation and error mapping, real-time client with a fake socket, notifications store, highlighting, CSP and client IP), and components (`DiffTable`, comment threads, approval panels, AI review card, notification bell, live indicator, verify-email pages) rendered to static markup with mocks.                                                                                             |
+| End-to-end        | Playwright (`e2e/`) clicks through the production builds of both apps: sign-up and email verification, workspaces and members, creating a review, the files tab, comments seen live by a second user, suggestion patches, approvals and merge, presence, notifications, the AI review, access revocation, the login rate limit. Every page fails the test on a Content Security Policy violation. See [End-to-end tests](#end-to-end-tests-playwright). |
+| CI                | GitHub Actions runs typecheck, lint, format check, the full test suite against PostgreSQL 18 and Redis 8 service containers, and the API and web builds on every PR and push to `main`.                                                                                                                                                                                                                                                                 |
+
+### End-to-end tests (Playwright)
+
+The `e2e/` package (`@diffcraft/e2e`) runs Playwright against the real stack. Playwright's `webServer` config builds and starts both apps in production mode on their own ports, so a dev server on 3000 / 4000 can keep running:
+
+| Part    | E2E setup                                                                                                                                                                                                         |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API     | `apps/api` production bundle on `http://localhost:4100`, `AI_PROVIDER=fake`. The database `diffcraft_e2e` is dropped, recreated and migrated on every start.                                                      |
+| Web     | `next build` + `next start` on `http://localhost:3100`, built into `apps/web/.next-e2e` (`NEXT_DIST_DIR`), so a regular build is never replaced.                                                                  |
+| Redis   | Database 2 of the Docker Redis, with its own rate-limit prefix.                                                                                                                                                   |
+| Email   | Sent to Mailpit (Docker); the tests read verification links through Mailpit's API.                                                                                                                                |
+| Limits  | Rate limiting is on, with every limit out of reach except login per email (5 per 15 minutes), which one test runs into.                                                                                           |
+| Browser | The installed Google Chrome (`channel: 'chrome'`), so nothing is downloaded. `E2E_BROWSER_CHANNEL=` (empty) uses Playwright's own Chromium after `pnpm --filter @diffcraft/e2e exec playwright install chromium`. |
+
+Each test creates its own users (registered, verified through the emailed link and logged in through the API), workspace and review, so tests are independent and run in parallel. Selectors are roles, labels and text, never CSS; waiting is Playwright's auto-waiting and `expect` polling, never sleeps. An automatic fixture collects console messages and `securitypolicyviolation` events on every page of every browser context and fails the test on any CSP violation.
+
+Run them with Docker running (`pnpm infra:up`); your root `.env` isn't used or changed:
+
+```bash
+pnpm e2e                                              # builds both apps, starts them, runs every test
+pnpm --filter @diffcraft/e2e test tests/ai.spec.ts    # one file
+pnpm --filter @diffcraft/e2e test --headed            # watch the browser
+pnpm --filter @diffcraft/e2e test --ui                # Playwright's UI mode: pick, rerun and step through tests
+pnpm --filter @diffcraft/e2e test --debug             # Playwright Inspector, paused at the first action
+```
+
+```bash
+# macOS / Linux
+E2E_SKIP_BUILD=1 pnpm e2e                             # reuse the last builds when only tests changed
+```
+
+```powershell
+# Windows PowerShell
+$env:E2E_SKIP_BUILD = '1'; pnpm e2e; Remove-Item Env:E2E_SKIP_BUILD
+```
+
+**Debugging a failure.** A failed test keeps its trace, screenshot and error context in `e2e/test-results/`, and the HTML report goes to `e2e/playwright-report/`:
+
+```bash
+pnpm --filter @diffcraft/e2e report                                         # open the HTML report
+pnpm --filter @diffcraft/e2e exec playwright show-trace test-results/<test>/trace.zip   # step through the trace
+```
+
+The trace viewer shows every action with DOM snapshots before and after, the console, network requests and the source line. In CI the e2e job uploads the same report and traces as the `playwright-report` artifact when it fails.
+
+**Screenshots.** `pnpm screenshots` runs the separate `screenshots` project: it seeds a demo workspace (three people, reviews in every status, threads with a suggestion, a change request and an approval, AI findings from the fake provider) and writes 1440×900 PNGs at device scale factor 2 to `docs/images/`. It isn't part of `pnpm e2e` or CI; run it after a UI change and commit the new images.
+
+| Variable                                                 | Default                                                                                             |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `E2E_DATABASE_URL`                                       | `postgresql://diffcraft:diffcraft@localhost:5432/diffcraft_e2e` (must end in `_e2e`: it is dropped) |
+| `E2E_REDIS_URL`                                          | `redis://localhost:6379/2`                                                                          |
+| `E2E_SMTP_URL`, `E2E_MAILPIT_URL`                        | `smtp://localhost:1025`, `http://localhost:8025`                                                    |
+| `E2E_WEB_PORT`, `E2E_API_PORT`                           | `3100`, `4100`                                                                                      |
+| `E2E_SKIP_BUILD`, `E2E_BROWSER_CHANNEL`, `E2E_LOG_LEVEL` | unset, `chrome`, `warn`                                                                             |
 
 ### Planned
 
-| Level      | Scope                                                                                                                        | Tooling    |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| End-to-end | Browser flows against a running web app and API: sign up and verify, create a review, comment, approve and merge, AI review. | Playwright |
-| AI eval    | A fixed set of patches with expected findings, to measure prompt and model changes.                                          | Vitest     |
+| Level   | Scope                                                                               | Tooling |
+| ------- | ----------------------------------------------------------------------------------- | ------- |
+| AI eval | A fixed set of patches with expected findings, to measure prompt and model changes. | Vitest  |
 
 ---
 

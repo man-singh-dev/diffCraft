@@ -1,0 +1,19 @@
+diff --git a/src/media/images.ts b/src/media/images.ts
+index 51c0d2a..c8e14f6 100644
+--- a/src/media/images.ts
++++ b/src/media/images.ts
+@@ -1,5 +1,11 @@
+-export function imageUrl(id: string): string {
+-  return `/images/${id}`;
++const CDN_ORIGIN = process.env.CDN_ORIGIN ?? '';
++
++export function imageUrl(id: string, width = 640): string {
++  return `${CDN_ORIGIN}/images/${id}?w=${width}`;
+ }
+ 
+-export const IMAGE_CACHE_SECONDS = 60;
++export const IMAGE_CACHE_SECONDS = 60 * 60 * 24 * 30;
++
++export function cacheControl(): string {
++  return `public, max-age=${IMAGE_CACHE_SECONDS}, immutable`;
++}

@@ -1,0 +1,17 @@
+{
+  "name": "@diffcraft/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test --project=e2e",
+    "screenshots": "playwright test --project=screenshots",
+    "report": "playwright show-report",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1"
+  }
+}
