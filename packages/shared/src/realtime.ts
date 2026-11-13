@@ -79,6 +79,16 @@ export const PresenceEventSchema = z.object({
 });
 export type PresenceEvent = z.infer<typeof PresenceEventSchema>;
 
+export const ACCESS_REVOKED_REASONS = ['removed', 'workspace_deleted'] as const;
+export const AccessRevokedReasonSchema = z.enum(ACCESS_REVOKED_REASONS);
+export type AccessRevokedReason = z.infer<typeof AccessRevokedReasonSchema>;
+
+export const AccessRevokedEventSchema = z.object({
+  reviewId: z.uuid(),
+  reason: AccessRevokedReasonSchema,
+});
+export type AccessRevokedEvent = z.infer<typeof AccessRevokedEventSchema>;
+
 export const ReviewRoomEventSchemas = {
   'thread:upsert': ThreadUpsertEventSchema,
   'review:changed': ReviewChangedEventSchema,
@@ -86,6 +96,7 @@ export const ReviewRoomEventSchemas = {
   presence: PresenceEventSchema,
   'analysis:status': AnalysisStatusEventSchema,
   'analysis:completed': AnalysisCompletedEventSchema,
+  'review:access-revoked': AccessRevokedEventSchema,
 } as const;
 
 export type ReviewRoomEvents = {

@@ -67,7 +67,9 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     '/:workspaceId',
     { preHandler: requireWorkspaceRole('owner') },
     async (request, reply) => {
-      await deleteWorkspace(app.db, requestWorkspace(request).id);
+      const { id } = requestWorkspace(request);
+      const members = await deleteWorkspace(app.db, id);
+      await app.realtime.revokeWorkspaceAccess(members, id, 'workspace_deleted');
       return reply.code(204).send();
     },
   );

@@ -13,7 +13,12 @@ import {
 } from '@/components/review-ui';
 import { textLink } from '@/components/styles';
 import { CommentsProvider } from '@/components/comments-provider';
-import { LiveStatus, ReviewDeletedBanner, ViewingNow } from '@/components/review-live';
+import {
+  LiveStatus,
+  RealtimeAccessBanner,
+  ReviewDeletedBanner,
+  ViewingNow,
+} from '@/components/review-live';
 import {
   OpenThreadCount,
   OpenThreadsSummary,
@@ -140,6 +145,7 @@ export default async function ReviewPage(
           </Link>
 
           <ReviewDeletedBanner />
+          <RealtimeAccessBanner />
 
           <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-sm">
             <div className="flex items-center gap-2">

@@ -7,39 +7,51 @@ import {
   userRoom,
   type ClientToServerEvents,
   type ReviewJoinAck,
+  type AccessRevokedReason,
   type ReviewRoomEvents,
   type ServerToClientEvents,
   type UserEvents,
 } from '@diffcraft/shared';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
 import type { Redis } from 'ioredis';
 import { Server, type Socket } from 'socket.io';
-import { users } from '../../db/schema/index.js';
+import { sessions, users } from '../../db/schema/index.js';
 import { closeRedisClient, createRedisClient } from '../../plugins/redis.js';
 import { getReviewByNumber } from '../reviews/service.js';
 import { getMembership } from '../workspaces/service.js';
+import {
+  createAccessControl,
+  DEFAULT_ACCESS_OPTIONS,
+  type AccessCheckResult,
+  type AccessOptions,
+  type InterServerEvents,
+} from './access.js';
 import { createPresence, DEFAULT_PRESENCE_OPTIONS, type Presence } from './presence.js';
-import { consumeTicket } from './ticket.js';
+import { consumeTicket, type TicketClaims } from './ticket.js';
 
+// Sent to other instances by fetchSockets(): keep it small and JSON-serializable.
 export interface SocketData {
   userId: string;
   displayName: string;
+  sessionId: string;
   joinTimes: number[];
+  /** reviewId → workspaceId of each review room this socket joined. */
+  reviewRooms: Record<string, string>;
 }
 
 export type RealtimeServer = Server<
   ClientToServerEvents,
   ServerToClientEvents,
-  Record<string, never>,
+  InterServerEvents,
   SocketData
 >;
 export type RealtimeSocket = Socket<
   ClientToServerEvents,
   ServerToClientEvents,
-  Record<string, never>,
+  InterServerEvents,
   SocketData
 >;
 
@@ -64,6 +76,15 @@ export interface Realtime {
   ): void;
   emitToUser<E extends keyof UserEvents>(userId: string, event: E, payload: UserEvents[E]): void;
   canReachAllInstances(): boolean;
+  /** After the commit that ended the membership: evicts those users' sockets from the workspace's review rooms. */
+  revokeWorkspaceAccess(
+    userIds: string[],
+    workspaceId: string,
+    reason: AccessRevokedReason,
+  ): Promise<void>;
+  /** After the sessions were deleted: disconnects the sockets authenticated with them. */
+  revokeSessions(userId: string, sessionIds: string[]): Promise<void>;
+  checkLocalSockets(): Promise<AccessCheckResult>;
 }
 
 declare module 'fastify' {
@@ -76,13 +97,14 @@ export interface RealtimePluginOptions {
   webOrigin: string;
   redisUrl: string;
   limits?: Partial<RealtimeLimits>;
+  access?: Partial<AccessOptions>;
 }
 
 export const safeError = (err: unknown) =>
   err instanceof Error ? { name: err.name, message: err.message } : { message: String(err) };
 
 export const realtimePlugin = fp<RealtimePluginOptions>(
-  async (app, { webOrigin, redisUrl, limits: limitOverrides }) => {
+  async (app, { webOrigin, redisUrl, limits: limitOverrides, access: accessOverrides }) => {
     const limits = { ...DEFAULT_REALTIME_LIMITS, ...limitOverrides };
     const allowedOrigin = new URL(webOrigin).origin;
 
@@ -102,15 +124,17 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
         const auth: unknown = socket.handshake.auth;
         const ticket =
           typeof auth === 'object' && auth !== null && 'ticket' in auth ? auth.ticket : null;
-        const userId = await consumeTicket(app.redis, ticket);
-        const user = userId ? await findUser(app, userId) : undefined;
-        if (!user) {
+        const claims = await consumeTicket(app.redis, ticket);
+        const user = claims ? await findSessionUser(app, claims) : undefined;
+        if (!claims || !user) {
           next(new Error('unauthorized'));
           return;
         }
         socket.data.userId = user.id;
         socket.data.displayName = user.displayName;
+        socket.data.sessionId = claims.sessionId;
         socket.data.joinTimes = [];
+        socket.data.reviewRooms = {};
         next();
       } catch (err) {
         app.log.error({ err: safeError(err) }, 'realtime handshake failed');
@@ -118,14 +142,24 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
       }
     });
 
+    let pub: Redis | undefined;
+    let sub: Redis | undefined;
+
     const presence = createPresence(io, app.log, DEFAULT_PRESENCE_OPTIONS);
+    const access = createAccessControl({
+      io,
+      db: app.db,
+      log: app.log,
+      presence,
+      options: { ...DEFAULT_ACCESS_OPTIONS, ...accessOverrides },
+      clusterJoined: () => pub !== undefined,
+    });
     io.on('connection', (socket) => {
       void socket.join(userRoom(socket.data.userId));
       registerReviewRooms(app, socket, limits, presence);
+      // After joining the user room: a logout committed after the handshake's check is seen here or reaches this socket.
+      void access.confirmSession(socket);
     });
-
-    let pub: Redis | undefined;
-    let sub: Redis | undefined;
 
     // Only a listening server joins the cluster; apps used through inject() never connect these.
     app.addHook('onListen', async () => {
@@ -134,9 +168,11 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
       pub = createRedisClient(redisUrl, app.log, 'pub', options);
       sub = createRedisClient(redisUrl, app.log, 'sub', options);
       io.adapter(createAdapter(pub, sub));
+      access.startRechecks();
     });
 
     app.addHook('preClose', async () => {
+      await access.stop();
       presence.close();
       await io.close();
     });
@@ -160,16 +196,26 @@ export const realtimePlugin = fp<RealtimePluginOptions>(
         );
       },
       canReachAllInstances: () => !pub || pub.status === 'ready',
+      revokeWorkspaceAccess: access.revokeWorkspaceAccess,
+      revokeSessions: access.revokeSessions,
+      checkLocalSockets: access.checkLocalSockets,
     } satisfies Realtime);
   },
   { name: 'realtime', dependencies: ['db', 'redis'] },
 );
 
-async function findUser(app: FastifyInstance, userId: string) {
+async function findSessionUser(app: FastifyInstance, { userId, sessionId }: TicketClaims) {
   const [row] = await app.db
     .select({ id: users.id, displayName: users.displayName })
-    .from(users)
-    .where(eq(users.id, userId));
+    .from(sessions)
+    .innerJoin(users, eq(sessions.userId, users.id))
+    .where(
+      and(
+        eq(sessions.id, sessionId),
+        eq(sessions.userId, userId),
+        gt(sessions.expiresAt, sql`now()`),
+      ),
+    );
   return row;
 }
 
@@ -207,6 +253,7 @@ function registerReviewRooms(
     const room = reviewRoom(parsed.data.reviewId);
     // Only a member of the room may trigger a recompute for it.
     const wasInRoom = socket.rooms.has(room);
+    delete socket.data.reviewRooms[parsed.data.reviewId];
     await socket.leave(room);
     ack({ ok: true });
     if (wasInRoom) presence.changed(parsed.data.reviewId);
@@ -251,7 +298,15 @@ async function joinReview(
     return { ok: false, error: 'too_many_rooms' };
   }
   if (socket.disconnected) return { ok: false, error: 'not_found' };
+  socket.data.reviewRooms[review.id] = review.workspaceId;
   await socket.join(room);
+
+  // Checked again after joining: a removal committed during the checks above is seen here or evicts this socket.
+  if (!(await getMembership(app.db, workspaceId, socket.data.userId))) {
+    delete socket.data.reviewRooms[review.id];
+    await socket.leave(room);
+    return { ok: false, error: 'not_found' };
+  }
   return { ok: true, reviewId: review.id };
 }
 

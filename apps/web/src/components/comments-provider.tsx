@@ -140,6 +140,10 @@ export function CommentsProvider({
       refresh.cancel();
       setDeleted(true);
     },
+    onAccessRevoked() {
+      refresh.cancel();
+      setPresence(null);
+    },
     async onResync() {
       // Another instance may answer after a reconnect, and its clock may be behind the last one's.
       setPresence(null);

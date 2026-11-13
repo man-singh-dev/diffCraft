@@ -11,6 +11,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Socket as ClientSocket } from 'socket.io-client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { users } from '../../db/schema/index.js';
+import { hashSessionToken, SESSION_COOKIE_NAME } from '../auth/session.js';
 import { addMember, createUserWithSession, type TestUser } from '../../test/fixtures.js';
 import {
   closeRealtimeResourcesAfterTests,
@@ -112,7 +113,9 @@ describeWithDbAndRedis('realtime', () => {
       expect(ttl).toBeGreaterThan(0);
       expect(ttl).toBeLessThanOrEqual(30);
       const value = await app.redis.get(key);
-      expect(JSON.parse(value!)).toEqual({ userId: viewer.id });
+      const token = viewer.cookies[SESSION_COOKIE_NAME]!;
+      expect(JSON.parse(value!)).toEqual({ userId: viewer.id, sessionId: hashSessionToken(token) });
+      expect(value).not.toContain(token);
       expect(await app.redis.keys(`*${ticket}*`)).toEqual([]);
     });
   });
@@ -142,6 +145,18 @@ describeWithDbAndRedis('realtime', () => {
       const ticket = await getTicket(app, viewer);
       await app.redis.pexpire(ticketKey(ticket), 1);
       await new Promise((resolve) => setTimeout(resolve, 20));
+      await expect(connect(url, { ticket })).rejects.toThrow('unauthorized');
+    });
+
+    it('rejects a ticket whose session ended before the handshake', async () => {
+      const user = await createUserWithSession(app.db);
+      const ticket = await getTicket(app, user);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/logout',
+        cookies: user.cookies,
+      });
+      expect(res.statusCode).toBe(204);
       await expect(connect(url, { ticket })).rejects.toThrow('unauthorized');
     });
 

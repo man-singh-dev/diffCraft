@@ -101,8 +101,22 @@ export async function renameWorkspace(
   return row ? toWorkspace(row, role) : null;
 }
 
-export async function deleteWorkspace(db: Database, id: string): Promise<void> {
-  await db.delete(workspaces).where(eq(workspaces.id, id));
+/** Returns the ids of the members it removed. */
+export async function deleteWorkspace(db: Database, id: string): Promise<string[]> {
+  return db.transaction(async (tx) => {
+    // The lock member changes take: no one can be added between reading the members and the delete.
+    await tx
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.id, id))
+      .for('update');
+    const members = await tx
+      .select({ userId: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.workspaceId, id));
+    await tx.delete(workspaces).where(eq(workspaces.id, id));
+    return members.map((member) => member.userId);
+  });
 }
 
 export async function getMembership(

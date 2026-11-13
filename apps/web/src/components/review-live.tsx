@@ -21,6 +21,8 @@ const INDICATOR: Partial<Record<ReviewRoomStatus, { label: string; dot: string; 
   live: { label: 'Live', dot: 'bg-emerald-400', text: 'text-emerald-300' },
   reconnecting: { label: 'Reconnecting…', dot: 'bg-amber-400', text: 'text-amber-300' },
   offline: { label: 'Offline', dot: 'bg-slate-500', text: 'text-slate-400' },
+  revoked: { label: 'No access', dot: 'bg-rose-400', text: 'text-rose-300' },
+  session_ended: { label: 'Logged out', dot: 'bg-slate-500', text: 'text-slate-400' },
 };
 
 export function LiveStatus() {
@@ -50,6 +52,37 @@ export function ViewingNow() {
       <span className="sr-only">{description}</span>
     </span>
   );
+}
+
+export function RealtimeAccessBanner() {
+  const live = useContext(ReviewLiveContext);
+  if (live?.status === 'revoked') {
+    return (
+      <p
+        role="alert"
+        className="rounded-xl border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200"
+      >
+        You no longer have access to this review.{' '}
+        <Link href="/workspaces" className={textLink}>
+          Go to your workspaces
+        </Link>
+      </p>
+    );
+  }
+  if (live?.status === 'session_ended') {
+    return (
+      <p
+        role="alert"
+        className="rounded-xl border border-amber-800 bg-amber-950/50 px-4 py-3 text-sm text-amber-200"
+      >
+        Your session ended.{' '}
+        <Link href="/login" className={textLink}>
+          Log in again
+        </Link>
+      </p>
+    );
+  }
+  return null;
 }
 
 export function ReviewDeletedBanner() {

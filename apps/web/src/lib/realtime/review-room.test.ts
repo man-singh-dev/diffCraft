@@ -38,6 +38,7 @@ function setup({ connected = true } = {}) {
     onPresence: vi.fn(),
     onAnalysisStatus: vi.fn(),
     onAnalysisCompleted: vi.fn(),
+    onAccessRevoked: vi.fn(),
     onResync: vi.fn(),
   };
   const unsubscribe = subscribeToReviewRoom(connection, {
@@ -188,6 +189,82 @@ describe('subscribeToReviewRoom', () => {
     socket.transportDrop();
     socket.receive('review:changed', { reviewId: REVIEW, actorId: null, at: AT, reason: 'merged' });
     expect(handlers.onReviewChanged).not.toHaveBeenCalled();
+  });
+
+  it('stops for good when access is revoked: no further events, no re-join, status revoked', () => {
+    const { socket, handlers, status, unsubscribe } = setup();
+    socket.ack('review:join', 0, joinAck);
+    socket.receive('review:access-revoked', { reviewId: OTHER_REVIEW, reason: 'removed' });
+    socket.receive('review:access-revoked', { reviewId: REVIEW, reason: 'kicked' });
+    expect(handlers.onAccessRevoked).not.toHaveBeenCalled();
+    expect(status()).toBe('live');
+
+    const revoked = { reviewId: REVIEW, reason: 'removed' };
+    socket.receive('review:access-revoked', revoked);
+    expect(handlers.onAccessRevoked.mock.calls).toEqual([[revoked]]);
+    expect(status()).toBe('revoked');
+
+    const base = { reviewId: REVIEW, actorId: ACTOR, at: AT };
+    socket.receive('thread:upsert', { ...base, thread });
+    socket.receive('review:changed', { ...base, reason: 'merged' });
+    socket.receive('presence', { reviewId: REVIEW, at: AT, viewers: [], total: 0 });
+    expect(handlers.onThread).not.toHaveBeenCalled();
+    expect(handlers.onReviewChanged).not.toHaveBeenCalled();
+    expect(handlers.onPresence).not.toHaveBeenCalled();
+
+    socket.transportDrop();
+    socket.serverConnect();
+    expect(socket.sentEvents('review:join')).toHaveLength(1);
+    expect(handlers.onResync).not.toHaveBeenCalled();
+    expect(status()).toBe('revoked');
+
+    unsubscribe();
+    expect(socket.sentEvents('review:leave')).toEqual([]);
+  });
+
+  it('ignores a revocation that arrives before the join is acknowledged', () => {
+    const { socket, handlers, status } = setup();
+    socket.receive('review:access-revoked', { reviewId: REVIEW, reason: 'removed' });
+    expect(handlers.onAccessRevoked).not.toHaveBeenCalled();
+    socket.ack('review:join', 0, joinAck);
+    expect(status()).toBe('live');
+  });
+
+  it('reports a session ended when the reconnect ticket is refused', async () => {
+    const socket = new FakeSocket();
+    const tickets = [
+      { ok: true as const, ticket: 't' },
+      { ok: false as const, unauthorized: true },
+    ];
+    let auth: ((callback: (data: Record<string, unknown>) => void) => void) | undefined;
+    const timers: (() => void)[] = [];
+    const connection = createRealtimeConnection({
+      createSocket: (a) => {
+        auth = a;
+        return socket;
+      },
+      fetchTicket: async () => tickets.shift()!,
+      setTimer: (fn) => timers.push(fn),
+    });
+    const statuses: ReviewRoomStatus[] = [];
+    subscribeToReviewRoom(connection, {
+      workspaceId: WS,
+      reviewNumber: 7,
+      onStatus: (s) => statuses.push(s),
+    });
+    auth!(() => undefined);
+    socket.serverConnect();
+    socket.ack('review:join', 0, joinAck);
+
+    socket.connected = false;
+    socket.active = false;
+    socket.receive('disconnect', 'io server disconnect');
+    timers.shift()!();
+    await new Promise<void>((resolve) => auth!(() => resolve()));
+    socket.refuse();
+
+    expect(statuses.at(-1)).toBe('session_ended');
+    expect(timers).toEqual([]);
   });
 
   it('leaves the room (with an acknowledgement callback) and stops listening on unsubscribe', () => {

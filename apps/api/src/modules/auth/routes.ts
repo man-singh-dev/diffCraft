@@ -33,6 +33,11 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
 ) => {
   const cookieOptions = sessionCookieOptions(secureCookies);
 
+  async function endSession(token: string) {
+    const ended = await deleteSession(app.db, token);
+    if (ended) await app.realtime.revokeSessions(ended.userId, [ended.id]);
+  }
+
   app.post<{ Reply: PublicUser }>(
     '/register',
     { preHandler: app.limit('register-ip') },
@@ -90,7 +95,7 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
 
       // Session fixation defence: always issue a new session on login, and drop the old one if sent.
       const previousToken = request.cookies[SESSION_COOKIE_NAME];
-      if (previousToken) await deleteSession(app.db, previousToken);
+      if (previousToken) await endSession(previousToken);
       const { token } = await createSession(app.db, user.id);
 
       reply.setCookie(SESSION_COOKIE_NAME, token, cookieOptions);
@@ -100,7 +105,7 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
 
   app.post('/logout', async (request, reply) => {
     const token = request.cookies[SESSION_COOKIE_NAME];
-    if (token) await deleteSession(app.db, token);
+    if (token) await endSession(token);
 
     reply.clearCookie(SESSION_COOKIE_NAME, cookieOptions);
     return reply.code(204).send();

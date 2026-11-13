@@ -1,4 +1,5 @@
 import type {
+  AccessRevokedEvent,
   AnalysisCompletedEvent,
   AnalysisStatusEvent,
   PresenceEvent,
@@ -10,7 +11,7 @@ import type {
 import type { ConnectionStatus, RealtimeConnection } from './connection';
 import { parseRoomEvent, REVIEW_ROOM_EVENTS, type ReviewRoomEventName } from './events';
 
-export type ReviewRoomStatus = ConnectionStatus | 'disabled';
+export type ReviewRoomStatus = ConnectionStatus | 'disabled' | 'revoked';
 
 export interface ReviewRoomHandlers {
   onThread?: (event: ThreadUpsertEvent) => void;
@@ -19,6 +20,7 @@ export interface ReviewRoomHandlers {
   onPresence?: (event: PresenceEvent) => void;
   onAnalysisStatus?: (event: AnalysisStatusEvent) => void;
   onAnalysisCompleted?: (event: AnalysisCompletedEvent) => void;
+  onAccessRevoked?: (event: AccessRevokedEvent) => void;
   onResync?: () => void;
 }
 
@@ -39,6 +41,7 @@ export function subscribeToReviewRoom(
   let joinFailed = false;
   let attempt = 0;
   let disposed = false;
+  let detached = false;
 
   const report = () => {
     if (disposed) return;
@@ -103,7 +106,25 @@ export function subscribeToReviewRoom(
       const event = joined && parseRoomEvent('analysis:completed', payload, reviewId);
       if (event) handlers.onAnalysisCompleted?.(event);
     },
+    'review:access-revoked': (payload) => {
+      const event = joined && parseRoomEvent('review:access-revoked', payload, reviewId);
+      if (!event) return;
+      joined = false;
+      detach();
+      if (!disposed) onStatus('revoked');
+      handlers.onAccessRevoked?.(event);
+    },
   };
+
+  // Stops everything for this review: no later event is applied and reconnects don't re-join.
+  function detach() {
+    if (detached) return;
+    detached = true;
+    unsubscribe();
+    socket.off('connect', join);
+    socket.off('disconnect', onDisconnect);
+    for (const name of REVIEW_ROOM_EVENTS) socket.off(name, dispatch[name]);
+  }
 
   socket.on('connect', join);
   socket.on('disconnect', onDisconnect);
@@ -114,12 +135,12 @@ export function subscribeToReviewRoom(
   else report();
 
   return () => {
+    const wasDetached = detached;
     disposed = true;
-    unsubscribe();
-    socket.off('connect', join);
-    socket.off('disconnect', onDisconnect);
-    for (const name of REVIEW_ROOM_EVENTS) socket.off(name, dispatch[name]);
+    detach();
     // The server ignores a leave without an acknowledgement callback.
-    if (socket.connected && reviewId) socket.emit('review:leave', { reviewId }, () => {});
+    if (!wasDetached && socket.connected && reviewId) {
+      socket.emit('review:leave', { reviewId }, () => {});
+    }
   };
 }

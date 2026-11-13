@@ -44,7 +44,10 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.post('/leave', { preHandler: requireWorkspaceRole('viewer') }, async (request, reply) => {
-    await leaveWorkspace(app.db, requestWorkspace(request).id, authUser(request).id);
+    const { id } = requestWorkspace(request);
+    const userId = authUser(request).id;
+    await leaveWorkspace(app.db, id, userId);
+    await app.realtime.revokeWorkspaceAccess([userId], id, 'removed');
     return reply.code(204).send();
   });
 
@@ -63,7 +66,9 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete('/:userId', { preHandler: requireWorkspaceRole('admin') }, async (request, reply) => {
     const userId = targetUserId(request);
-    await removeMember(app.db, requestWorkspace(request).id, authUser(request).id, userId);
+    const { id } = requestWorkspace(request);
+    await removeMember(app.db, id, authUser(request).id, userId);
+    await app.realtime.revokeWorkspaceAccess([userId], id, 'removed');
     return reply.code(204).send();
   });
 };

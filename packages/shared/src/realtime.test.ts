@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AccessRevokedEventSchema,
   PresenceEventSchema,
   ReviewChangedEventSchema,
   ReviewDeletedEventSchema,
@@ -31,10 +32,26 @@ describe('review room event schemas', () => {
       'analysis:completed',
       'analysis:status',
       'presence',
+      'review:access-revoked',
       'review:changed',
       'review:deleted',
       'thread:upsert',
     ]);
+  });
+
+  it('accepts an access revocation with a known reason only', () => {
+    expect(
+      AccessRevokedEventSchema.safeParse({ reviewId: REVIEW, reason: 'removed' }).success,
+    ).toBe(true);
+    expect(
+      AccessRevokedEventSchema.safeParse({ reviewId: REVIEW, reason: 'workspace_deleted' }).success,
+    ).toBe(true);
+    expect(AccessRevokedEventSchema.safeParse({ reviewId: REVIEW, reason: 'kicked' }).success).toBe(
+      false,
+    );
+    expect(
+      AccessRevokedEventSchema.safeParse({ reviewId: 'nope', reason: 'removed' }).success,
+    ).toBe(false);
   });
 
   it('accepts valid payloads, including a null actor', () => {

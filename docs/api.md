@@ -9,7 +9,7 @@ The REST API design: conventions, every implemented and proposed endpoint, and w
 ## API Design
 
 > [!NOTE]
-> **All endpoints below are proposed** unless marked **Implemented** (so far the four authentication endpoints, the five workspace endpoints, the five member endpoints, the seven review endpoints, the seven comment endpoints, the ten approval endpoints, the three AI analysis endpoints, `GET /health` and `GET /ready`). Paths, payloads and semantics may change. Once implemented, the OpenAPI document generated from route schemas will be authoritative.
+> Each endpoint is marked **Implemented** or **Planned** in its table (and each section says its status). Implemented: authentication, workspaces and members, reviews, comment threads, approvals, the realtime ticket, notifications, AI analysis, `GET /health` and `GET /ready`. Planned endpoints (invitations, revisions, the OpenAPI UI) may change before they are built. An OpenAPI document generated from the route schemas is planned; until then this file is the reference.
 
 Conventions (the base path, error shape, `400`, `401`, `403`, `404`, `413`, `422` and cursor pagination are **Implemented**; the rest are proposed):
 
@@ -271,9 +271,11 @@ Delivery is at most once: after reconnecting, re-join and re-fetch over HTTP.
 
 **`presence`** is not a domain event and has no `actorId`: `{ reviewId, at, viewers: { id, displayName }[], total }`. `at` is the API instance's clock when the list was computed (same format as other events); clients ignore a presence older than the one they show. `viewers` holds the distinct users connected to the room, sorted by display name and capped at 50; `total` is the real distinct count. A socket gets it right after its join is acknowledged, and the room gets it (at most once per 500 ms) after joins, leaves and disconnects.
 
+**`review:access-revoked`** is sent to one socket only, never to the room: `{ reviewId, reason }` with `reason` `removed` (the user was removed or left) or `workspace_deleted`. The server has already taken the socket out of the room; the client stops showing live updates for that review. A socket whose session ends (logout, an expired session) is disconnected instead, and its next ticket request answers `401`. See [security](security.md#continuous-authorization-for-sockets-implemented).
+
 ### Notifications
 
-**Implemented** (backend, Stage 7 step 5a). Every route needs a session and only ever touches the caller's own notifications. Notifications from a workspace the user is no longer a member of are hidden everywhere (list, count, read).
+**Implemented** (Stage 7; the web app shows them in the header bell). Every route needs a session and only ever touches the caller's own notifications. Notifications from a workspace the user is no longer a member of are hidden everywhere (list, count, read).
 
 | Method | Path                                 | Purpose                                                                                 |
 | ------ | ------------------------------------ | --------------------------------------------------------------------------------------- |
@@ -316,7 +318,7 @@ Never the person who acted, only current workspace members, and one notification
 
 The daily limit (`AI_MAX_JOBS_PER_WORKSPACE_PER_DAY`, default 20) counts every job the workspace created in the last 24 hours.
 
-Planned: listing past jobs, cancelling, converting a finding into a thread.
+Planned: listing past jobs and cancelling a job. (The web app turns a finding into a comment thread through the normal thread route, then dismisses the finding.)
 
 ### Operational
 

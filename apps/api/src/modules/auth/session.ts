@@ -34,7 +34,21 @@ export async function createSession(
   return { token, expiresAt };
 }
 
-export async function findSessionUser(db: Database, token: string): Promise<SessionUser | null> {
+export interface EndedSession {
+  id: string;
+  userId: string;
+}
+
+export interface ActiveSession {
+  id: string;
+  user: SessionUser;
+}
+
+export async function findSession(
+  db: Database,
+  token: string,
+  onExpired?: (session: EndedSession) => Promise<void>,
+): Promise<ActiveSession | null> {
   if (!TOKEN_PATTERN.test(token)) return null;
   const id = hashSessionToken(token);
 
@@ -57,11 +71,16 @@ export async function findSessionUser(db: Database, token: string): Promise<Sess
   if (!row) return null;
   if (row.expiresAt <= new Date()) {
     await db.delete(sessions).where(eq(sessions.id, id));
+    await onExpired?.({ id, userId: row.user.id });
     return null;
   }
-  return row.user;
+  return { id, user: row.user };
 }
 
-export async function deleteSession(db: Database, token: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.id, hashSessionToken(token)));
+export async function deleteSession(db: Database, token: string): Promise<EndedSession | null> {
+  const [row] = await db
+    .delete(sessions)
+    .where(eq(sessions.id, hashSessionToken(token)))
+    .returning({ id: sessions.id, userId: sessions.userId });
+  return row ?? null;
 }

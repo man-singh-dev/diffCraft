@@ -12,6 +12,7 @@ import {
   type NotificationsPluginOptions,
 } from './modules/notifications/plugin.js';
 import { notificationRoutes } from './modules/notifications/routes.js';
+import type { AccessOptions } from './modules/realtime/access.js';
 import { realtimeRoutes } from './modules/realtime/routes.js';
 import { realtimePlugin, type RealtimeLimits } from './modules/realtime/socket-server.js';
 import { requestWorkspacePlugin } from './modules/workspaces/require-workspace-role.js';
@@ -36,6 +37,7 @@ export async function buildApp(
   deps: {
     mailer?: Mailer;
     realtimeLimits?: Partial<RealtimeLimits>;
+    realtimeAccess?: Partial<AccessOptions>;
     relay?: NotificationsPluginOptions['relay'];
     ai?: Omit<AiPluginOptions, 'config'>;
   } = {},
@@ -66,6 +68,7 @@ export async function buildApp(
     webOrigin: config.WEB_ORIGIN,
     redisUrl: config.REDIS_URL,
     ...(deps.realtimeLimits && { limits: deps.realtimeLimits }),
+    ...(deps.realtimeAccess && { access: deps.realtimeAccess }),
   });
 
   await app.register(healthRoutes);

@@ -8,28 +8,32 @@ How the web app, API and database are deployed on Vercel, Render and Neon, and w
 
 ## Deployment
 
-> Status: **Implemented.** The web app, API and database are deployed. Live demo: [diffcraft-three.vercel.app](https://diffcraft-three.vercel.app).
+> Status: **Implemented.** The web app, the API (with the AI worker and the outbox relay in the same process), Redis and the database are deployed. Live demo: [diffcraft-three.vercel.app](https://diffcraft-three.vercel.app).
 
 | Part             | Host   | Plan                     |
 | ---------------- | ------ | ------------------------ |
 | Web (`apps/web`) | Vercel | Hobby (free)             |
 | API (`apps/api`) | Render | Free web service         |
 | Database         | Neon   | Free plan, PostgreSQL 18 |
+| Redis            | Render | Key Value                |
+| AI provider      | Groq   | Free API tier            |
 
 ### Environment variables (set in each host's dashboard)
 
-| Host   | Variable                   | Notes                                                                                                                                                                                  |
-| ------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Vercel | `API_URL`                  | The Render service URL. Also needed at build time: the `/api` rewrite is fixed when the app is built, so changing it means a redeploy.                                                 |
-| Vercel | `NEXT_PUBLIC_REALTIME_URL` | The Render service origin (same as `API_URL`, no path) for live updates. Inlined at build time: changing it means a redeploy. Unset: live updates are off.                             |
-| Render | `NODE_ENV`                 | Production mode: `Secure` cookies and trusted proxy headers.                                                                                                                           |
-| Render | `HOST`                     | All interfaces, so Render's proxy can reach the server.                                                                                                                                |
-| Render | `DATABASE_URL`             | Neon's direct (non-pooled) connection string. Use `sslmode=verify-full`: same checks as `require` today, without pg's deprecation warning.                                             |
-| Render | `WEB_ORIGIN`               | The Vercel URL. Must match exactly, or the API's origin check rejects logins (preview deployments have other URLs).                                                                    |
-| Render | `LOG_LEVEL`                | Optional.                                                                                                                                                                              |
-| Render | `DB_POOL_MAX`              | Optional. Keep it within Neon's connection limit.                                                                                                                                      |
-| Render | `TRUST_PROXY`              | Optional (default: private addresses). IPs, CIDRs, presets or a hop count; never `true`. See [security](security.md#the-real-client-ip).                                               |
-| Both   | `WEB_PROXY_SECRET`         | **Required on Render in production** (while rate limiting is on), and set to the **same value** on Vercel. At least 32 characters; generate with `openssl rand -base64 32`. See below. |
+| Host   | Variable                   | Notes                                                                                                                                                                                                                                                            |
+| ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vercel | `API_URL`                  | The Render service URL. Also needed at build time: the `/api` rewrite is fixed when the app is built, so changing it means a redeploy.                                                                                                                           |
+| Vercel | `NEXT_PUBLIC_REALTIME_URL` | The Render service origin (same as `API_URL`, no path) for live updates. Inlined at build time: changing it means a redeploy. Unset: live updates are off.                                                                                                       |
+| Render | `NODE_ENV`                 | Production mode: `Secure` cookies and trusted proxy headers.                                                                                                                                                                                                     |
+| Render | `HOST`                     | All interfaces, so Render's proxy can reach the server.                                                                                                                                                                                                          |
+| Render | `DATABASE_URL`             | Neon's direct (non-pooled) connection string. Use `sslmode=verify-full`: same checks as `require` today, without pg's deprecation warning.                                                                                                                       |
+| Render | `REDIS_URL`                | **Required in production.** The Render Key Value internal connection URL (`redis://` or `rediss://`). Used for realtime tickets, the Socket.IO adapter, the AI queue and rate limits. Set its eviction policy to `noeviction` (see [AI analysis](#ai-analysis)). |
+| Render | `MAIL_TRANSPORT`           | `log` until an email provider is set up: verification links go to the server log. `smtp` requires `MAIL_SMTP_URL` and `MAIL_FROM`.                                                                                                                               |
+| Render | `WEB_ORIGIN`               | The Vercel URL. Must match exactly, or the API's origin check rejects logins (preview deployments have other URLs).                                                                                                                                              |
+| Render | `LOG_LEVEL`                | Optional.                                                                                                                                                                                                                                                        |
+| Render | `DB_POOL_MAX`              | Optional. Keep it within Neon's connection limit.                                                                                                                                                                                                                |
+| Render | `TRUST_PROXY`              | Optional (default: private addresses). IPs, CIDRs, presets or a hop count; never `true`. See [security](security.md#the-real-client-ip).                                                                                                                         |
+| Both   | `WEB_PROXY_SECRET`         | **Required on Render in production** (while rate limiting is on), and set to the **same value** on Vercel. At least 32 characters; generate with `openssl rand -base64 32`. See below.                                                                           |
 
 Don't set `API_PORT` on Render: the API falls back to the `PORT` Render provides. Neon needs no variables; it supplies `DATABASE_URL`.
 
@@ -70,11 +74,11 @@ Health check path: `/health`. The build bundles `src/server.ts` and `src/migrate
 
 On Vercel, set the project's Root Directory to `apps/web` and the Install Command to `npx --yes pnpm@12.15.0 install --frozen-lockfile` (otherwise Vercel picks pnpm 9 or 10 from the lockfile version, which refuses this repo's `packageManager`). The default `next build` is fine.
 
-Migrations run on start because the API is a single free instance. With several instances they would race on every deploy, so the [future architecture](architecture.md#future-architecture-planned) runs them as a separate release step. See also the [current deployment diagram](architecture.md#current-deployment-implemented).
+Migrations run on start because the API is a single free instance. With several instances they would race on every deploy, so the [multi-instance setup](architecture.md#scaling-beyond-one-instance) would run them as a separate release step. See also the [current deployment diagram](architecture.md#current-deployment-implemented).
 
 ## AI analysis
 
-> Status: **Implemented in the API, not enabled on the live demo** (it needs Redis, which isn't deployed yet). Design: [design/ai-analysis.md](design/ai-analysis.md).
+> Status: **Implemented and enabled on the live demo** (Groq through its OpenAI-compatible API, with Redis on Render Key Value). Design: [design/ai-analysis.md](design/ai-analysis.md).
 
 The worker runs inside the API process, so no extra service is needed: each API instance works up to `AI_WORKER_CONCURRENCY` jobs and runs the sweeper.
 

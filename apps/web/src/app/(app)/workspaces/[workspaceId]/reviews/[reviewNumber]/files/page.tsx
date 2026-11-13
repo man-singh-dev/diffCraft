@@ -8,7 +8,12 @@ import { PageCard } from '@/components/page-card';
 import { ChangeTypeBadge, filePath, LineCounts, StatusBadge } from '@/components/review-ui';
 import { textLink } from '@/components/styles';
 import { CommentsProvider } from '@/components/comments-provider';
-import { LiveStatus, ReviewDeletedBanner, ViewingNow } from '@/components/review-live';
+import {
+  LiveStatus,
+  RealtimeAccessBanner,
+  ReviewDeletedBanner,
+  ViewingNow,
+} from '@/components/review-live';
 import { AiAnalysisProvider } from '@/components/ai-analysis-provider';
 import { AiFindingsToggle } from '@/components/ai-review-card';
 import {
@@ -170,6 +175,7 @@ export default async function FilesChangedPage(
           </div>
 
           <ReviewDeletedBanner />
+          <RealtimeAccessBanner />
 
           {files.data.length === 0 ? (
             <p className="text-sm text-slate-500">This patch changes no files.</p>

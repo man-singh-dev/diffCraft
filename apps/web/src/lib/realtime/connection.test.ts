@@ -40,17 +40,37 @@ describe('createRealtimeConnection', () => {
     expect(fetchTicket).toHaveBeenCalledTimes(2);
   });
 
-  it('stops reconnecting when the ticket request returns 401', async () => {
+  it('stops reconnecting when the ticket request returns 401, as a session that ended', async () => {
     const { socket, connection, timers, authenticate } = setup([{ ok: false, unauthorized: true }]);
     expect(await authenticate()).toEqual({});
     socket.refuse();
     expect(socket.disconnectCalls).toBe(1);
     expect(timers).toEqual([]);
-    expect(connection.status()).toBe('offline');
+    expect(connection.status()).toBe('session_ended');
 
     socket.receive('disconnect', 'io client disconnect');
     expect(timers).toEqual([]);
-    expect(connection.status()).toBe('offline');
+    expect(connection.status()).toBe('session_ended');
+  });
+
+  it('after the server disconnects a revoked session: one reconnect, a 401 ticket, then stops', async () => {
+    const { socket, connection, timers, authenticate, fetchTicket } = setup([
+      { ok: true, ticket: 'first' },
+      { ok: false, unauthorized: true },
+    ]);
+    await authenticate();
+    socket.serverConnect();
+    socket.connected = false;
+    socket.active = false;
+    socket.receive('disconnect', 'io server disconnect');
+    expect(connection.status()).toBe('reconnecting');
+
+    timers.shift()!.fn();
+    expect(await authenticate()).toEqual({});
+    socket.refuse();
+    expect(connection.status()).toBe('session_ended');
+    expect(timers).toEqual([]);
+    expect(fetchTicket).toHaveBeenCalledTimes(2);
   });
 
   it('retries with a fresh ticket after a network error, with growing capped delays', async () => {

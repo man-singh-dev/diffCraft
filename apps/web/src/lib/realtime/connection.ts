@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { realtimeConfig, warnIfRealtimeDisabled } from './config';
 import { fetchRealtimeTicket, type TicketResult } from './ticket';
 
-export type ConnectionStatus = 'connecting' | 'live' | 'reconnecting' | 'offline';
+export type ConnectionStatus = 'connecting' | 'live' | 'reconnecting' | 'offline' | 'session_ended';
 
 type Listener = (...args: never[]) => void;
 
@@ -46,6 +46,7 @@ export function createRealtimeConnection({
 }: ConnectionDeps): RealtimeConnection {
   let status: ConnectionStatus = 'connecting';
   let stopped = false;
+  let sessionEnded = false;
   let everConnected = false;
   let attempts = 0;
   const listeners = new Set<() => void>();
@@ -56,6 +57,7 @@ export function createRealtimeConnection({
     for (const listener of listeners) listener();
   };
   const waiting = () => setStatus(everConnected ? 'reconnecting' : 'connecting');
+  const stop = () => setStatus(sessionEnded ? 'session_ended' : 'offline');
 
   // Called before every connection attempt: tickets are single-use, so each attempt needs a fresh one.
   const auth: SocketAuth = (callback) => {
@@ -64,7 +66,10 @@ export function createRealtimeConnection({
         callback({ ticket: result.ticket });
         return;
       }
-      if (result.unauthorized) stopped = true;
+      if (result.unauthorized) {
+        stopped = true;
+        sessionEnded = true;
+      }
       // No ticket: the server refuses the handshake and connect_error decides whether to retry.
       callback({});
     });
@@ -75,7 +80,7 @@ export function createRealtimeConnection({
   // A handshake refused by the server leaves the socket inactive: Socket.IO won't retry it, so this does.
   function retryLater() {
     if (stopped) {
-      setStatus('offline');
+      stop();
       return;
     }
     waiting();
@@ -99,7 +104,7 @@ export function createRealtimeConnection({
   socket.on('connect_error', () => {
     if (stopped) {
       socket.disconnect();
-      setStatus('offline');
+      stop();
     } else if (socket.active) {
       waiting();
     } else {
